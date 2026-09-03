@@ -54,7 +54,7 @@ Valem para todo arquivo que leva frontmatter:
 | `estagio` | `f1` `f2` `f3` `f4` `f5` `f6` |
 | `status` (trabalho, sprint, fase) | `nao_iniciado` \| `em_andamento` \| `bloqueado` \| `concluido` |
 | `status` (task) | `pendente` \| `em_andamento` \| `concluida` \| `bloqueada` |
-| `suite` | `verde` \| `vermelha` \| `nao_executada` |
+| `suite` | `verde` \| `vermelha` \| `parcial` \| `nao_executada` |
 | `severidade` | `alta` \| `media` \| `baixa` |
 | `confianca` | `alta` \| `media` \| `baixa` |
 | `tipo_task` | `config` \| `client` \| `dominio` \| `persistencia` \| `api` \| `ui` \| `integracao_externa` \| `teste` \| `infra` \| `refatoracao` |
@@ -218,8 +218,78 @@ Regras duras deste kind:
 - `arquivos` mantém a forma do contrato do `SKILL.md`: um mapa com `cria` e `altera`,
   cada um uma lista de caminhos relativos à raiz do repositório (`[]` quando vazio).
 - `concluida_em` é `null` enquanto a task não estiver `concluida`.
-- `suite` é `nao_executada` até a suíte rodar para aquela task; depois `verde` ou `vermelha`.
+- `suite` é `nao_executada` até rodar algum teste para aquela task; depois `parcial`, `verde` ou `vermelha`. `parcial` é o estado normal de uma task concluída na F6: rodou o subconjunto de testes afetado por ela e passou, e a suíte inteira é cobrada uma vez, no fim da sprint. `verde` significa suíte inteira executada e sem falha — quem a rodar na task grava `verde`, que nunca é violação.
 - Os campos do YAML são a mesma verdade da prosa do bloco correspondente. Os dois andam juntos.
+
+### `sprint-NN/tasks.md` no formato condensado → `kind: plano`
+
+**Compartilhado com a runx** — as duas skills gravam este kind com os mesmos campos.
+
+Quando uma sprint tem **uma única fase**, os três arquivos dela viram um só. O arquivo
+continua se chamando `sprint-NN/tasks.md`: é o caminho que os hooks de método procuram, e
+mudá-lo os desligaria em silêncio, porque hook de método falha aberto.
+
+O corte é **por sprint, não pelo trabalho inteiro**. Num plano de três sprints, cada uma é
+gravada no formato que couber: a que tem uma fase vai condensada, a que tem três vai nos
+três arquivos. A regra 13 (a sprint-01 entrega capacidade de testar) faz a maioria dos
+trabalhos ter mais de uma sprint — o ganho está em cada sprint de fase única, não num
+trabalho inteiro de fase única, que quase não existe.
+
+O bloco YAML é **um só**. Os leitores de frontmatter param no primeiro `---` de fechamento;
+um segundo bloco no mesmo arquivo seria invisível para eles.
+
+```yaml
+---
+expx_schema: 1
+expx_tool: sprintx
+kind: plano
+trabalho_id: exportacao-csv-relatorios
+sprint_id: sprint-02
+atualizado_em: 2026-08-29
+sprint:
+  titulo: Geracao do CSV
+  status: em_andamento
+  criterio_saida: Relatorio de 10 mil linhas exporta em CSV valido
+  riscos: [Limite de memoria nao documentado na fonte]
+  fora_de_escopo: [Exportacao em XLSX]
+fases:
+  - id: F-02.1
+    titulo: Gerador de CSV
+    status: em_andamento
+    criterio_saida: Campo com virgula e aspas sai escapado
+    paralelizavel: false
+    paralela_com: []
+    tasks: [T-02.01]
+tasks:
+  - id: T-02.01
+    titulo: Escapar separador e aspas
+    fase: F-02.1
+    status: concluida
+    objetivo: Gerar CSV valido quando o dado tem virgula ou aspas
+    arquivos:
+      cria: [src/csv/escapar.ts, src/csv/escapar.test.ts]
+      altera: []
+    teste_integracao: Gera o CSV de uma fixture com virgula e aspas e reabre com o parser
+    teste_funcional: Dado o valor `a,"b`, retorna `"a,""b"`
+    criterio_aceite: O CSV gerado reabre sem erro no parser de referencia
+    depende_de: []
+    paralelizavel: false
+    concluida_em: 2026-08-29
+    suite: parcial
+---
+```
+
+Regras duras deste kind:
+
+- **`tasks` tem exatamente o mesmo formato do `kind: tasks`** — mesmos campos, mesmos
+  enums. Quem consome tasks lê a mesma chave nos dois formatos.
+- `sprint` e `fases` carregam os campos dos kinds `sprint` e `fases` **menos** as chaves de
+  cabeçalho (`expx_schema`, `expx_tool`, `trabalho_id`, `sprint_id`, `atualizado_em`), que
+  já estão no topo. É essa repetição que o formato condensado corta.
+- `sprint.fora_de_escopo` é uma lista de strings de uma linha (`[]` quando vazia).
+- **Quando usar:** a sprint tem uma fase. Com duas ou mais fases, os três arquivos.
+- Os kinds `sprint`, `fases` e `tasks` **continuam válidos e não são descontinuados**.
+  Plano já escrito neles permanece como está e nunca é migrado retroativamente.
 
 ### `00-BLOQUEIOS.md` → `kind: bloqueios`
 

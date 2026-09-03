@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 # task-so-fecha-verde — PreToolUse em escrita no tasks.md.
 #
+# `parcial` = rodou o subconjunto de testes afetado pela task e passou. E o
+# estado normal de uma task fechada na F6: a suite inteira e cobrada uma vez, ao
+# fechar a sprint. Barrar `parcial` aqui barraria toda conclusao de task — e hook
+# que da falso positivo e desinstalado, levando junto os que funcionavam.
+#
 # A regra central do metodo: task so fecha verde. Hoje ela depende do modelo
 # lembrar dela na hora de editar o proprio arquivo de estado.
 #
 # Barra a mudanca de status para `concluida` quando:
-#   - `suite` nao for `verde`, ou
+#   - `suite` nao for `verde` nem `parcial`, ou
 #   - `teste_integracao` ou `teste_funcional` estiverem vazios.
 #
 # Modo: nasce em `aviso`.
@@ -44,7 +49,7 @@ PROBLEMAS="$(printf '%s' "$NOVO" | awk '
   function fecha(  msg) {
     if (id != "" && concluida) {
       msg = ""
-      if (suite != "verde")   msg = msg " suite=" (suite == "" ? "ausente" : suite)
+      if (suite != "verde" && suite != "parcial") msg = msg " suite=" (suite == "" ? "ausente" : suite)
       if (ti == 0)            msg = msg " teste_integracao vazio"
       if (tf == 0)            msg = msg " teste_funcional vazio"
       if (msg != "") print id ":" msg
@@ -62,7 +67,7 @@ PROBLEMAS="$(printf '%s' "$NOVO" | awk '
 [ -n "$PROBLEMAS" ] || exit 0
 
 RESUMO="$(printf '%s' "$PROBLEMAS" | tr '\n' ';')"
-MSG="sprintx/task-so-fecha-verde: task nao pode ir para concluida assim -> $RESUMO. A regra do metodo e: task so e concluida quando o teste de integracao E o teste funcional passam. Nao existe concluido com ressalva. Rode a suite ate verde, ou marque a task como bloqueada e registre em 00-BLOQUEIOS.md."
+MSG="sprintx/task-so-fecha-verde: task nao pode ir para concluida assim -> $RESUMO. A regra do metodo e: task so e concluida quando o teste de integracao E o teste funcional passam. Nao existe concluido com ressalva. Rode os testes ate passarem — o subconjunto afetado pela task basta, e grava suite: parcial — ou marque a task como bloqueada e registre em 00-BLOQUEIOS.md."
 
 MODO="$(rastro_modo "$RAIZ" task-so-fecha-verde metodo)"
 REL="${ALVO#"$RAIZ"/}"

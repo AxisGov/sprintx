@@ -27,7 +27,11 @@ Para CADA task, nesta ordem:
 
 1. Marque `status: em_andamento` em `tasks.md` e grave `task_iniciada` no rastro (`references/08-rastro.md`). Grave `task: T-NN.MM` em `.expx/estado.json` (`references/09-estado.md`).
 2. **Escreva o teste de integração e o teste funcional ANTES de qualquer código de implementação**, exatamente como a task os descreve. Rode-os e confirme que falham (vermelho).
-3. Implemente até os dois testes passarem (verde). Rode a suíte relevante inteira, não só os testes novos.
+3. Implemente até os dois testes passarem (verde). **Rode o subconjunto de testes afetado pela task** — os que ela criou ou alterou, mais os que cobrem os arquivos em `arquivos.cria` e `arquivos.altera` — e grave `suite: parcial`.
+
+   A suíte inteira roda **uma vez, ao fechar a sprint** (ver "Portões de fase e de sprint"). Rodá-la ao fim de cada task custa uma execução completa por task e não descobre nada que a execução do portão não descubra — só descobre mais cedo, ao preço de repetir tudo N vezes. Se o subconjunto ficar difícil de delimitar, rode a suíte inteira e grave `suite: verde`: o valor mais forte nunca é violação.
+
+   O que não muda: **task com teste vermelho não fecha**, seja o subconjunto ou a suíte inteira. `parcial` significa "o que era desta task passou", nunca "passou mais ou menos".
 4. Assuma os três papéis do ORQUESTRADOR, em sequência: implementador (passos 2–3), revisor de testes, auditor de aceite (o `criterio_aceite` é verdade agora? verifique de fato, não presuma).
 
    **O papel de revisor de testes é do agente `revisor-testes`, quando ele existir neste harness.** Acione-o sobre a task que está fechando: ele lê os testes e responde `solido` ou `fraco`, com o motivo em uma linha. Um `fraco` significa que o teste passaria com a implementação errada — e teste fraco é pior que teste ausente, porque produz suíte verde e falsa confiança. Task com teste `fraco` NÃO fecha: corrija o teste até ele discriminar, e só então siga. Sem o agente disponível, faça você mesma a pergunta, com o mesmo rigor.
@@ -47,8 +51,9 @@ dois. A cada gravação de `tasks.md`:
 - `atualizado_em` do arquivo é reescrito com a data do sistema (`date +%Y-%m-%d`).
 - `concluida_em` recebe a data quando a task passa a `concluida`; permanece `null` em
   qualquer outro status.
-- `suite` recebe `verde` quando a suíte relevante terminou com 0 failed, `vermelha` quando
-  houve falha, e permanece `nao_executada` enquanto a suíte não rodou para aquela task.
+- `suite` recebe `parcial` quando o subconjunto afetado pela task terminou com 0 failed,
+  `verde` quando foi a suíte inteira que rodou sem falha, `vermelha` quando houve falha, e
+  permanece `nao_executada` enquanto nada rodou para aquela task.
 
 Deixar o frontmatter desatualizado em relação à prosa equivale a não ter gravado a task: o
 painel de operação lê o YAML, não a prosa.
@@ -68,6 +73,23 @@ Surgiu dúvida nova, decisão não coberta pelo plano, pré-requisito faltando (
 - Fase só é dada como concluída quando seu critério de saída em `fases.md` é verdade.
 - Sprint só é dada como concluída quando seu critério de saída em `sprint.md` é verdade.
 - Critério não atendido = não avança para a próxima fase/sprint; trate como bloqueio se não houver task que o resolva.
+
+### A suíte inteira é cobrada aqui
+
+**Antes de dar qualquer sprint como concluída, rode a suíte INTEIRA e exija 0 failed.**
+
+Durante a sprint cada task roda o subconjunto que lhe cabe e grava `suite: parcial`. É neste
+portão que a garantia de que nada mais quebrou é efetivamente cobrada — a sprintx não tem um
+estágio de QA depois da execução, então o fim da sprint é o último ponto em que uma quebra
+colateral ainda é barata de achar.
+
+- Suíte inteira vermelha: a sprint **não fecha**. Corrija, ou registre bloqueio em
+  `00-BLOQUEIOS.md` e trate como qualquer outro critério de saída não atendido.
+- Suíte inteira verde: cole a saída no relatório da sprint e siga. As tasks daquela sprint
+  **permanecem com `suite: parcial`** — o valor descreve o que rodou para aquela task, e
+  reescrevê-lo em massa apagaria justamente essa informação.
+- Escreva a suíte inteira no `criterio_saida` da sprint desde a F3, para que o portão seja
+  verificável e não dependa de alguém lembrar dele aqui.
 
 ## Passo 3 — Atualizar o histórico de esforço
 
@@ -173,6 +195,8 @@ quais módulos ele declara — é assim que o usuário sabe que a feature entrou
 
 - [ ] Toda task está `concluida` ou `bloqueada` (nenhuma `pendente`/`em_andamento` executável restante).
 - [ ] `tasks.md` atualizado com data e resultado de suíte em cada task concluída.
+- [ ] Toda task concluída tem `suite: parcial` ou `suite: verde` — nenhuma com `vermelha` ou `nao_executada`.
+- [ ] Toda sprint concluída teve a suíte INTEIRA executada e verde, com a saída colada no relatório.
 - [ ] Em todo arquivo de estado tocado, o frontmatter está válido e coerente com a prosa: `status`, `concluida_em`, `suite` e `atualizado_em` refletem o estado real (`references/00-schema.md`).
 - [ ] Se o trabalho inteiro foi entregue, `ORQUESTRADOR.md` teve `estagio`, `status`, `concluido_em` e `atualizado_em` reescritos; sprints e fases concluídas tiveram `status` atualizado em `sprint.md` e `fases.md`.
 - [ ] Toda task concluída tem o esforço real registrado em `tasks.md`.

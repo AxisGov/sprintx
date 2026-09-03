@@ -66,7 +66,7 @@ Objetivo, fases, critério de saída, riscos conhecidos.
 1. Todo o esforço vai para o planejamento; pergunta feita durante a execução é sempre falha da fase de planejamento.
 2. As fases são estritamente sequenciais; nunca pule fase nem execute fora de ordem.
 3. TDD é obrigatório: o teste é escrito antes da implementação.
-4. Task só é marcada como concluída quando o teste de integração E o teste funcional passam; não existe "concluído com ressalva".
+4. Task só é marcada como concluída quando o teste de integração E o teste funcional passam; não existe "concluído com ressalva". Na task roda o subconjunto afetado (`suite: parcial`); a suíte inteira é cobrada uma vez, ao fechar a sprint.
 5. Toda transição (task → task, task → fase, fase → sprint) tem critério de aceite verificável, binário e sem adjetivo; critério não atendido = não avança.
 6. O paralelismo é declarado no plano para cada task e cada fase; a IA em execução nunca decide isso sozinha.
 7. Nenhuma task pode depender de decisão humana em tempo de execução.
@@ -117,7 +117,7 @@ O modo de cada hook vive em `.expx/hooks.json`, e é lá que se promove.
 | Hook | Evento | Modo inicial | O que faz |
 |---|---|---|---|
 | `escopo-da-task` | `PreToolUse` (escrita) | `aviso` | Compara o arquivo editado com o campo `arquivos` da task em andamento. Fora da lista, avisa |
-| `task-so-fecha-verde` | `PreToolUse` (`tasks.md`) | `aviso` | Barra `status: concluida` quando `suite` não é `verde` ou falta `teste_integracao`/`teste_funcional` |
+| `task-so-fecha-verde` | `PreToolUse` (`tasks.md`) | `aviso` | Barra `status: concluida` quando `suite` não é `verde` nem `parcial`, ou falta `teste_integracao`/`teste_funcional` |
 | `sem-placeholder-no-plano` | `PostToolUse` (plano) | `aviso` | Acha marcador `{{...}}` de template não substituído |
 | `tdd-teste-antes` | `PostToolUse` (escrita) | `aviso` | Avisa quando a implementação nasce antes do teste. **Inativo sem `CONVENCOES.md`** — não chuta onde o teste deveria estar |
 | `segredo` | `PreToolUse` (escrita) | `bloqueio` | Barra segredo com forma reconhecível indo para arquivo versionado |

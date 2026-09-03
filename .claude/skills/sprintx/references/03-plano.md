@@ -49,15 +49,43 @@ Com a base (`base/`) e as decisões (`00-DECISOES.md`) na mão, desenhe Sprints 
 
 ## Passo 2 — Escrever os arquivos
 
-Para cada sprint N, crie `docs/sprintx/features/<slug>/sprint-NN/` com três arquivos, usando os templates (caminhos relativos à raiz da skill):
+**Escolha o formato de cada sprint antes de gravá-la.** A escolha é mecânica, sprint a
+sprint — não pelo trabalho inteiro:
+
+| Situação da sprint | Formato | Arquivos gravados |
+|---|---|---|
+| **uma fase** | **condensado** | `sprint-NN/tasks.md` (um arquivo, `kind: plano`) |
+| duas ou mais fases | três arquivos | `sprint-NN/sprint.md`, `fases.md`, `tasks.md` |
+
+Num plano de três sprints, cada uma vai no formato que couber: a de fase única condensada, a
+de três fases nos três arquivos. O condensado **não remove nenhum campo** — todos os
+contratos continuam inteiros. O que ele corta é o cabeçalho de frontmatter repetido três
+vezes, que custa o mesmo numa sprint de duas tasks e numa de nove.
+
+Dois pontos que não mudam, e que são a razão de o arquivo condensado se chamar `tasks.md`:
+
+- **O nome do arquivo é `sprint-NN/tasks.md`, sempre.** Os hooks de método procuram esse
+  caminho literal, e hook de método falha aberto: um nome novo os desligaria sem que nada
+  avisasse.
+- **Um único bloco YAML**, com `sprint`, `fases` e `tasks` como chaves irmãs. Os leitores de
+  frontmatter param no primeiro `---` de fechamento.
+
+**No formato condensado**, crie `docs/sprintx/features/<slug>/sprint-NN/tasks.md` de
+`assets/TEMPLATE-plano-condensado.md`, com `kind: plano`. Ele carrega o objetivo e o critério
+de saída da sprint, o fora de escopo, a fase com seu critério de saída e todas as tasks com
+todos os campos do contrato.
+
+**No formato de três arquivos**, para cada sprint N crie
+`docs/sprintx/features/<slug>/sprint-NN/` com três arquivos, usando os templates (caminhos
+relativos à raiz da skill):
 
 - `sprint.md` — de `assets/TEMPLATE-sprint.md`: objetivo, fases, critério de saída, riscos conhecidos.
 - `fases.md` — de `assets/TEMPLATE-fases.md`: por fase, objetivo, tasks que a compõem, critério de saída, com qual outra fase pode rodar em paralelo.
 - `tasks.md` — de `assets/TEMPLATE-tasks.md`: um bloco por task com TODOS os campos do contrato (`id`, `titulo`, `objetivo`, `arquivos`, `teste_integracao`, `teste_funcional`, `criterio_aceite`, `depende_de`, `paralelizavel`, `status`).
 
-**Frontmatter (obrigatório).** Os três arquivos são arquivos de estado e são gravados com
-o frontmatter do contrato expx-schema v1 — `kind: sprint`, `kind: fases` e `kind: tasks`,
-respectivamente. Leia `references/00-schema.md` antes de gravar e siga-o para os campos e
+**Frontmatter (obrigatório).** Os arquivos do plano são arquivos de estado e são gravados
+com o frontmatter do contrato expx-schema v1 — `kind: plano` no formato condensado;
+`kind: sprint`, `kind: fases` e `kind: tasks` no de três arquivos. Leia `references/00-schema.md` antes de gravar e siga-o para os campos e
 os enums. Pontos que a F3 costuma errar:
 
 - Em `kind: tasks`, a lista `tasks:` do frontmatter espelha os blocos da prosa: um item por
@@ -151,7 +179,7 @@ significa que o CLI não instalou o ecossistema neste projeto, e nada do plano d
 Antes de declarar a F3 concluída, confira você mesmo:
 
 - [ ] Toda task tem os 10 campos do contrato preenchidos.
-- [ ] Os três arquivos de cada sprint têm frontmatter válido conforme `references/00-schema.md`, e a lista `tasks:` do YAML bate task a task com os blocos da prosa.
+- [ ] Os arquivos de cada sprint têm frontmatter válido conforme `references/00-schema.md`, e a lista `tasks:` do YAML bate task a task com os blocos da prosa.
 - [ ] Nenhum `depende_de` aponta para id inexistente; não há ciclo de dependência.
 - [ ] Toda task com `paralelizavel: true` não escreve nos mesmos arquivos de outra task paralela da mesma janela.
 - [ ] A sprint-01 é de capacidade de testar, não de negócio.
@@ -164,7 +192,7 @@ Antes de declarar a F3 concluída, confira você mesmo:
 
 ## Critério de saída da fase
 
-- [ ] `sprint-01/` (e demais sprints) existem com `sprint.md`, `fases.md` e `tasks.md` completos.
+- [ ] `sprint-01/` (e demais sprints) existem: sprint de fase única com `tasks.md` (`kind: plano`); as demais com `sprint.md`, `fases.md` e `tasks.md` completos.
 - [ ] Checklist do Passo 3 toda atendida.
 
 ## Quando o critério não é atendido
