@@ -25,6 +25,13 @@ Ordem: sprints em ordem numérica; dentro da sprint, a rota do ORQUESTRADOR. Só
 
 Para CADA task, nesta ordem:
 
+**Antes de abrir**, quando há mais de uma sessão trabalhando na mesma feature (regra 21,
+"Sessões paralelas" do `SKILL.md`): checagem de reivindicação — leia
+`docs/eventos/<trabalho_id>.jsonl` e procure, para a task em questão, o `task_iniciada` mais
+recente. Se ele foi gravado por outra sessão e não há `task_concluida`/`task_bloqueada` dela
+depois, a task está reivindicada — não a abra. Pule para a próxima paralelizável cujas
+dependências estão satisfeitas; sem nenhuma, registre um bloqueio.
+
 1. Marque `status: em_andamento` em `tasks.md` e grave `task_iniciada` no rastro (`references/08-rastro.md`). Grave `task: T-NN.MM` em `.expx/estado.json` (`references/09-estado.md`).
 2. **Escreva o teste de integração e o teste funcional ANTES de qualquer código de implementação**, exatamente como a task os descreve. Rode-os e confirme que falham (vermelho).
 3. Implemente até os dois testes passarem (verde). **Rode o subconjunto de testes afetado pela task** — os que ela criou ou alterou, mais os que cobrem os arquivos em `arquivos.cria` e `arquivos.altera` — e grave `suite: parcial`.
@@ -75,6 +82,12 @@ Surgiu dúvida nova, decisão não coberta pelo plano, pré-requisito faltando (
 - Critério não atendido = não avança para a próxima fase/sprint; trate como bloqueio se não houver task que o resolva.
 
 ### A suíte inteira é cobrada aqui
+
+**Confira antes que a árvore não tem trabalho de outra sessão** (regra 21): arquivo sujo
+(`git status --porcelain --untracked-files=all`) fora do `arquivos` de qualquer task da
+feature, ou task `em_andamento` reivindicada por outra sessão. Achando qualquer um dos dois,
+**não rode a suíte e não feche a sprint** — anuncie o que está contaminando a árvore e
+aguarde; isso não é falha da sprint, é árvore ainda não pronta.
 
 **Antes de dar qualquer sprint como concluída, rode a suíte INTEIRA e exija 0 failed.**
 

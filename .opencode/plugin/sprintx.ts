@@ -130,9 +130,10 @@ export default async ({ directory }: { directory?: string }) => {
           "comum/segredo.sh",
           "sprintx/escopo-da-task.sh",
           "sprintx/task-so-fecha-verde.sh",
+          "sprintx/task-reivindicada.sh",
         )
       } else if (tool === "bash") {
-        hooks.push("comum/git-perigoso.sh")
+        hooks.push("comum/git-perigoso.sh", "sprintx/arvore-limpa-antes-da-suite.sh")
       }
 
       for (const h of hooks) {
@@ -171,6 +172,16 @@ export default async ({ directory }: { directory?: string }) => {
         output.output += "\n\n[sprintx/hooks — aviso, a acao NAO foi bloqueada]\n" +
           avisos.map((a) => `- ${a}`).join("\n")
       }
+    },
+
+    // Exporta a identidade de sessao para o shell dos comandos Bash, para que
+    // os hooks bash (rastro_sessao em comum/rastro.sh) a leiam sem precisar
+    // adivinhar pela ancestralidade de processo. Mesma convencao do runx
+    // (D-09, "Sessoes paralelas"): <harness>@<id-da-sessao>.
+    "shell.env": async (input: any, output: any) => {
+      output.env = output.env ?? {}
+      output.env.EXPX_HARNESS = "opencode"
+      output.env.EXPX_SESSAO = `opencode@${input?.sessionID ?? "sem-id"}`
     },
   }
 }

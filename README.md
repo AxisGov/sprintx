@@ -115,6 +115,20 @@ Os dois harnesses descobrem a skill do mesmo jeito — pelo `name` e pela `descr
 
 Já os **hooks** divergem de mecanismo, e é a única parte com fork. A lógica mora **uma vez só**, em `.claude/hooks/*.sh`; o plugin do OpenCode é uma ponte que a invoca e traduz a saída. O modo `aviso` é a lacuna real de paridade: o `tool.execute.before` do OpenCode só sabe passar em silêncio ou bloquear, então o aviso é anexado ao resultado da ferramenta, sempre prefixado para o modelo não confundi-lo com a saída do comando.
 
+**MimoCode não é suportado por esta skill.** Não há flag de instalação, coluna de compatibilidade nem hook para ele — diferente do runx (skill irmã), que ganhou suporte a MimoCode numa entrega recente. Portar isso para a sprintx dobraria o escopo desta feature; fica registrado como decisão explícita, não como esquecimento.
+
+### Sessões paralelas
+
+Várias sessões — do mesmo harness ou de harnesses diferentes — podem trabalhar ao mesmo tempo no mesmo projeto. Sem isolamento, um `stash` de uma sessão levaria o trabalho não salvo de outra, e a suíte inteira do fechamento de sprint reprovaria por causa do código que outra sessão está no meio de mudar.
+
+Três mecanismos resolvem isso:
+
+- **Worktree por feature** (regra 21): com git, a F1 abre a feature num `git worktree` próprio, num diretório irmão do checkout principal, na branch `feature/<slug>`.
+- **Reivindicação de task pelo rastro**: o hook `task-reivindicada` avisa quando uma sessão tenta abrir uma task que o rastro mostra aberta por outra sessão sem fechamento.
+- **Árvore limpa antes da suíte completa**: o portão de fechamento de sprint só roda a suíte inteira depois de confirmar, via `arvore-limpa-antes-da-suite`, que a árvore não tem trabalho de outra sessão no meio.
+
+O texto do método vale nos dois harnesses; os hooks rodam nativamente no Claude Code e, no OpenCode, pela mesma ponte (`.opencode/plugin/sprintx.ts`) que já cobre os demais.
+
 ---
 
 ## Hooks e agentes

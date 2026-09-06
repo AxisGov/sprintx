@@ -104,6 +104,7 @@ caminho_critico: [F-01.1, F-01.3]
 modulo_afetado: [relatorios, exportacao]
 arquivos_alterados: []
 palavras_chave: [csv, exportacao, relatorio, streaming]
+worktree: ../leadiq--exportacao-csv-relatorios
 ---
 ```
 
@@ -111,6 +112,11 @@ palavras_chave: [csv, exportacao, relatorio, streaming]
 - `caminho_critico` lista ids de fase (`F-NN.M`) e/ou de task (`T-NN.MM`), na ordem da
   cadeia, exatamente como a seção 3 do ORQUESTRADOR os declara.
 - `concluido_em` permanece `null` até o trabalho inteiro estar entregue.
+- `worktree` é o caminho relativo à raiz do checkout principal para o `git worktree` desta
+  feature (regra 21, "Sessões paralelas" no `SKILL.md`). `null` quando não há git, ou quando
+  o pedido foi explicitamente "sem worktree" — a chave existe sempre, mesmo quando não se
+  aplica. Nunca um caminho absoluto. Gravado pela F1 ao abrir a área de trabalho
+  (`references/01-ingestao.md`) e copiado ao `ORQUESTRADOR.md` pela F4.
 
 Os três campos de indexação — `modulo_afetado`, `arquivos_alterados` e `palavras_chave` — são
 listas e seguem a regra universal 6: **nunca omita a chave**; vazia é `[]`, jamais ausente.

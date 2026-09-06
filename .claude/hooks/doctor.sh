@@ -16,7 +16,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RAIZ="$(rastro_raiz "$PWD")"
 CFG="$RAIZ/.expx/hooks.json"
 
-HOOKS="segredo git-perigoso escopo-da-task task-so-fecha-verde sem-placeholder-no-plano tdd-teste-antes"
+HOOKS="segredo git-perigoso escopo-da-task task-so-fecha-verde sem-placeholder-no-plano tdd-teste-antes task-reivindicada arvore-limpa-antes-da-suite"
 
 # ------------------------------------------------------------- subcomandos
 if [ "${1:-}" = "promover" ] || [ "${1:-}" = "rebaixar" ]; then

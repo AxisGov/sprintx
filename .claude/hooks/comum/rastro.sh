@@ -16,13 +16,50 @@
 
 # Raiz do repositorio: sobe ate achar .git. Sem .git em nenhum ancestral,
 # usa o cwd. Mesma regra do SKILL.md ("Onde fica docs/sprintx/features/<slug>/").
+#
+# `[ -e ]`, nao `[ -d ]`: num `git worktree`, `.git` e ARQUIVO (contem
+# "gitdir: <principal>/.git/worktrees/<nome>"), nao diretorio. `[ -d ]` sozinho
+# faz a busca pular a raiz do worktree e continuar subindo — de um subdiretorio
+# dele, isso devolve o subdiretorio errado em vez da raiz do worktree (regra 21,
+# "Sessoes paralelas", D-06).
 rastro_raiz() {
   local d="${1:-$PWD}"
   while [ "$d" != "/" ]; do
-    [ -d "$d/.git" ] && { printf '%s' "$d"; return 0; }
+    [ -e "$d/.git" ] && { printf '%s' "$d"; return 0; }
     d="$(dirname "$d")"
   done
   printf '%s' "${1:-$PWD}"
+}
+
+# ------------------------------------------------------------- identidade
+
+# Nome do harness: EXPX_HARNESS (a ponte OpenCode injeta isso) -> CLAUDECODE
+# (o Claude Code exporta essa variavel) -> nome do processo avo -> "desconhecido".
+# Nunca lanca excecao.
+rastro_harness() {
+  if [ -n "${EXPX_HARNESS:-}" ]; then printf '%s' "$EXPX_HARNESS"; return 0; fi
+  if [ -n "${CLAUDECODE:-}" ]; then printf 'claude-code'; return 0; fi
+  local nome
+  nome="$(ps -o comm= -p "${PPID:-0}" 2>/dev/null | xargs -n1 basename 2>/dev/null)"
+  case "$nome" in
+    claude)   printf 'claude-code' ;;
+    opencode) printf 'opencode' ;;
+    mimo)     printf 'mimocode' ;;
+    *)        printf 'desconhecido' ;;
+  esac
+}
+
+# Identidade da sessao: <harness>@<id>. Ordem: EXPX_SESSAO (a ponte injeta) ->
+# CLAUDE_CODE_SESSION_ID (com o harness na frente) -> <harness>@<ppid> ->
+# <harness>@sem-id. Nunca lanca excecao (regra 3 do contrato).
+rastro_sessao() {
+  if [ -n "${EXPX_SESSAO:-}" ]; then printf '%s' "$EXPX_SESSAO"; return 0; fi
+  local h; h="$(rastro_harness)"
+  if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+    printf '%s@%s' "$h" "$CLAUDE_CODE_SESSION_ID"; return 0
+  fi
+  if [ -n "${PPID:-}" ]; then printf '%s@%s' "$h" "$PPID"; return 0; fi
+  printf '%s@sem-id' "$h"
 }
 
 # Escapa uma string para caber dentro de um JSON string literal.

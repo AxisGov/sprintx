@@ -9,6 +9,59 @@ Você está na F1. Seu único objetivo é construir a base de conhecimento antes
 
 Se `docs/sprintx/features/<slug>/base/` já existe completa e `00-DECISOES.md` também existe, a F1 já passou: anuncie a fase real detectada pela máquina de estados e execute-a em vez desta.
 
+## Passo 0 — Uma feature por árvore e abrir a área de trabalho (regra 21)
+
+Antes do scaffold: verifique se `docs/sprintx/features/` já tem outra pasta com
+`ORQUESTRADOR.md` sem `concluido_em` preenchido (ou, antes da F4, uma pasta sem
+`ORQUESTRADOR.md` mas mais recente que a atual). Isso é outra feature aberta na mesma árvore.
+
+- **Com git:** siga adiante neste passo — o worktree resolve a colisão isolando esta feature.
+- **Sem git:** anuncie qual feature está aberta e pergunte se é para continuar nela ou
+  encerrá-la antes. É a única pergunta legítima aqui, porque sem worktree não há como isolar.
+
+**Abrir a área de trabalho** só se aplica com git (`git rev-parse --is-inside-work-tree`
+responde `true`). Sem git, ou com "sem worktree" explícito no pedido: `worktree: null` (será
+copiado ao `ORQUESTRADOR.md` na F4) e nada muda no restante desta fase.
+
+1. **Nome da branch e base**: `feature/<slug>`. Base, nesta ordem: `CONVENCOES.md` (seção de
+   versionamento, se marcada e não `PROPOSTA`) → `git symbolic-ref refs/remotes/origin/HEAD`
+   → a branch atual, se `main`/`master`/`develop` ou equivalente detectada.
+2. **Criar ou retomar**: `git worktree list` já lista essa branch → retome nele. Senão:
+   `git worktree add -b feature/<slug> ../<repo>--<slug> <base>`, onde `<repo>` é o nome do
+   diretório do checkout principal. Branch já existente sem worktree: `git worktree add
+   ../<repo>--<slug> feature/<slug>`.
+3. **Herdar do checkout principal** — só o que existir lá, nunca lendo o conteúdo:
+   `.expx/hooks.json` (+ `estado.json` do objeto padrão de `references/09-estado.md`),
+   `.claude/settings.json` (sem ele os hooks não rodam no worktree), `.env`, `.env.local`,
+   `.env.*.local`.
+4. **Instalar dependências**, para esta fase conseguir rodar comando no worktree novo.
+   Comando do `CONVENCOES.md` quando existir; senão pelo lockfile encontrado:
+
+   | Lockfile | Comando |
+   |---|---|
+   | `package-lock.json` | `npm ci` |
+   | `pnpm-lock.yaml` | `pnpm install --frozen-lockfile` |
+   | `yarn.lock` | `yarn install --frozen-lockfile` |
+   | `bun.lock` / `bun.lockb` | `bun install` |
+   | `requirements.txt` | `pip install -r requirements.txt` |
+   | `poetry.lock` | `poetry install` |
+   | `go.mod` | `go mod download` |
+   | `Cargo.lock` | `cargo fetch` |
+   | `Gemfile.lock` | `bundle install` |
+   | `composer.lock` | `composer install` |
+
+   Nenhum lockfile reconhecido: registre a lacuna em `base/00-LACUNAS.md` e siga.
+5. **Gravar** o caminho (`../<repo>--<slug>`) para uso na F4, quando o `ORQUESTRADOR.md`
+   grava a chave `worktree` (`references/00-schema.md`).
+6. **Entrar na área de trabalho.** Se o harness oferecer uma ferramenta de troca para
+   worktree, use-a apontando para o diretório criado. Caso contrário — e sempre no OpenCode
+   — anuncie "Área de trabalho: `../<repo>--<slug>`. Continue de dentro desse diretório" e
+   encerre a fase aqui; o próximo comando, rodado de lá, retoma pela máquina de estados
+   normalmente.
+
+Todo o scaffold do Passo 1 em diante vive dentro do worktree a partir daqui; nada dele é
+gravado no checkout principal.
+
 ## Passo 1 — Scaffold
 
 Crie, se ainda não existirem (os diretórios intermediários `docs/sprintx/` e `docs/sprintx/features/` fazem parte da criação e nascem junto):

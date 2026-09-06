@@ -83,6 +83,38 @@ Objetivo, fases, critério de saída, riscos conhecidos.
 18. Estimativa sai sempre como faixa, com premissas, invalidadores e nível de confiança. Número único é proibido.
 19. Estimativa é esforço, nunca prazo de calendário. A conversão em data é decisão humana.
 20. Todo trabalho fecha com `FECHAMENTO.md`, declarando módulo afetado, arquivos alterados e palavras-chave.
+21. Uma feature aberta por árvore de trabalho. Com git, ela nasce em worktree próprio na F1, e toda sessão que a toca trabalha de dentro dele — ver "Sessões paralelas".
+
+## Sessões paralelas
+
+Várias sessões — do mesmo harness ou de harnesses diferentes (Claude Code, OpenCode) — podem
+trabalhar ao mesmo tempo no mesmo projeto. Sem isolamento, três coisas dão errado: um `stash`
+ou uma troca de branch de uma sessão leva junto o trabalho não salvo de outra; a suíte
+inteira do fechamento de sprint reprova por causa do código que outra sessão está no meio de
+mudar; e o rastro de uma sessão acaba gravado no arquivo `.jsonl` da outra, porque
+`rastro_trabalho_id()` escolhe pela feature de `ORQUESTRADOR.md` mais recente, sem
+discriminar qual sessão está em qual.
+
+**O que resolve isso:**
+
+- **Regra 21 — worktree por feature.** Com git, a F1 abre a feature num `git worktree`
+  próprio, num diretório irmão do checkout principal, na branch `feature/<slug>`. Cada
+  feature vive isolada: `stash` e troca de branch de uma sessão não alcançam a árvore de
+  outra. Sem git, ou com o pedido explícito de "sem worktree", o comportamento é o de sempre.
+- **Reivindicação de task pelo rastro.** A F6 já grava `task_iniciada`/`task_concluida`/
+  `task_bloqueada` no rastro. O hook `task-reivindicada` avisa quando uma sessão tenta abrir
+  uma task que o rastro mostra aberta por outra sessão sem fechamento.
+- **Árvore limpa antes da suíte completa.** O portão de fechamento de sprint (ver "Portões de
+  fase e de sprint" em `references/06-execucao.md`) só roda a suíte inteira depois de
+  confirmar que a árvore não tem trabalho de outra sessão no meio. Uma árvore contaminada
+  nunca faz a sprint fechar por engano — ela simplesmente adia o portão.
+- **Identidade no rastro.** Toda linha do rastro passa a trazer `sessao` (`<harness>@<id>`) e
+  `harness`, gravados por `rastro_grava` no parâmetro `extras`.
+
+**O que vale em cada harness:** o texto do método — a regra 21, os passos de F1 e F6 — vale
+nos dois harnesses, porque os dois leem o mesmo `SKILL.md`. Os hooks bash rodam nativamente
+no Claude Code e, no OpenCode, pela ponte já existente (`.opencode/plugin/sprintx.ts`).
+MimoCode não é suportado por esta skill.
 
 ## Fases → arquivos da skill
 
@@ -122,6 +154,8 @@ O modo de cada hook vive em `.expx/hooks.json`, e é lá que se promove.
 | `tdd-teste-antes` | `PostToolUse` (escrita) | `aviso` | Avisa quando a implementação nasce antes do teste. **Inativo sem `CONVENCOES.md`** — não chuta onde o teste deveria estar |
 | `segredo` | `PreToolUse` (escrita) | `bloqueio` | Barra segredo com forma reconhecível indo para arquivo versionado |
 | `git-perigoso` | `PreToolUse` (Bash) | `bloqueio` | Barra operação de versionamento irreversível durante a execução autônoma |
+| `task-reivindicada` | `PreToolUse` (`tasks.md`) | `aviso` | Avisa ao marcar `em_andamento` uma task que o rastro mostra aberta por outra sessão (regras 6 e 8) |
+| `arvore-limpa-antes-da-suite` | `PreToolUse` (Bash) | `aviso` | Avisa, antes de rodar a suíte, se há arquivo sujo fora do escopo declarado ou task de outra sessão em andamento |
 
 Hook de método falha **aberta**: se ele quebra, o trabalho segue. Hook de segurança falha **fechada**.
 
