@@ -59,6 +59,8 @@ Valem para todo arquivo que leva frontmatter:
 | `confianca` | `alta` \| `media` \| `baixa` |
 | `tipo_task` | `config` \| `client` \| `dominio` \| `persistencia` \| `api` \| `ui` \| `integracao_externa` \| `teste` \| `infra` \| `refatoracao` |
 | `metodo_agregacao` | `pert_quadratura` |
+| `densidade` | `mvp` \| `padrao` \| `completo` \| `profundo` |
+| `modo_construcao` | `entrevista` \| `autonomo` |
 
 Atenção a duas distinções que o painel trata como coisas diferentes:
 
@@ -325,8 +327,16 @@ expx_schema: 1
 expx_tool: sprintx
 kind: decisoes
 trabalho_id: exportacao-csv-relatorios
+densidade: padrao
+modo_construcao: entrevista
 atualizado_em: 2026-08-29
 decisoes:
+  - id: D-00
+    decisao: densidade padrao, construcao entrevista
+    alternativa_descartada: null
+    motivo: confirmado pelo usuario sem sugestao previa
+    status: fechada
+    bloqueante: false
   - id: D-01
     decisao: Envio assincrono via fila existente
     alternativa_descartada: Envio sincrono na request
@@ -341,6 +351,15 @@ decisoes:
   `alternativa_descartada: null` e `motivo: null` enquanto não estiver resolvida.
 - `bloqueante` reflete a regra da skill: todo PENDENTE é `true` por padrão; só é `false`
   com autorização explícita do usuário. Decisão já `fechada` é `bloqueante: false`.
+- `densidade` (`mvp` \| `padrao` \| `completo` \| `profundo`) e `modo_construcao`
+  (`entrevista` \| `autonomo`) são gravados na F2, Passo 0, e refletem a linha `D-00` —
+  a primeira decisão de toda fase de descoberta. Quando a feature vem de um
+  `BRIEFING.md` do prodx com `densidade_sugerida`/`modo_construcao_sugerido`,
+  `D-00.alternativa_descartada` registra a sugestão original quando o usuário a ajusta;
+  `null` quando ele apenas confirma.
+- No modo `autonomo`, uma decisão fechada por pesquisa (sem resposta direta do usuário)
+  tem seu `motivo` começando com `(HIPOTESE)`, seguido da evidência que a sustenta. Uma
+  decisão sem esse marcador é lida como confirmada pelo usuário, em qualquer modo.
 
 ### `base/00-INDICE.md` → `kind: base_indice`
 
@@ -539,6 +558,7 @@ Antes de dar por gravado qualquer arquivo de estado:
 - [ ] Nenhum acento em chave ou em valor de enum.
 - [ ] Datas em `AAAA-MM-DD`; `atualizado_em` reescrito nesta gravação.
 - [ ] Em `kind: tasks`, toda task tem `teste_integracao` e `teste_funcional` não vazios.
+- [ ] Em `kind: decisoes`, `densidade` e `modo_construcao` estão preenchidos e a linha `D-00` existe. No modo `autonomo`, toda decisão sem resposta direta do usuário tem `(HIPOTESE)` no início do `motivo`.
 - [ ] Em `kind: estimativa`, `min` e `max` sao diferentes (numero unico e proibido) e nenhum valor e data de calendario.
 - [ ] Em `kind: orquestrador`, as tres chaves de indexacao (`modulo_afetado`, `arquivos_alterados`, `palavras_chave`) existem — vazias sao `[]`, nunca ausentes — e nao tem acento nem maiuscula.
 - [ ] Em `kind: fechamento`, `arquivos_alterados` nao tem repeticao e bate com o `ORQUESTRADOR.md`.

@@ -99,6 +99,17 @@ com `trabalho: <slug>`, `ferramenta: sprintx`, `titulo_curto` (a feature em até
 `references/09-estado.md` — leitura e gravação atômica, preservando os campos dos outros donos.
 Se `.expx/` não existir, siga sem gravar, sem erro e sem aviso.
 
+## Passo 1.1 — Ler densidade e forma de construção sugeridas (quando vem do prodx)
+
+Se a feature nasceu de um `BRIEFING.md` do prodx, ele traz `densidade_sugerida`
+(`mvp` | `padrao` | `completo` | `profundo`) e `modo_construcao_sugerido`
+(`entrevista` | `autonomo`) no frontmatter. Leia os dois agora e leve-os para a
+F2 — é lá que são confirmados ou ajustados, nunca aqui: a F1 não pergunta nada
+(ver cabeçalho desta fase).
+
+Sem `BRIEFING.md`, ou sem esses campos nele: os dois ficam `NÃO SUGERIDO`, e a
+F2 pergunta do zero, sem viés de sugestão nenhuma.
+
 ## Passo 2 — Detectar o modo
 
 Decida pelo que o usuário descreveu:

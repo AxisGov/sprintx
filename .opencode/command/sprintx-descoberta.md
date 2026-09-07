@@ -1,5 +1,5 @@
 ---
-description: sprintx F2 — descoberta, entrevista o usuário e registra as decisões
+description: sprintx F2 — descoberta, por entrevista ou de forma autônoma, e registra as decisões
 ---
 
 Invoque a skill `sprintx` e execute a F2 DESCOBERTA seguindo `references/02-descoberta.md`.

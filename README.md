@@ -31,7 +31,7 @@ de features novas para <a href="https://claude.com/claude-code">Claude Code</a> 
 
 </div>
 
-`sprintx` (lê-se "sprint elevado a x") pega uma ideia e a leva até a feature entregue, passando por seis fases obrigatórias: ingestão da base de conhecimento, descoberta com entrevista, plano em sprints/fases/tasks, orquestrador, auditoria do próprio plano e execução autônoma.
+`sprintx` (lê-se "sprint elevado a x") pega uma ideia e a leva até a feature entregue, passando por seis fases obrigatórias: ingestão da base de conhecimento, descoberta (por entrevista ou de forma autônoma, à sua escolha), plano em sprints/fases/tasks, orquestrador, auditoria do próprio plano e execução autônoma.
 
 > **Todo o esforço vai para o planejamento; a execução é autônoma porque a ambiguidade já foi eliminada.**
 > Uma pergunta feita durante a execução é sempre uma falha da fase de planejamento.
@@ -233,7 +233,7 @@ Quero adicionar exportação de relatório em CSV nessa tela.
 |---|---|
 | `/sprintx <feature>` | detecta a fase atual e continua de onde parou |
 | `/sprintx-base <feature>` | **F1** — ingestão, constrói a base de conhecimento |
-| `/sprintx-descoberta <feature>` | **F2** — entrevista de descoberta |
+| `/sprintx-descoberta <feature>` | **F2** — descoberta, por entrevista ou de forma autônoma |
 | `/sprintx-sprints <feature>` | **F3** — gera o plano de sprints, fases e tasks |
 | `/sprintx-estimar <feature>` | **F3.5** — estima o esforço do plano em faixa *(opcional)* |
 | `/sprintx-orquestrador <feature>` | **F4** — gera o mapa de execução |
@@ -257,7 +257,7 @@ A elas se soma uma única fase **opcional**, a F3.5 (estimativa), que roda entre
 | Fase | Nome | O que faz |
 |---|---|---|
 | **F1** | Ingestão | Constrói a base de conhecimento antes de qualquer plano — documentação oficial de ferramentas de terceiro (modo externo) ou o código e contratos existentes (modo interno). Nada de invenção: o que a fonte não afirma vira `NÃO DOCUMENTADO`. |
-| **F2** | Descoberta | A única fase em que a IA pergunta — e nela é obrigada a perguntar, em blocos de até 5 perguntas, esperando resposta entre eles. Cobre escopo, arquitetura, dados, observabilidade, erros, segredos e definição de pronto. Sai um `00-DECISOES.md` com cada decisão rastreável. |
+| **F2** | Descoberta | A única fase em que a IA pergunta — e nela é obrigada a perguntar. Abre confirmando **densidade** (MVP/Padrão/Completo/Profundo) e **forma de construção** (Entrevista/Autônomo) — a segunda muda como os sete eixos seguintes são preenchidos: em blocos de até 5 perguntas esperando resposta (Entrevista), ou por pesquisa própria com hipótese registrada e evidência, só perguntando o indecidível (Autônomo). Cobre escopo, arquitetura, dados, observabilidade, erros, segredos e definição de pronto. Sai um `00-DECISOES.md` com cada decisão rastreável, incluindo o que foi hipótese. |
 | **F3** | Plano | Gera a árvore de sprints, fases e tasks com todos os contratos preenchidos. Bloqueia se sobrar pendência não resolvida. A primeira sprint sempre entrega a capacidade de testar (config, client, harness, fixtures) antes de qualquer funcionalidade de negócio. |
 | **F3.5** | Estimativa *(opcional)* | Converte o plano pronto em **faixa de esforço** — nunca número único, nunca prazo de calendário. Só roda a pedido, e nunca bloqueia a F4. |
 | **F4** | Orquestrador | Gera o `ORQUESTRADOR.md` — o mapa de execução, escrito para quem abre o repositório sem saber nada: rota de execução, paralelismo, caminho crítico, ferramentas, agentes, regras de autonomia e como retomar uma sessão interrompida. |

@@ -1,5 +1,5 @@
 ---
-description: sprintx F2 — descoberta, entrevista o usuário e registra as decisões
+description: sprintx F2 — descoberta, por entrevista ou de forma autônoma, e registra as decisões
 argument-hint: [nome-da-feature]
 ---
 
