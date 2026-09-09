@@ -106,7 +106,7 @@ caminho_critico: [F-01.1, F-01.3]
 modulo_afetado: [relatorios, exportacao]
 arquivos_alterados: []
 palavras_chave: [csv, exportacao, relatorio, streaming]
-worktree: ../leadiq--exportacao-csv-relatorios
+worktree: ../nome-do-projeto--exportacao-csv-relatorios
 ---
 ```
 
