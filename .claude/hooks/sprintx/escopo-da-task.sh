@@ -31,9 +31,10 @@ REL="${ALVO#"$RAIZ"/}"
 
 # ------------------------------------------------------------------ isencoes
 # Os proprios artefatos da skill nunca sao "fora de escopo": a F6 escreve em
-# tasks.md e 00-BLOQUEIOS.md o tempo todo, por desenho.
+# tasks.md e 00-BLOQUEIOS.md o tempo todo, por desenho. docs/entregas/ e a
+# area de artefatos da mergex, que a F6 aciona nos mesmos moldes.
 case "$REL" in
-  docs/sprintx/*|docs/eventos/*|.expx/*) exit 0 ;;
+  docs/sprintx/*|docs/eventos/*|docs/entregas/*|.expx/*) exit 0 ;;
 esac
 
 # ------------------------------------------------ achar a task em andamento

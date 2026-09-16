@@ -19,6 +19,35 @@ disco diz de verdade — `tasks_total`, `tasks_concluidas` e `bloqueios` — por
 anterior pode ter morrido entre a gravação de `tasks.md` e a do estado. O disco é a verdade; o
 `estado.json` é a cópia para exibição.
 
+## Passo 1.1 — Abertura do trabalho no repositório
+
+Se `.claude/skills/mergex/SKILL.md` existir, acione a **etapa E0 da `mergex`** agora: depois de
+ler o `ORQUESTRADOR.md`, antes da primeira task. Sem a `mergex` instalada, siga direto para o
+Passo 2 — a F6 roda exatamente como sempre rodou, e a ausência dela não gera aviso nenhum.
+
+Num projeto OpenCode a skill pode estar em `.opencode/skills/mergex/SKILL.md` (é para lá que o
+`install.sh` copia as skills de projeto nesse harness). **Qualquer um dos dois caminhos conta
+como "a `mergex` instalada"**, e é assim que os dois harnesses enxergam a mesma integração;
+daqui em diante este arquivo diz só "se a `mergex` existir".
+
+A F1 já abriu `feature/<slug>` e o worktree da feature (regra 21). O E0 **adota** o que existe:
+não troca de branch, não cria uma segunda, não renomeia a da F1, não remove worktree e **não
+exige árvore limpa** para isso — os artefatos de F1 a F5 estão na árvore, ainda não commitados,
+que é exatamente onde deveriam estar. Ele registra a branch no `ORQUESTRADOR.md` e cria
+`docs/entregas/<slug>/ENTREGA.md`.
+
+Se **não** houver branch para este trabalho (execução sem git, "sem worktree" explícito, ou
+fluxo que não passou pela F1), o E0 cria `feature/<slug>` a partir da base — e aí a árvore
+precisa estar limpa. Se a `mergex` avisar que há alteração não commitada pendente nesse caso,
+**pare a F6** e repasse o aviso: não se começa a executar por cima de trabalho não salvo de
+outra pessoa.
+
+Se a `mergex` avisar que a branch do trabalho está em **outro worktree**, pare a F6 e repasse o
+caminho: o trabalho continua de dentro daquele diretório.
+
+Você aciona e devolve o controle: **nenhum comando de versionamento entra na F6 por sua conta**.
+A branch e o worktree continuam sendo da F1; o versionamento é da `mergex`.
+
 ## Passo 2 — Executar task a task
 
 Ordem: sprints em ordem numérica; dentro da sprint, a rota do ORQUESTRADOR. Só execute em paralelo o que o plano declarou paralelizável. Uma task só começa quando todas em `depende_de` estão `concluida`.
@@ -46,6 +75,16 @@ dependências estão satisfeitas; sem nenhuma, registre um bloqueio.
 6. **Registre o esforço real da task**, em horas de trabalho focado, na mesma linha (ex.: `2026-08-26 · suíte: 42 passed, 0 failed · real: 3,5 h`). O real cobre o que a task de fato custou — escrever os dois testes, implementar, rodar a suíte e verificar o critério de aceite — e NÃO inclui reunião, revisão de código, deploy nem ida e volta com o cliente. Isso alimenta a calibração das estimativas futuras (ver "Passo 4"); anote no momento de concluir, não reconstrua de memória no fim do trabalho.
 7. Critério de aceite não atendido ou teste não passando: a task NÃO é concluída. Não existe "concluído com ressalva".
 8. **Atualize a cor daquele nó no diagrama** de `fases.md` da sprint: troque a classe na linha `class` do nó da task, e nada mais (`concluida`, `em_andamento` ou `bloqueada`, conforme `references/09-diagrama.md`). Não recalcule o caminho crítico, não reordene, não reescreva o bloco — durante a execução a estrutura do grafo não muda, só a cor. Se a atualização falhar, ou se `fases.md` não tiver bloco Mermaid (plano de uma versão anterior da skill), registre no rastro com `resultado: aviso` e siga: o diagrama é derivado e **nunca** impede uma task de fechar.
+
+9. **O commit da task.** Se `.claude/skills/mergex/SKILL.md` existir, acione a **etapa E1 da `mergex`** para esta task. Ela commita os arquivos de produto declarados em `arquivos`, mais os artefatos de método deste trabalho que estiverem sujos (a pasta `docs/sprintx/features/<slug>/`, a começar pelo `tasks.md` que você acabou de atualizar), com a mensagem que traz o objetivo e os testes da task, depois de varrer o diff em busca de segredo, credencial e dado real de cliente.
+
+   **A ordem é obrigatória e é esta:** teste → implementação → suíte afetada → revisão de testes → aceite → `status: concluida` → `tasks.md` atualizado (data, resultado da suíte e esforço real dos passos 5 e 6) → E1. O commit registra a task **já marcada** como concluída, e é o `tasks.md` atualizado que dá à mensagem o objetivo e os testes.
+
+   **`suite: parcial` fecha task e sustenta commit** — é o registro normal da F6, e a suíte inteira continua sendo cobrada no fechamento da sprint. O E1 barra apenas `suite: vermelha` e `suite: nao_executada`.
+
+   Se a `mergex` abortar o commit por suspeita de segredo, **não contorne**: a task fica sem commit, o aviso vai para o relatório final, e o portão de prontidão vai barrá-la depois.
+
+   **Task marcada `bloqueada` não gera commit** — a regra de bloqueio abaixo segue para a próxima task sem passar por aqui. Sem a `mergex` instalada, a task fecha no passo 8, como sempre fechou.
 
 **Frontmatter (obrigatório) — o YAML e a prosa andam juntos.** Cada arquivo de estado que
 você tocar na F6 é gravado com o frontmatter do contrato expx-schema v1
@@ -192,14 +231,37 @@ continua existindo — fechar trabalho não é apagar o estado.
 Este é o último passo do trabalho, e é o mais dispensável de todos: se `.expx/` não existir, ou
 se a gravação falhar, o trabalho está entregue do mesmo jeito. Registre no rastro e siga.
 
+## Passo 3.2 — Entrega
+
+Se `.claude/skills/mergex/SKILL.md` existir, acione as **etapas E2 a E8 da `mergex`**, nesta
+ordem: portão de prontidão, classificação da atenção humana, descrição do pull request, pacote
+de QA, push, abertura do PR e registro da entrega. Sem a `mergex` instalada, siga direto para o
+Passo 4 — e não escreva nada sobre a ausência dela.
+
+**A ordem é crítica, e este passo vem depois do Passo 3.1 inteiro.** Primeiro a execução
+possível termina, depois os portões de sprint rodam, depois o `FECHAMENTO.md` é gravado — e
+**só então** E2 a E8. O `FECHAMENTO.md` precisa já existir quando o E2 começa, porque ele entra
+no commit de artefatos de método que a `mergex` faz antes do push; gravado depois, ficaria de
+fora da entrega.
+
+Se o portão devolver `BLOQUEADO`, **inclua no relatório final o que ele apontou** e não tente
+contornar: a `mergex` barra e explica, nunca maquia. Achado de auditoria ALTA em aberto na F5
+faz o portão barrar, e sprint fechada sem a suíte inteira registrada aparece como aviso do
+portão.
+
+**A integração para no E8.** Não sugira o merge, não encadeie a revisão e não mencione o
+comando de revisão da `mergex` — nem no relatório, nem como próximo passo, nem como dica.
+Integrar código é decisão humana: o desenvolvedor chama a revisão pelo nome, quando quiser.
+
 ## Passo 4 — Relatório final
 
-Ao terminar (tudo concluído, ou nada mais executável), entregue ao usuário um relatório com exatamente estas seções:
+Ao terminar (tudo concluído, ou nada mais executável), entregue ao usuário um relatório com exatamente estas seções — a 5ª existe apenas quando a `mergex` estiver instalada:
 
 1. **Concluído por sprint** — por sprint: tasks concluídas / total, e o que ficou funcionando.
 2. **Bloqueios** — o conteúdo de `00-BLOQUEIOS.md` (ou "nenhum").
 3. **Saída da suíte** — o resultado da última execução completa da suíte de testes, colado, não resumido de memória.
 4. **Divergências entre o plano e a realidade** — tudo que foi diferente do planejado (arquivo a mais, teste ajustado, limite da base que se comportou diferente), uma linha por divergência.
+5. **Entrega** — **somente quando a `mergex` estiver instalada** (Passo 3.2), com o que estiver disponível: a branch, a quantidade de commits, o resultado do portão, a contagem das três faixas de atenção humana, e a URL do pull request (ou o caminho de `PR.md`, quando a ferramenta do serviço não estiver disponível). Se o portão devolveu `BLOQUEADO`, é aqui que o motivo aparece, dito com todas as letras. Sem a `mergex`, esta seção **não existe**: não a crie vazia e não avise que ela falta.
 
 Ao entregar o relatório, informe também, em uma linha, que o `FECHAMENTO.md` foi gravado e
 quais módulos ele declara — é assim que o usuário sabe que a feature entrou no índice.
@@ -216,5 +278,6 @@ quais módulos ele declara — é assim que o usuário sabe que a feature entrou
 - [ ] `docs/sprintx/estimativas/HISTORICO.md` recebeu uma entrada por task concluída, com o desvio calculado (ou `null` quando não houve estimativa), e a tabela de calibração por tipo foi recalculada.
 - [ ] `ORQUESTRADOR.md` teve `arquivos_alterados` agregado (união sem repetição dos `arquivos` das tasks concluídas) e `modulo_afetado` conferido contra o que a execução de fato tocou.
 - [ ] `FECHAMENTO.md` existe em `docs/sprintx/features/<slug>/` com frontmatter `kind: fechamento` válido e a prosa correspondente abaixo dele.
-- [ ] Relatório final entregue com as 4 seções.
+- [ ] Relatório final entregue com as 4 seções — 5 quando a `mergex` estiver instalada, com a seção **Entrega**.
+- [ ] Com a `mergex` instalada: o E0 rodou depois do `ORQUESTRADOR.md` e antes da primeira task, o E1 rodou depois de cada task dada como `concluida`, e o E2 a E8 rodaram com o `FECHAMENTO.md` já gravado. Portão `BLOQUEADO` aparece no relatório e não foi contornado. Sem a `mergex`, nenhum desses passos aconteceu e nada nesta fase mudou por causa disso.
 - [ ] `.expx/estado.json` fechou o trabalho (`trabalho`, `fase` e `task` em `null`), ou `.expx/` não existe no projeto, ou a falha de gravação está registrada no rastro. Este item **nunca impede** a fase de ser dada como concluída: o arquivo é de exibição, e sua ausência é inofensiva.

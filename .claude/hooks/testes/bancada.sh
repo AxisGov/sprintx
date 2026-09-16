@@ -194,6 +194,76 @@ else
   falhou=$((falhou+1)); printf '  FALHA %-45s esperado=claude-code@abc-123 real=%s\n' "sessao-por-claude-code-env" "$sessao_por_claude"
 fi
 
+echo "== contrato sprintx x mergex (F6) =="
+# Asserts textuais sobre o contrato de integracao. Sem python3 e sem rede: so
+# leitura dos arquivos da skill, para que o caso rode em qualquer maquina.
+SK="$H/../skills/sprintx"
+EXEC="$SK/references/06-execucao.md"
+SKILLMD="$SK/SKILL.md"
+
+afirma() { # afirma <nome> <condicao-ja-avaliada:0|1> <detalhe>
+  if [ "$2" -eq 0 ]; then ok=$((ok+1)); printf '  ok   %-46s %s\n' "$1" "$3"
+  else falhou=$((falhou+1)); printf '  FALHA %-45s %s\n' "$1" "$3"; fi
+}
+tem() { grep -qF "$2" "$1"; }          # substring literal
+conta() { grep -cF "$2" "$1"; }
+linha_de() { grep -nF "$2" "$1" | head -1 | cut -d: -f1; }
+
+# 1. Os tres acionamentos existem e estao condicionados a presenca da mergex.
+tem "$EXEC" 'etapa E0 da `mergex`'; afirma "e0-existe" $? "F6 aciona E0"
+tem "$EXEC" 'etapa E1 da `mergex`'; afirma "e1-existe" $? "F6 aciona E1"
+tem "$EXEC" 'etapas E2 a E8 da `mergex`'; afirma "e2-e8-existe" $? "F6 aciona E2-E8"
+
+# Toda mencao a acionamento vem guardada pela existencia do SKILL.md da mergex.
+GUARDA=$(conta "$EXEC" '.claude/skills/mergex/SKILL.md')
+[ "$GUARDA" -ge 3 ]; afirma "acionamento-condicional" $? "$GUARDA guardas de presenca"
+
+# 2. A ordem no arquivo: E0 antes da primeira task; FECHAMENTO.md antes de E2.
+L_E0=$(linha_de "$EXEC" 'etapa E0 da `mergex`')
+L_TASK=$(linha_de "$EXEC" '## Passo 2 — Executar task a task')
+[ "$L_E0" -lt "$L_TASK" ]; afirma "e0-antes-da-primeira-task" $? "E0=$L_E0 < Passo2=$L_TASK"
+
+L_FECH=$(linha_de "$EXEC" 'grave `docs/sprintx/features/<slug>/FECHAMENTO.md`')
+L_E2=$(linha_de "$EXEC" 'etapas E2 a E8 da `mergex`')
+[ "$L_FECH" -lt "$L_E2" ]; afirma "fechamento-antes-de-e2" $? "FECHAMENTO=$L_FECH < E2=$L_E2"
+
+L_CONCLUIDA=$(linha_de "$EXEC" 'Só então marque `status: concluida`')
+L_E1=$(linha_de "$EXEC" 'etapa E1 da `mergex`')
+[ "$L_CONCLUIDA" -lt "$L_E1" ]; afirma "e1-depois-de-status-concluida" $? "concluida=$L_CONCLUIDA < E1=$L_E1"
+
+# 3. suite: parcial sustenta commit; task bloqueada nao gera commit.
+tem "$EXEC" '**`suite: parcial` fecha task e sustenta commit**'; afirma "parcial-permite-e1" $? "parcial sustenta E1"
+tem "$EXEC" '**Task marcada `bloqueada` não gera commit**'; afirma "bloqueada-sem-e1" $? "bloqueada nao commita"
+
+# 4. A integracao para no E8: nenhum arquivo da skill encadeia a revisao.
+REV=$(grep -rlF "mergex-""revisar" "$SK" "$H/.." 2>/dev/null | grep -v "/testes/bancada.sh$" | wc -l)
+[ "$REV" -eq 0 ]; afirma "sem-mergex-revisar" $? "$REV arquivo(s) citam o comando de revisao"
+E910=$(grep -rnE '\bE(9|10)\b' "$SK" 2>/dev/null | grep -i mergex | wc -l)
+[ "$E910" -eq 0 ]; afirma "sem-e9-e10" $? "$E910 mencao(oes) a E9/E10 da mergex"
+
+# 5. Sem mergex, a F6 nao muda e nao avisa.
+tem "$EXEC" 'siga direto para o'; afirma "sem-mergex-segue-direto" $? "caminho sem mergex explicito"
+
+# 6. Nenhum caminho absoluto entrou no contrato (regra inviolavel 16).
+ABS=$(grep -nE '(^|[^a-zA-Z0-9_])(/(home|Users|tmp|var|opt)/|[A-Za-z]:\\)' "$EXEC" "$SKILLMD" | wc -l)
+[ "$ABS" -eq 0 ]; afirma "sem-caminho-absoluto" $? "$ABS ocorrencia(s)"
+
+# 7. O contrato da task nao ganhou campo novo: os 10 campos da tabela do SKILL.md.
+CAMPOS=$(sed -n '/### Contrato da Task/,/### Contrato da Fase/p' "$SKILLMD" | grep -cE '^\| `')
+[ "$CAMPOS" -eq 10 ]; afirma "contrato-task-intacto" $? "$CAMPOS campos (esperado 10)"
+
+# 8. Regra 21 e a posse da branch/worktree seguem com a F1.
+tem "$SKILLMD" '21. Uma feature aberta por árvore de trabalho. Com git, ela nasce em worktree próprio na F1'; afirma "regra-21-intacta" $? "regra 21 literal"
+REGRAS=$(sed -n '/^## Regras invioláveis$/,/^## Sessões paralelas$/p' "$SKILLMD" | grep -cE '^[0-9]+\. ')
+[ "$REGRAS" -eq 21 ]; afirma "21-regras-inviolaveis" $? "$REGRAS regras (esperado 21)"
+
+# 9. A mergex nao virou fase da maquina de estados.
+FASES=$(sed -n '/^| Estado do disco | Fase atual |$/,/^$/p' "$SKILLMD" | grep -ci mergex)
+[ "$FASES" -eq 0 ]; afirma "mergex-fora-da-maquina" $? "$FASES linha(s) na tabela de fase"
+
+# 10. Os dois harnesses enxergam a mesma integracao (Claude Code e OpenCode).
+tem "$EXEC" '.opencode/skills/mergex/SKILL.md'; afirma "deteccao-nos-dois-harnesses" $? "caminho OpenCode previsto"
+
 echo
 echo "  $ok ok, $falhou falhas"
 [ "$falhou" -eq 0 ]

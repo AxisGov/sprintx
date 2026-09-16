@@ -61,6 +61,22 @@ Objetivo, tasks que a compõem, critério de saída, com qual outra fase pode ro
 
 Objetivo, fases, critério de saída, riscos conhecidos.
 
+## Entrega no repositório
+
+A `sprintx` termina com o código escrito e os testes verdes. Levar isso até o repositório e até
+o revisor é trabalho da [`mergex`](https://github.com/bittencourtthulio/mergex): ela adota a
+branch e o worktree que a F1 abriu (regra 21), commita cada task que fecha, e ao fim monta a
+entrega — portão de prontidão, classificação do diff por atenção humana, descrição do pull
+request e pacote para o QA.
+
+Ela entra **apenas na F6**, nos três pontos que `references/06-execucao.md` define: E0 na
+abertura do trabalho, E1 a cada task concluída, E2 a E8 no fechamento, depois do
+`FECHAMENTO.md`. A `mergex` não é uma fase, não entra na máquina de estados e não acrescenta
+campo nenhum ao contrato da task.
+
+A integração é condicional: sem a `mergex` instalada, a F6 roda exatamente como sempre. E ela
+**para no E8** — revisar e integrar código é decisão humana, nunca encadeada por esta skill.
+
 ## Regras invioláveis
 
 1. Todo o esforço vai para o planejamento; pergunta feita durante a execução é sempre falha da fase de planejamento.
@@ -130,7 +146,7 @@ MimoCode não é suportado por esta skill.
 | F3.5 ESTIMATIVA (opcional) | `references/07-estimativa.md` | `assets/TEMPLATE-ESTIMATIVA.md`, `assets/TEMPLATE-HISTORICO.md` |
 | F4 ORQUESTRADOR | `references/04-orquestrador.md` | `assets/TEMPLATE-ORQUESTRADOR.md` |
 | F5 AUDITORIA | `references/05-auditoria.md` | — |
-| F6 EXECUÇÃO | `references/06-execucao.md` | `assets/TEMPLATE-FECHAMENTO.md`, `assets/TEMPLATE-HISTORICO.md` |
+| F6 EXECUÇÃO | `references/06-execucao.md` — aciona a `mergex` (E0, E1, E2–E8) quando ela estiver instalada | `assets/TEMPLATE-FECHAMENTO.md`, `assets/TEMPLATE-HISTORICO.md` |
 
 Os caminhos acima são relativos à raiz desta skill. O detalhe operacional de cada fase mora exclusivamente no reference correspondente; leia-o apenas quando a fase chegar.
 
