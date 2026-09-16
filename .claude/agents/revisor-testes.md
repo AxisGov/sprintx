@@ -1,6 +1,6 @@
 ---
 name: revisor-testes
-description: Responde a uma pergunta so sobre os testes de uma task: esse teste passaria mesmo com a implementacao errada? Use na F5 sobre cada task, e na F6 ao fechar uma task. Le e julga, nao corrige.
+description: "Responde a uma pergunta so sobre os testes de uma task: esse teste passaria mesmo com a implementacao errada? Use na F5 sobre cada task, e na F6 ao fechar uma task. Le e julga, nao corrige."
 tools: Read, Glob, Grep
 model: inherit
 ---
