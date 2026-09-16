@@ -62,7 +62,7 @@ Nunca use uma ferramenta de edição que reescreva o arquivo inteiro: o rastro �
 
 ## Versionamento
 
-O rastro é **ignorado pelo versionador** por padrão: é local da máquina de quem executou, cresce rápido, e o painel roda local. A F1 garante a linha `docs/eventos/` no `.gitignore` do projeto.
+O rastro é **ignorado pelo versionador** por padrão: é local da máquina de quem executou, cresce rápido, e o painel roda local. A F1 garante isso **localmente**, pelo `info/exclude` do repositório (caminho resolvido com `git rev-parse --git-path info/exclude`), e só quando o padrão ainda não é ignorado — ela **não** mexe no `.gitignore` versionado, que é decisão do projeto, não do trabalho (`references/01-ingestao.md`).
 
 Rotação: acima de 5 MB, o arquivo vira `<trabalho_id>.1.jsonl` e um novo começa (os hooks fazem isso sozinhos). O painel lê os dois.
 

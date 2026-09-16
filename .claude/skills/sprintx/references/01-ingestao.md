@@ -82,16 +82,38 @@ recurso da base NÃO levam frontmatter.
 Use `assets/TEMPLATE-BLOQUEIOS.md` e `assets/TEMPLATE-base-indice.md` (caminhos relativos à
 raiz da skill) como ponto de partida desses dois arquivos.
 
-**O rastro no `.gitignore`.** Garanta a linha `docs/eventos/` no `.gitignore` da raiz do
-repositório — acrescente-a se não existir, e não faça nada se já existir. O rastro de
-eventos (`references/08-rastro.md`) é local da máquina de quem executou, cresce rápido e o
-painel roda local; versioná-lo por acidente traz conflito de merge em arquivo append-only,
-que é chato de resolver. Quem quiser rastro compartilhado troca isso conscientemente.
+**O rastro e o estado ficam fora do versionador — sem tocar no `.gitignore`.** O rastro de
+eventos (`references/08-rastro.md`) e o `.expx/estado.json` (`references/09-estado.md`) são
+**estado local da máquina** de quem executou: crescem rápido, são reescritos a cada transição,
+o painel roda local, e versioná-los traz conflito de merge em arquivo que ninguém lê à mão. Mas
+eles não são produto nem decisão do projeto — e a F1 **não suja uma branch de feature com uma
+alteração global de `.gitignore` antes de o plano existir**.
 
-Na mesma passada, garanta também a linha `.expx/estado.json` no `.gitignore` — o arquivo que a
-barra de status lê (`references/09-estado.md`), pela mesma razão: é estado da máquina de quem
-está trabalhando, reescrito a cada transição. Se `.expx/` não existe no projeto, não crie nada
-e não acrescente a linha: não há o que ignorar.
+Com Git, garanta isso pelo mecanismo **local** do repositório: ele não aparece em `git status`
+e não entra em commit nenhum. Para cada um dos padrões `docs/eventos/` e `.expx/estado.json`:
+
+1. **Confira se já é ignorado** pela configuração existente — `git check-ignore -q <padrão>`
+   responde isso e cobre `.gitignore` versionado, excludes globais e o que mais o repositório já
+   tenha. Já ignorado: **não faça nada**.
+2. **Não sendo ignorado**, acrescente a linha ao arquivo que o próprio Git indicar:
+
+   ```bash
+   git rev-parse --git-path info/exclude
+   ```
+
+   **Resolva o caminho com esse comando, sempre.** Nunca escreva `.git/info/exclude` na mão: num
+   linked worktree o `.git` é um arquivo, não um diretório, e o exclude real vive no repositório
+   principal — o caminho fixo gravaria no lugar errado, ou em lugar nenhum. O comando devolve o
+   caminho certo nos dois casos.
+3. **Acrescente idempotentemente**: se a linha já está lá, não duplique. Crie o arquivo, e o
+   diretório dele, se não existirem.
+
+Se `.expx/` não existe no projeto, não crie nada e não acrescente a regra do `estado.json`: não
+há o que ignorar. **Sem Git** não existe `info/exclude` — siga sem erro e sem aviso.
+
+**A `sprintx` nunca modifica o `.gitignore` por conta própria.** Um time que queira política
+compartilhada versiona essas entradas por fora da F1 — e aí o passo 1 já as respeita, e a F1
+não faz nada.
 
 **O estado da barra — abertura do trabalho.** Com o scaffold no disco, grave `.expx/estado.json`
 com `trabalho: <slug>`, `ferramenta: sprintx`, `titulo_curto` (a feature em até 30 caracteres),

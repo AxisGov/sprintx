@@ -192,8 +192,10 @@ exibição a regra criaria bloqueio por algo puramente cosmético.
 
 `.expx/estado.json` é **ignorado pelo versionador**: é estado da máquina de quem está
 trabalhando, não do projeto, e reescrito a cada transição — versioná-lo produz conflito de
-merge em arquivo que ninguém lê a mão. A F1 garante a linha no `.gitignore` do projeto, do
-mesmo jeito que já garante `docs/eventos/`.
+merge em arquivo que ninguém lê a mão. A F1 garante isso **localmente**, pelo `info/exclude` do
+repositório (caminho resolvido com `git rev-parse --git-path info/exclude`) e só quando o
+padrão ainda não é ignorado, do mesmo jeito que já garante `docs/eventos/`. O `.gitignore`
+versionado é decisão do projeto, e a skill não o altera (`references/01-ingestao.md`).
 
 ## Ressalva
 
