@@ -375,6 +375,200 @@ tem "$EST" 'ou três arquivos'; afirma "c-f35-aceita-os-dois" $? "F3.5 tambem re
 AGENTE=$(grep -lF 'kind: plano' "$H/../agents/auditor-plano.md" "$H/../../.opencode/agent/auditor-plano.md" 2>/dev/null | wc -l)
 [ "$AGENTE" -eq 2 ]; afirma "c-agente-nos-dois-harnesses" $? "$AGENTE/2 espelhos do auditor corrigidos"
 
+pulado=0
+pula() { pulado=$((pulado+1)); printf '  pula %-46s %s\n' "$1" "$2"; }
+
+echo "== D. frontmatter dos agentes carrega =="
+# O E2E achou o revisor-testes invisivel ao Claude Code: `description:` sem aspas
+# com ": " no meio e YAML invalido, e o agente some sem erro nenhum. Guarda
+# ESTRUTURAL e conservadora (awk, roda em qualquer maquina); nao e um parser YAML
+# completo. Quando ha um parser real (PyYAML), ele confere tambem, logo abaixo.
+valida_frontmatter() { # valida_frontmatter <arquivo> <exige_name:1|0> -> motivo em stdout
+  tr -d '\r' < "$1" | awk -v exige_name="$2" '
+    function simples_invalido(v) {
+      if (v == "") return 0
+      c = substr(v, 1, 1)
+      if (c == "\"") return (v !~ /"[ \t]*$/)
+      if (c == "'\''" || c == "|" || c == ">" || c == "[" || c == "{") return 0
+      return (index(v, ": ") > 0 || v ~ /:$/ || index(v, " #") > 0)
+    }
+    function falha(m) { print m; erro = 1; exit 1 }
+    NR == 1 { if ($0 != "---") falha("sem delimitador inicial na linha 1"); next }
+    $0 == "---" { fechou = 1; exit }
+    /^[ \t]*$/ || /^[ \t]*#/ { next }
+    { linhas++ }
+    /^[A-Za-z_][A-Za-z0-9_-]*:/ || /^[ \t]+[A-Za-z_][A-Za-z0-9_-]*:/ {
+      chave = $0; sub(/^[ \t]*/, "", chave); sub(/:.*/, "", chave)
+      valor = $0; sub(/^[ \t]*[A-Za-z_][A-Za-z0-9_-]*:[ \t]*/, "", valor); sub(/[ \t]+$/, "", valor)
+      if (simples_invalido(valor)) falha("valor simples invalido em " chave " (\": \" ou \" #\" sem aspas)")
+      if ($0 !~ /^[ \t]/) { visto[chave] = 1; val[chave] = valor }
+      next
+    }
+    /^[ \t]+-/ { next }
+    { falha("linha que nao e chave YAML: " $0) }
+    END {
+      if (erro) exit 1
+      if (NR == 0) { print "arquivo vazio"; exit 1 }
+      if (!fechou) { print "sem delimitador final"; exit 1 }
+      if (!linhas) { print "frontmatter vazio"; exit 1 }
+      if (exige_name == 1 && (!visto["name"] || val["name"] == "")) { print "name ausente"; exit 1 }
+      if (!visto["description"] || val["description"] == "") { print "description ausente"; exit 1 }
+    }'
+}
+
+# D1. todo agente real dos dois harnesses passa. Claude Code exige `name`;
+# o OpenCode tira o nome do arquivo e so exige `description`.
+for f in "$H"/../agents/*.md; do
+  motivo="$(valida_frontmatter "$f" 1)"; rc=$?; afirma "d1-claude-$(basename "$f" .md)" "$rc" "${motivo:-frontmatter valido}"
+done
+for f in "$H"/../../.opencode/agent/*.md; do
+  motivo="$(valida_frontmatter "$f" 0)"; rc=$?; afirma "d1-opencode-$(basename "$f" .md)" "$rc" "${motivo:-frontmatter valido}"
+done
+NAG=$(ls "$H"/../agents/*.md 2>/dev/null | wc -l); NOA=$(ls "$H"/../../.opencode/agent/*.md 2>/dev/null | wc -l)
+[ "$NAG" -eq 3 ] && [ "$NOA" -eq 3 ]; afirma "d1-nenhum-agente-sumiu" $? "$NAG claude, $NOA opencode (esperado 3 e 3)"
+tem "$H/../agents/revisor-testes.md" 'tools: Read, Glob, Grep'; afirma "d1-revisor-so-leitura" $? "tools de leitura preservadas"
+
+# D2. a guarda reconhece cada forma de cabecalho quebrado — inclusive o bug do E2E.
+AG="$W/agentes-ruins"; mkdir -p "$AG"
+printf 'name: x\ndescription: y\n---\n' > "$AG/sem-inicio.md"
+printf '%s\n' '---' 'name: x' 'description: y' > "$AG/sem-fim.md"
+printf '%s\n' '---' 'description: y' '---' > "$AG/sem-name.md"
+printf '%s\n' '---' 'name: x' 'tools: Read' '---' > "$AG/sem-description.md"
+printf '%s\n' '---' 'name: revisor-testes' 'description: Responde sobre os testes de uma task: esse teste passaria?' '---' > "$AG/dois-pontos.md"
+printf '%s\n' '---' '---' 'corpo' > "$AG/vazio.md"
+printf '\n---\nname: x\ndescription: y\n---\n' > "$AG/linha-antes.md"
+printf '\357\273\277---\nname: x\ndescription: y\n---\n' > "$AG/bom-antes.md"
+printf '%s\n' '---' 'name: x' 'description: y # comentario come o resto' '---' > "$AG/cerquilha.md"
+for caso_ruim in sem-inicio sem-fim sem-name sem-description dois-pontos vazio linha-antes bom-antes cerquilha; do
+  motivo="$(valida_frontmatter "$AG/$caso_ruim.md" 1)"
+  [ $? -ne 0 ]; afirma "d2-rejeita-$caso_ruim" $? "${motivo:-NAO rejeitou}"
+done
+printf '%s\n' '---' 'name: x' 'description: "Pergunta: passaria? # sim"' '---' > "$AG/citado.md"
+motivo="$(valida_frontmatter "$AG/citado.md" 1)"; afirma "d2-aceita-citado" $? "${motivo:-aspas protegem \": \" e \" #\"}"
+
+# D3. parser YAML real, quando existir. `python3` do Windows pode ser o stub da
+# loja, por isso a deteccao exige `import yaml` funcionando de fato.
+PYY=""
+for py in python3 python; do
+  command -v "$py" >/dev/null 2>&1 && "$py" -c 'import yaml' >/dev/null 2>&1 && { PYY="$py"; break; }
+done
+if [ -n "$PYY" ]; then
+  yaml_ok() { "$PYY" - "$1" 2>/dev/null <<'PY'
+import sys, yaml
+t = open(sys.argv[1], encoding='utf-8').read().replace('\r\n', '\n')
+if not t.startswith('---\n'): sys.exit(1)
+d = yaml.safe_load(t[4:].split('\n---', 1)[0])
+sys.exit(0 if isinstance(d, dict) and d.get('description') else 1)
+PY
+  }
+  for f in "$H"/../agents/*.md "$H"/../../.opencode/agent/*.md; do
+    yaml_ok "$f"; rc=$?; afirma "d3-yaml-$(basename "$(dirname "$f")")-$(basename "$f" .md)" "$rc" "PyYAML ($PYY) carrega"
+  done
+  yaml_ok "$AG/dois-pontos.md"; [ $? -ne 0 ]; afirma "d3-yaml-confirma-bug-e2e" $? "PyYAML tambem rejeita o caso do E2E"
+else
+  pula "d3-yaml-real" "nenhum python com PyYAML; so a guarda estrutural rodou"
+fi
+
+echo "== E. CONVENCOES.md: caminho canonico e precedencia =="
+SCH="$SK/references/00-schema.md"
+TDD="$H/sprintx/tdd-teste-antes.sh"
+CV="$(mktemp -d)"
+git -C "$CV" init -q -b main
+mkdir -p "$CV/src" "$CV/docs/stack" "$CV/docs/stackx" "$CV/.expx"
+printf 'export const x = 1\n' > "$CV/src/calculo.ts"
+ev_cv() { printf '{"cwd":"%s","tool_name":"Write","tool_input":{"file_path":"%s"}}' "$CV" "$CV/src/calculo.ts"; }
+conv() { printf '# Convencoes (%s)\nTestes: `*.test.ts` ao lado do arquivo.\n' "$1" > "$CV/$1"; }
+limpa_conv() { rm -f "$CV/CONVENCOES.md" "$CV/docs/stack/CONVENCOES.md" "$CV/docs/stackx/CONVENCOES.md" "$CV/.expx/CONVENCOES.md"; }
+lido_de() { # imprime o CONVENCOES.md que o hook usou, ou "inativo"
+  local s; s="$(ev_cv | (cd "$CV" && bash "$TDD") 2>/dev/null)"
+  case "$s" in *"convencoes lidas de "*) s="${s#*convencoes lidas de }"; printf '%s' "${s%%)*}" ;; *) printf 'inativo' ;; esac
+}
+espera_conv() { # espera_conv <nome> <esperado>
+  local r; r="$(lido_de)"; [ "$r" = "$2" ]; afirma "$1" $? "lido: $r (esperado $2)"
+}
+
+# A. so o caminho canonico.
+limpa_conv; conv docs/stack/CONVENCOES.md
+espera_conv "ea-so-docs-stack-encontrado" docs/stack/CONVENCOES.md
+# B. raiz e docs/stack: a raiz e override explicito.
+limpa_conv; conv CONVENCOES.md; conv docs/stack/CONVENCOES.md
+espera_conv "eb-raiz-vence-docs-stack" CONVENCOES.md
+# C. canonico vence o legado.
+limpa_conv; conv docs/stack/CONVENCOES.md; conv docs/stackx/CONVENCOES.md
+espera_conv "ec-canonico-vence-stackx" docs/stack/CONVENCOES.md
+# D. so o legado docs/stackx continua funcionando.
+limpa_conv; conv docs/stackx/CONVENCOES.md
+espera_conv "ed-stackx-legado-funciona" docs/stackx/CONVENCOES.md
+limpa_conv; conv .expx/CONVENCOES.md; conv docs/stackx/CONVENCOES.md
+espera_conv "ed2-stackx-vence-expx" docs/stackx/CONVENCOES.md
+# Determinismo: o mais novo NAO vence (a raiz e mais velha e continua valendo).
+limpa_conv; conv CONVENCOES.md; touch -d '2001-01-01' "$CV/CONVENCOES.md" 2>/dev/null; conv docs/stack/CONVENCOES.md
+espera_conv "e-mtime-nao-decide" CONVENCOES.md
+# E. nenhum: o hook segue inativo (fallback atual).
+limpa_conv
+espera_conv "ee-nenhum-hook-inativo" inativo
+tem "$SK/references/03-plano.md" '2. **Sem `CONVENCOES.md`**: use a **estrutura de pastas**'; afirma "ee2-fallback-por-pastas-intacto" $? "modulo_afetado sem convencoes"
+
+# H. rodar o hook nao escreve nenhum CONVENCOES.md.
+limpa_conv; conv docs/stack/CONVENCOES.md; conv docs/stackx/CONVENCOES.md
+ANTES="$(cat "$CV/docs/stack/CONVENCOES.md" "$CV/docs/stackx/CONVENCOES.md" | cksum)"
+lido_de >/dev/null
+DEPOIS="$(cat "$CV/docs/stack/CONVENCOES.md" "$CV/docs/stackx/CONVENCOES.md" | cksum)"
+NOVOS=$(find "$CV" -name CONVENCOES.md -not -path '*/.git/*' | wc -l)
+[ "$ANTES" = "$DEPOIS" ] && [ "$NOVOS" -eq 2 ]; afirma "eh-hook-nao-escreve-convencoes" $? "conteudo intacto, $NOVOS arquivo(s)"
+ESCREVE=$(grep -rniE '(grav|cri|edit|reescrev|atualiz)[a-z]* (o |um )?`?CONVENCOES\.md' "$SK" 2>/dev/null | grep -viE 'nunca|não' | wc -l)
+[ "$ESCREVE" -eq 0 ]; afirma "eh2-skill-nao-manda-escrever" $? "$ESCREVE instrucao(oes) de escrita"
+rm -rf "$CV"
+
+# Regra unica: descrita uma vez, na ordem certa, e o hook segue a mesma ordem.
+NREG=$(grep -rlF '## Como localizar o `CONVENCOES.md`' "$SK" | wc -l)
+[ "$NREG" -eq 1 ]; afirma "e-regra-unica" $? "$NREG arquivo(s) com a regra"
+L1=$(linha_de "$SCH" '1. `CONVENCOES.md` — na raiz'); L2=$(linha_de "$SCH" '2. `docs/stack/CONVENCOES.md`')
+L3=$(linha_de "$SCH" '3. `docs/stackx/CONVENCOES.md`'); L4=$(linha_de "$SCH" '4. `.expx/CONVENCOES.md`')
+[ -n "$L1" ] && [ "$L1" -lt "$L2" ] && [ "$L2" -lt "$L3" ] && [ "$L3" -lt "$L4" ]; afirma "e-precedencia-documentada" $? "linhas $L1<$L2<$L3<$L4"
+tem "$TDD" '"$RAIZ/CONVENCOES.md" "$RAIZ/docs/stack/CONVENCOES.md" "$RAIZ/docs/stackx/CONVENCOES.md" "$RAIZ/.expx/CONVENCOES.md"'
+afirma "e-hook-mesma-ordem" $? "tdd-teste-antes segue a regra"
+tem "$SCH" 'Nunca mescle'; afirma "e-sem-merge" $? "nunca mesclar"
+tem "$SCH" 'nunca cria, edita nem reescreve `CONVENCOES.md`'; afirma "e-sprintx-nao-escreve" $? "declarado na regra"
+# Lista antiga, sem docs/stack, nao sobrevive em lugar nenhum.
+VELHA=$(grep -rnF 'docs/stackx/CONVENCOES.md' "$SK" "$H/sprintx" | grep -vF 'docs/stack/CONVENCOES.md' | grep -vF 'DECISOES-DA-SKILL.md' | grep -vF 'references/00-schema.md:' | wc -l)
+[ "$VELHA" -eq 0 ]; afirma "e-sem-lista-antiga" $? "$VELHA lookup(s) sem o canonico"
+# F/G. consumidores apontam para a regra.
+tem "$SK/references/03-plano.md" 'Como localizar o `CONVENCOES.md`'; afirma "ef-modulo-afetado-usa-regra" $? "F3 Passo 2.1"
+tem "$SK/references/03-plano.md" '`docs/stack/CONVENCOES.md`'; afirma "ef2-modulo-afetado-canonico" $? "caminho canonico citado"
+tem "$SK/references/04-orquestrador.md" '`references/00-schema.md`; estrutura de pastas'; afirma "ef3-f4-usa-regra" $? "F4 deriva pelo mesmo criterio"
+tem "$SK/references/01-ingestao.md" 'Como localizar o `CONVENCOES.md`'; afirma "eg-f1-branch-base-usa-regra" $? "F1 branch base e instalacao"
+L_REG=$(linha_de "$SK/references/01-ingestao.md" 'Como localizar o `CONVENCOES.md`')
+L_BASE=$(linha_de "$SK/references/01-ingestao.md" '1. **Nome da branch e base**')
+[ "$L_REG" -lt "$L_BASE" ]; afirma "eg2-regra-antes-da-branch-base" $? "regra=$L_REG < base=$L_BASE"
+tem "$SK/references/02-descoberta.md" 'Como localizar o `CONVENCOES.md`'; afirma "e-f2-usa-regra" $? "F2 pesquisa pela regra"
+
+echo "== F. plano condensado sem diagrama; tres arquivos com diagrama =="
+TPC="$SK/assets/TEMPLATE-plano-condensado.md"
+TPF="$SK/assets/TEMPLATE-fases.md"
+tem "$TPC" 'kind: plano'; afirma "f1-condensado-kind-plano" $? "kind: plano"
+grep -q '^sprint:' "$TPC" && grep -q '^fases:' "$TPC" && grep -q '^tasks:' "$TPC"
+afirma "f2-condensado-sprint-fases-tasks" $? "tres chaves no frontmatter"
+tem "$TPC" 'depende_de:' && tem "$TPC" 'paralelizavel:' && tem "$TPC" 'criterio_saida:'
+afirma "f2b-condensado-estrutura-logica" $? "depende_de, paralelizavel, criterio_saida"
+NMER=$(grep -ci 'mermaid' "$TPC")
+[ "$NMER" -eq 0 ]; afirma "f3-condensado-sem-bloco-diagrama" $? "$NMER mencao(oes) a mermaid"
+if grep -qiE 'Grafo de tasks|classDef|flowchart|09-diagrama' "$TPC"; then false; else true; fi
+afirma "f4-condensado-sem-instrucao-de-grafo" $? "sem secao, classes ou regra de diagrama"
+tem "$SK/references/03-plano.md" '`fases.md` — de `assets/TEMPLATE-fases.md`'; afirma "f5-tres-arquivos-usa-template-fases" $? "F3 usa TEMPLATE-fases.md"
+tem "$TPF" '```mermaid' && tem "$TPF" 'references/09-diagrama.md'; afirma "f6-template-fases-tem-diagrama" $? "diagrama preservado em fases.md"
+tem "$SK/references/03-plano.md" 'uma sprint condensada não tem diagrama nem precisa de um'; afirma "f7-f3-condensado-sem-diagrama" $? "F3 declara"
+if grep -qiE 'cada sprint tem (um )?diagrama' "$SK/references/03-plano.md"; then false; else true; fi
+afirma "f7b-f3-sem-diagrama-universal" $? "nenhuma exigencia sem ressalva"
+tem "$ORQ" 'ou três arquivos'; afirma "f8-f4-aceita-sem-fases" $? "F4 pelos dois formatos"
+tem "$SK/assets/TEMPLATE-ORQUESTRADOR.md" 'ou só `tasks.md` quando a sprint é condensada'; afirma "f8b-orquestrador-mapa-condensado" $? "mapa de leitura nao pressupoe tres arquivos"
+tem "$AUD" 'Como resolver o formato de uma sprint' && tem "$SCHEMA" '**não exija `fases.md`**'
+afirma "f9-f5-aceita-sem-fases" $? "F5 resolve pela regra unica"
+tem "$EXEC" 'Sprint condensada (`tasks.md` com `kind: plano`) não tem `fases.md` e não tem diagrama'; afirma "f10-f6-aceita-sem-fases" $? "F6 distingue"
+tem "$EXEC" 'pule este passo inteiro, **sem registrar aviso**'; afirma "f11-f6-sem-aviso-no-condensado" $? "sem warning"
+tem "$EXEC" 'troque a classe na linha `class` do nó da task'; afirma "f12-tres-arquivos-atualiza-diagrama" $? "tres arquivos como antes"
+tem "$DIAG" '# O diagrama do grafo de tasks — bloco Mermaid em `fases.md`'; afirma "f12b-09-diagrama-preservado" $? "reference intacto"
+
 echo
-echo "  $ok ok, $falhou falhas"
+echo "  $ok ok, $falhou falhas, $pulado pulados"
 [ "$falhou" -eq 0 ]
