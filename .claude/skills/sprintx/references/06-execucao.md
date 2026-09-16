@@ -147,6 +147,23 @@ colateral ainda é barata de achar.
 
 Ao fim do trabalho (tudo concluído, ou nada mais executável), atualize `docs/sprintx/estimativas/HISTORICO.md` a partir de `assets/TEMPLATE-HISTORICO.md` (`kind: estimativa_historico`, contrato em `references/00-schema.md`). Este é o único arquivo da skill que é **apendado**, nunca sobrescrito: entrada de trabalho anterior não se apaga nem se reescreve. Se o arquivo não existir, crie-o a partir do template.
 
+**Quem é dono deste arquivo.** `docs/sprintx/estimativas/HISTORICO.md` é o **artefato global de
+método da `sprintx`**. Ele não é arquivo de produto, não pertence a nenhuma task e **não é
+feature-local**: mora fora de `features/` porque a calibração atravessa trabalhos, é lida por
+features futuras e precisa sobreviver a máquina, sessão e worktree. Por isso ele é
+**deliberadamente versionado** — ao contrário do rastro e do `.expx/estado.json`, que são
+estado local e ficam fora do versionador (`references/01-ingestao.md`).
+
+Com a `mergex` instalada, a `sprintx` **escreve** e a `mergex` **versiona**: o `HISTORICO.md`
+entra no commit de artefatos de método que antecede o push (E6), junto com os artefatos da
+feature, e **não deve aparecer como desvio** na classificação de atenção humana — ele é
+artefato de método declarado, não arquivo fora do plano. Continua sujeito à varredura de
+segredo como qualquer outro arquivo do commit.
+
+Sem a `mergex`, a `sprintx` grava o arquivo do mesmo jeito e **não commita**: versionamento
+nunca é trabalho desta skill. Um `HISTORICO.md` não rastreado ao fim de uma execução standalone
+é o resultado esperado, não uma pendência.
+
 Uma entrada por task **concluída**, com: `trabalho_id`, `task_id`, `tipo_task`, `area`, `sinais`, `estimado_min`, `estimado_max`, `estimado_media`, `real` e `desvio`. Task `bloqueada` não entra — ela não tem real completo a registrar.
 
 **O desvio.** Se `docs/sprintx/features/<slug>/00-ESTIMATIVA.md` existe, cada entrada traz o estimado daquela task e o desvio entre estimado e real:
@@ -235,7 +252,9 @@ se a gravação falhar, o trabalho está entregue do mesmo jeito. Registre no ra
 
 Se `.claude/skills/mergex/SKILL.md` existir, acione as **etapas E2 a E8 da `mergex`**, nesta
 ordem: portão de prontidão, classificação da atenção humana, descrição do pull request, pacote
-de QA, push, abertura do PR e registro da entrega. Sem a `mergex` instalada, siga direto para o
+de QA, push, abertura do PR e registro da entrega. Os artefatos de método deste
+trabalho são a pasta `docs/sprintx/features/<slug>/` **e** o `docs/sprintx/estimativas/HISTORICO.md`
+(Passo 3), que é global e entra no mesmo commit de artefatos, antes do push. Sem a `mergex` instalada, siga direto para o
 Passo 4 — e não escreva nada sobre a ausência dela.
 
 **A ordem é crítica, e este passo vem depois do Passo 3.1 inteiro.** Primeiro a execução

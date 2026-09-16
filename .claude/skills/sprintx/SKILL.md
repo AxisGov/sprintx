@@ -202,6 +202,18 @@ docs/sprintx/
   estimativas/HISTORICO.md       esforço real do projeto inteiro (atravessa features)
 ```
 
+**Os dois níveis de artefato, e o que é versionado.** Tudo em `features/<slug>/` é
+**feature-local**. Já `estimativas/HISTORICO.md` é o **artefato global de método** da skill:
+não é produto, não pertence a task nenhuma, atravessa trabalhos e é **deliberadamente
+versionado**, porque a calibração precisa sobreviver a máquina, sessão e worktree. Os dois são
+artefatos de método e, com a `mergex` instalada, entram no commit de artefatos que antecede o
+push — a `sprintx` escreve, a `mergex` versiona.
+
+Fora disso ficam o rastro (`docs/eventos/`) e o `.expx/estado.json`: **estado local da
+máquina**, reescritos a cada transição e mantidos fora do versionador pelo `info/exclude` do
+repositório, não pelo `.gitignore` (`references/01-ingestao.md`). A skill nunca altera o
+`.gitignore` do projeto.
+
 O `FECHAMENTO.md` é o que torna a feature encontrável depois — por arquivo, por módulo e por
 palavra-chave (regra inviolável 20). É o equivalente, do lado Build, ao relatório técnico da
 runx; sem ele, um índice dos artefatos do projeto conheceria apenas a manutenção, e metade da

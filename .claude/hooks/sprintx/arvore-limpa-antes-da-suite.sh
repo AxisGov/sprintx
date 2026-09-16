@@ -78,7 +78,7 @@ FORA_ESCOPO=""
 while IFS= read -r caminho; do
   [ -n "$caminho" ] || continue
   case "$caminho" in
-    docs/sprintx/*|docs/eventos/*|.expx/*) continue ;;
+    docs/sprintx/*|docs/eventos/*|docs/entregas/*|.expx/*) continue ;;
   esac
   # Isencao de arquivo de teste, mesmo espirito de escopo-da-task.sh: o metodo
   # MANDA escrever teste antes do codigo (regra 3), e cobrar escopo dele
