@@ -127,8 +127,10 @@ afetados e registre-os no `ORQUESTRADOR.md` — no campo `modulo_afetado` do fro
 
 **Como derivar o módulo de um arquivo, nesta ordem:**
 
-1. **Com `CONVENCOES.md` no projeto** (procure, nesta ordem, em `CONVENCOES.md`,
-   `docs/stackx/CONVENCOES.md` e `.expx/CONVENCOES.md`, na raiz do repositório): use as
+1. **Com `CONVENCOES.md` no projeto** (localizado pela regra única de
+   `references/00-schema.md`, "Como localizar o `CONVENCOES.md`": `CONVENCOES.md` →
+   `docs/stack/CONVENCOES.md` → `docs/stackx/CONVENCOES.md` → `.expx/CONVENCOES.md`, o
+   primeiro que existir, sem mesclar): use as
    **camadas que ele declara**. O módulo é o nome da camada à qual o arquivo pertence segundo
    as convenções do projeto — é a resposta certa porque é a que o projeto já usa para se
    descrever.

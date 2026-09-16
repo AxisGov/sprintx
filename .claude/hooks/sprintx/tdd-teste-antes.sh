@@ -28,8 +28,10 @@ RAIZ="$(rastro_raiz "$CWD")"
 # Sem CONVENCOES.md nao ha como saber onde o teste mora neste projeto.
 # Inativo e a resposta certa; chutar produziria falso positivo, e falso
 # positivo desinstala o hook (e leva junto os que funcionavam).
+# Localizacao: regra unica em references/00-schema.md ("Como localizar o
+# CONVENCOES.md"). Primeiro que existir vence; nunca mescla, nunca por data.
 CONV=""
-for c in "$RAIZ/CONVENCOES.md" "$RAIZ/docs/stackx/CONVENCOES.md" "$RAIZ/.expx/CONVENCOES.md"; do
+for c in "$RAIZ/CONVENCOES.md" "$RAIZ/docs/stack/CONVENCOES.md" "$RAIZ/docs/stackx/CONVENCOES.md" "$RAIZ/.expx/CONVENCOES.md"; do
   [ -f "$c" ] && { CONV="$c"; break; }
 done
 [ -n "$CONV" ] || exit 0

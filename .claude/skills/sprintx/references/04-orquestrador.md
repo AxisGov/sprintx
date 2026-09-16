@@ -44,7 +44,8 @@ frontmatter `kind: orquestrador` do contrato expx-schema v1, descrito em
 - `concluido_em` é `null` até a feature inteira estar entregue.
 - `modulo_afetado` e `palavras_chave` recebem os valores que a F3 derivou no Passo 2.1 de
   `references/03-plano.md`. Se a F3 não os deixou prontos, derive-os aqui pelo mesmo critério
-  daquele passo (camadas do `CONVENCOES.md` quando existir; estrutura de pastas quando não),
+  daquele passo (camadas do `CONVENCOES.md` quando existir, localizado pela regra única de
+  `references/00-schema.md`; estrutura de pastas quando não),
   a partir dos `arquivos` das tasks.
 - `arquivos_alterados` nasce `[]` na F4 — nenhuma task foi concluída ainda. Quem o preenche é
   a F6, ao fechar a última task. A chave existe desde já, vazia, nunca ausente.

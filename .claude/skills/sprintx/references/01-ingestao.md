@@ -23,6 +23,10 @@ Antes do scaffold: verifique se `docs/sprintx/features/` já tem outra pasta com
 responde `true`). Sem git, ou com "sem worktree" explícito no pedido: `worktree: null` (será
 copiado ao `ORQUESTRADOR.md` na F4) e nada muda no restante desta fase.
 
+Onde esta fase diz `CONVENCOES.md`, o arquivo é localizado pela regra única de
+`references/00-schema.md` ("Como localizar o `CONVENCOES.md`"), que reconhece o caminho
+canônico `docs/stack/CONVENCOES.md`.
+
 1. **Nome da branch e base**: `feature/<slug>`. Base, nesta ordem: `CONVENCOES.md` (seção de
    versionamento, se marcada e não `PROPOSTA`) → `git symbolic-ref refs/remotes/origin/HEAD`
    → a branch atual, se `main`/`master`/`develop` ou equivalente detectada.

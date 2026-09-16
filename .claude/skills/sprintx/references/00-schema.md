@@ -126,7 +126,8 @@ listas e seguem a regra universal 6: **nunca omita a chave**; vazia é `[]`, jam
 - `modulo_afetado` lista os módulos que o trabalho toca, em minúscula e sem acento, um termo
   por módulo (`autenticacao`, não `Autenticação`; `relatorios`, não `Relatórios`). É derivado
   na F3 a partir dos arquivos declarados nas tasks — as camadas do `CONVENCOES.md` do projeto
-  quando ele existe, a estrutura de pastas quando não (`references/03-plano.md`). É a única
+  quando ele existe (localizado pela regra única "Como localizar o `CONVENCOES.md`", neste
+  arquivo), a estrutura de pastas quando não (`references/03-plano.md`). É a única
   das três listas que a F3 já grava preenchida.
 - `arquivos_alterados` é a união, **sem repetição**, dos campos `arquivos` (`cria` + `altera`)
   de todas as tasks **concluídas** do trabalho. Nasce `[]` na F3 e é preenchido pela F6 ao
@@ -569,6 +570,30 @@ Não recebem frontmatter, porque o painel não os lê individualmente:
 - `00-AUDITORIA.md`.
 
 Não acrescente frontmatter a eles: um `kind` fora deste contrato é uma violação, não uma extensão.
+
+## Como localizar o `CONVENCOES.md` — regra única
+
+O `CONVENCOES.md` é insumo **externo**: quem o escreve é a `stackx` (ou a `buildx`, no B2). A
+`sprintx` só lê. Todo ponto da skill que consulta convenções — a base da F1 (branch base e
+comando de instalação), a F2, o `modulo_afetado` da F3 e da F4, a F6 e o hook
+`tdd-teste-antes` — localiza o arquivo assim, e esta é a única descrição da regra.
+
+Procure, a partir da raiz do repositório (a do worktree, quando houver), **nesta ordem**:
+
+1. `CONVENCOES.md` — na raiz: override explícito do próprio projeto;
+2. `docs/stack/CONVENCOES.md` — **caminho canônico** da `stackx` e da `buildx`;
+3. `docs/stackx/CONVENCOES.md` — compatibilidade com o layout antigo;
+4. `.expx/CONVENCOES.md` — fallback legado.
+
+- **O primeiro que existir vence, e só ele é lido.** Dois ou mais presentes: os demais são
+  ignorados. Nunca mescle o conteúdo, nunca escolha por data de modificação, por tamanho ou
+  por "o mais novo" — a mesma árvore resolve sempre para o mesmo arquivo.
+- **Nenhum existir** é o caso normal de projeto sem `stackx`, nunca erro: cada consumidor
+  segue o seu próprio fallback (o `modulo_afetado` cai para a estrutura de pastas; o hook
+  `tdd-teste-antes` fica inativo; a branch base e a instalação seguem a ordem de
+  `references/01-ingestao.md`).
+- **A `sprintx` nunca cria, edita nem reescreve `CONVENCOES.md`**, em nenhum dos quatro
+  caminhos e em nenhuma fase. Convenção errada vira achado ou decisão registrada, não edição.
 
 ## Regra de migração — pastas que já existem
 

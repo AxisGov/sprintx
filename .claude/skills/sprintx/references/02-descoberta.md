@@ -36,7 +36,7 @@ Sem sugestão prévia, pergunte diretamente, com opções concretas. Registre a 
 **O que a forma de construção muda:** é sobre COMO os sete eixos são preenchidos, não sobre pular a fase — a F2 continua obrigatória (regra 10) em qualquer modo.
 
 - **`entrevista`** (padrão até aqui): siga o Passo 2 como descrito — blocos de até 5 perguntas, espera resposta, só então o próximo bloco.
-- **`autonomo`**: para cada eixo, pesquise primeiro (código existente, `CONVENCOES.md`, base da F1, decisões anteriores em `docs/sprintx/`) e registre a decisão com a hipótese assumida e a evidência que a sustenta, sem parar para esperar resposta. Só vira pergunta ao usuário o que é **genuinamente indecidível sem ele** — tipicamente escopo de negócio (eixo 1) e definição de pronto (eixo 7), porque nenhuma leitura de código responde "o cliente ficaria satisfeito com isso". Tudo que foi assumido por hipótese entra em `00-DECISOES.md` marcado como tal (ver Passo 3) — nunca como se tivesse sido confirmado.
+- **`autonomo`**: para cada eixo, pesquise primeiro (código existente, `CONVENCOES.md` — localizado pela regra única de `references/00-schema.md`, "Como localizar o `CONVENCOES.md`" —, base da F1, decisões anteriores em `docs/sprintx/`) e registre a decisão com a hipótese assumida e a evidência que a sustenta, sem parar para esperar resposta. Só vira pergunta ao usuário o que é **genuinamente indecidível sem ele** — tipicamente escopo de negócio (eixo 1) e definição de pronto (eixo 7), porque nenhuma leitura de código responde "o cliente ficaria satisfeito com isso". Tudo que foi assumido por hipótese entra em `00-DECISOES.md` marcado como tal (ver Passo 3) — nunca como se tivesse sido confirmado.
 
 ## Passo 1 — Preparar a entrevista
 
