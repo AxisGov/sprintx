@@ -299,6 +299,40 @@ Regras duras deste kind:
 - Os kinds `sprint`, `fases` e `tasks` **continuam válidos e não são descontinuados**.
   Plano já escrito neles permanece como está e nunca é migrado retroativamente.
 
+### Como resolver o formato de uma sprint — regra única
+
+Uma sprint existe em **um dos dois formatos**, e nenhum deles é plano incompleto. Todo leitor
+de plano — **F3.5, F4, F5 e F6** — resolve o formato assim, e esta é a única descrição da regra:
+
+1. Leia `sprint-NN/tasks.md`. Ele existe **sempre**, nos dois formatos.
+2. O frontmatter declara `kind: plano`? Então a sprint é **condensada**:
+   - dados da sprint = chave `sprint`;
+   - fases = chave `fases`;
+   - tasks = chave `tasks`;
+   - **não exija `sprint.md`**, **não exija `fases.md`** — a ausência dos dois é o formato
+     funcionando, não arquivo faltando.
+3. Qualquer outro kind (`tasks`): a sprint está nos **três arquivos**. Exija
+   `sprint.md`, `fases.md` e `tasks.md`, e leia os três como sempre.
+
+O que muda entre os formatos é **onde a informação mora**, nunca quais campos existem nem
+quanto rigor se cobra:
+
+| Informação | Condensado (`kind: plano`) | Três arquivos |
+|---|---|---|
+| Status da sprint | `tasks.md` → `sprint.status` | `sprint.md` |
+| Critério de saída da sprint | `tasks.md` → `sprint.criterio_saida` | `sprint.md` |
+| Fases e seus critérios | `tasks.md` → `fases[]` | `fases.md` |
+| Tasks | `tasks.md` → `tasks[]` | `tasks.md` |
+| Diagrama Mermaid | não existe (só a F3 o gera, e só em `fases.md`) | `fases.md` |
+
+**Ao gravar no condensado**, tudo acontece no mesmo frontmatter: fechar uma task atualiza o
+item em `tasks`, fechar uma fase atualiza o item em `fases`, fechar a sprint atualiza
+`sprint.status`. Um único arquivo é reescrito, com um único bloco YAML.
+
+Num plano com várias sprints, **cada uma resolve o seu próprio formato**: a de fase única vai
+condensada, a de três fases vai nos três arquivos, e as duas convivem no mesmo trabalho. Nunca
+migre um plano já escrito de um formato para o outro.
+
 ### `00-BLOQUEIOS.md` → `kind: bloqueios`
 
 ```yaml

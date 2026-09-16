@@ -17,7 +17,10 @@ Você tem **somente ferramentas de leitura**. Não existe cenário em que você 
 1. `ORQUESTRADOR.md`
 2. `00-DECISOES.md`
 3. `base/00-INDICE.md` e os arquivos que ele lista
-4. Cada `sprint-NN/sprint.md`, `fases.md` e `tasks.md`
+4. O plano de cada `sprint-NN/`, **no formato que ela tiver**: leia `sprint-NN/tasks.md` primeiro
+   — se o frontmatter diz `kind: plano`, a sprint é condensada e sprint, fases e tasks estão
+   todos ali, sem `sprint.md` e sem `fases.md` (a ausência deles é o formato, não um achado);
+   qualquer outro kind significa os três arquivos, e aí leia `sprint.md`, `fases.md` e `tasks.md`
 
 Leia tudo antes de julgar qualquer coisa. Um achado que some depois de ler o arquivo seguinte é ruído, e ruído gasta a confiança na auditoria.
 

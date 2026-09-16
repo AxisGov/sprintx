@@ -74,7 +74,7 @@ dependências estão satisfeitas; sem nenhuma, registre um bloqueio.
 5. Só então marque `status: concluida` em `tasks.md` e grave `task_concluida` no rastro, acrescentando na linha da task: data (obtenha com `date +%Y-%m-%d` do sistema) e resultado da suíte (ex.: `2026-08-26 · suíte: 42 passed, 0 failed`). Em seguida grave em `.expx/estado.json` (`references/09-estado.md`) o novo `tasks_concluidas` e o campo `task`: o id da próxima task que você vai abrir, ou `null` se não houver próxima.
 6. **Registre o esforço real da task**, em horas de trabalho focado, na mesma linha (ex.: `2026-08-26 · suíte: 42 passed, 0 failed · real: 3,5 h`). O real cobre o que a task de fato custou — escrever os dois testes, implementar, rodar a suíte e verificar o critério de aceite — e NÃO inclui reunião, revisão de código, deploy nem ida e volta com o cliente. Isso alimenta a calibração das estimativas futuras (ver "Passo 4"); anote no momento de concluir, não reconstrua de memória no fim do trabalho.
 7. Critério de aceite não atendido ou teste não passando: a task NÃO é concluída. Não existe "concluído com ressalva".
-8. **Atualize a cor daquele nó no diagrama** de `fases.md` da sprint: troque a classe na linha `class` do nó da task, e nada mais (`concluida`, `em_andamento` ou `bloqueada`, conforme `references/09-diagrama.md`). Não recalcule o caminho crítico, não reordene, não reescreva o bloco — durante a execução a estrutura do grafo não muda, só a cor. Se a atualização falhar, ou se `fases.md` não tiver bloco Mermaid (plano de uma versão anterior da skill), registre no rastro com `resultado: aviso` e siga: o diagrama é derivado e **nunca** impede uma task de fechar.
+8. **Atualize a cor daquele nó no diagrama**, quando a sprint tiver diagrama. **Sprint condensada (`tasks.md` com `kind: plano`) não tem `fases.md` e não tem diagrama** — a F3 só gera o bloco Mermaid quando grava `fases.md`. Nesse caso pule este passo inteiro, **sem registrar aviso**: não há diagrama ausente, há um formato que não usa diagrama. Tendo `fases.md`: troque a classe na linha `class` do nó da task, e nada mais (`concluida`, `em_andamento` ou `bloqueada`, conforme `references/09-diagrama.md`). Não recalcule o caminho crítico, não reordene, não reescreva o bloco — durante a execução a estrutura do grafo não muda, só a cor. Se a atualização falhar, ou se `fases.md` não tiver bloco Mermaid (plano de uma versão anterior da skill), registre no rastro com `resultado: aviso` e siga: o diagrama é derivado e **nunca** impede uma task de fechar.
 
 9. **O commit da task.** Se `.claude/skills/mergex/SKILL.md` existir, acione a **etapa E1 da `mergex`** para esta task. Ela commita os arquivos de produto declarados em `arquivos`, mais os artefatos de método deste trabalho que estiverem sujos (a pasta `docs/sprintx/features/<slug>/`, a começar pelo `tasks.md` que você acabou de atualizar), com a mensagem que traz o objetivo e os testes da task, depois de varrer o diff em busca de segredo, credencial e dado real de cliente.
 
@@ -101,6 +101,18 @@ dois. A cada gravação de `tasks.md`:
   `verde` quando foi a suíte inteira que rodou sem falha, `vermelha` quando houve falha, e
   permanece `nao_executada` enquanto nada rodou para aquela task.
 
+**Onde gravar, nos dois formatos.** A lista `tasks:` acima é a mesma chave nos dois formatos —
+`kind: tasks` e `kind: plano` carregam tasks idênticas —, então fechar uma task funciona igual
+em ambos. O que muda é onde ficam a fase e a sprint (regra única em `references/00-schema.md`):
+
+- **Condensado** (`tasks.md` com `kind: plano`): tudo vive no mesmo frontmatter, num único
+  bloco YAML. Fechar fase atualiza o item correspondente em `fases`; fechar sprint atualiza
+  `sprint.status`. Você reescreve um arquivo só.
+- **Três arquivos**: fechar fase atualiza `fases.md`; fechar sprint atualiza `sprint.md`.
+
+Em qualquer dos dois, `atualizado_em` do arquivo tocado é reescrito, e o YAML e a prosa daquele
+arquivo continuam dizendo a mesma coisa.
+
 Deixar o frontmatter desatualizado em relação à prosa equivale a não ter gravado a task: o
 painel de operação lê o YAML, não a prosa.
 
@@ -116,8 +128,9 @@ Surgiu dúvida nova, decisão não coberta pelo plano, pré-requisito faltando (
 
 ## Portões de fase e de sprint
 
-- Fase só é dada como concluída quando seu critério de saída em `fases.md` é verdade.
-- Sprint só é dada como concluída quando seu critério de saída em `sprint.md` é verdade.
+- Fase só é dada como concluída quando seu `criterio_saida` é verdade.
+- Sprint só é dada como concluída quando seu `criterio_saida` é verdade.
+- **Onde esses critérios moram depende do formato da sprint** (regra única em `references/00-schema.md`, "Como resolver o formato de uma sprint"): nos três arquivos, em `fases.md` e `sprint.md`; no condensado (`tasks.md` com `kind: plano`), em `fases[].criterio_saida` e `sprint.criterio_saida` do frontmatter do próprio `tasks.md`. **Nenhuma condição afrouxa por causa do formato** — só muda onde você lê e onde você grava.
 - Critério não atendido = não avança para a próxima fase/sprint; trate como bloqueio se não houver task que o resolva.
 
 ### A suíte inteira é cobrada aqui
@@ -292,7 +305,7 @@ quais módulos ele declara — é assim que o usuário sabe que a feature entrou
 - [ ] Toda task concluída tem `suite: parcial` ou `suite: verde` — nenhuma com `vermelha` ou `nao_executada`.
 - [ ] Toda sprint concluída teve a suíte INTEIRA executada e verde, com a saída colada no relatório.
 - [ ] Em todo arquivo de estado tocado, o frontmatter está válido e coerente com a prosa: `status`, `concluida_em`, `suite` e `atualizado_em` refletem o estado real (`references/00-schema.md`).
-- [ ] Se o trabalho inteiro foi entregue, `ORQUESTRADOR.md` teve `estagio`, `status`, `concluido_em` e `atualizado_em` reescritos; sprints e fases concluídas tiveram `status` atualizado em `sprint.md` e `fases.md`.
+- [ ] Se o trabalho inteiro foi entregue, `ORQUESTRADOR.md` teve `estagio`, `status`, `concluido_em` e `atualizado_em` reescritos; sprints e fases concluídas tiveram `status` atualizado onde o formato daquela sprint o guarda — `sprint.md` e `fases.md` nos três arquivos, `sprint.status` e `fases[].status` do `tasks.md` no condensado.
 - [ ] Toda task concluída tem o esforço real registrado em `tasks.md`.
 - [ ] `docs/sprintx/estimativas/HISTORICO.md` recebeu uma entrada por task concluída, com o desvio calculado (ou `null` quando não houve estimativa), e a tabela de calibração por tipo foi recalculada.
 - [ ] `ORQUESTRADOR.md` teve `arquivos_alterados` agregado (união sem repetição dos `arquivos` das tasks concluídas) e `modulo_afetado` conferido contra o que a execução de fato tocou.

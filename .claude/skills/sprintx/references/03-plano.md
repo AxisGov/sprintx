@@ -188,7 +188,7 @@ Antes de declarar a F3 concluída, confira você mesmo:
 - [ ] Nenhuma task tem pior caso plausível maior que quatro vezes o melhor caso plausível (senão, quebre-a agora — a F3.5 se recusaria a estimá-la).
 - [ ] `modulo_afetado` e `palavras_chave` estão derivados (Passo 2.1), em minúscula e sem acento, prontos para o `ORQUESTRADOR.md` — ou já gravados nele, se ele existir.
 - [ ] `tasks_total` foi gravado em `.expx/estado.json` com o número de tasks do plano (Passo 2.2), ou `.expx/` não existe no projeto.
-- [ ] Cada `fases.md` tem o bloco Mermaid do grafo de tasks conforme `references/09-diagrama.md` — ou a contradição que impediu a geração foi corrigida no plano. Este item não bloqueia a fase: o diagrama é derivado.
+- [ ] Cada `fases.md` tem o bloco Mermaid do grafo de tasks conforme `references/09-diagrama.md` — só as sprints em três arquivos têm `fases.md`, e uma sprint condensada não tem diagrama nem precisa de um — ou a contradição que impediu a geração foi corrigida no plano. Este item não bloqueia a fase: o diagrama é derivado.
 
 ## Critério de saída da fase
 

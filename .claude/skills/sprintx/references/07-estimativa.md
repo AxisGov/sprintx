@@ -19,11 +19,11 @@ Você nunca escreve "entrega em 12 dias", "duas semanas", "fica pronto na sexta"
 
 ## Pré-requisitos verificáveis
 
-- `docs/sprintx/features/<slug>/sprint-01/` existe com `sprint.md`, `fases.md` e `tasks.md` — a F3 aconteceu.
+- `docs/sprintx/features/<slug>/sprint-01/` existe com uma sprint válida em um dos dois formatos do contrato — condensado (`tasks.md` com `kind: plano`) ou três arquivos (`sprint.md`, `fases.md`, `tasks.md`), regra única em `references/00-schema.md` — a F3 aconteceu.
 - Se não existe, o plano não existe: diga "Falta a F3 (plano). Não dá para estimar antes de existir task." e execute `references/03-plano.md` primeiro. Estimar antes de existir task é chute com aparência de método.
 - `docs/sprintx/features/<slug>/base/` e `docs/sprintx/features/<slug>/00-DECISOES.md` existem (você vai ler as lacunas e as decisões para derivar sinais e confiança).
 
-Leia, antes de estimar: cada `sprint-NN/tasks.md`, cada `sprint-NN/fases.md`, `base/00-LACUNAS.md`, `00-DECISOES.md` e — se existir — `docs/sprintx/estimativas/HISTORICO.md`.
+Leia, antes de estimar: o plano de cada sprint no formato que ela tiver (no condensado, sprint, fases e tasks saem do frontmatter do próprio `tasks.md`; nos três arquivos, de `tasks.md` e `fases.md`), `base/00-LACUNAS.md`, `00-DECISOES.md` e — se existir — `docs/sprintx/estimativas/HISTORICO.md`.
 
 ## Passo 1 — Consultar o histórico de calibração
 

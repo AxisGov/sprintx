@@ -260,6 +260,12 @@ diagrama é derivado e **nunca** pode bloquear o trabalho, nem impedir uma task 
 Se `fases.md` não tem bloco Mermaid (plano gerado por uma versão anterior da skill), a F6 não
 o cria: gerar diagrama é papel da F3. Siga sem avisar.
 
+**Sprint condensada não tem diagrama, e isso não é ausência.** Numa sprint gravada em
+`tasks.md` com `kind: plano` (`references/00-schema.md`) não existe `fases.md`, e a F3 só gera
+o bloco Mermaid quando grava `fases.md` — logo não há o que atualizar. A F6 pula o passo do
+diagrama **sem registrar aviso**: não é plano antigo, não é erro, não é falha de atualização —
+é o formato funcionando como foi desenhado.
+
 ## Exemplo correto
 
 Sprint de 5 tasks em duas fases. `T-01.02` e `T-01.03` não dependem uma da outra e correm em

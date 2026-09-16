@@ -4,7 +4,7 @@ Você está na F4. Seu objetivo é gerar `docs/sprintx/features/<slug>/ORQUESTRA
 
 ## Pré-requisitos verificáveis
 
-- `docs/sprintx/features/<slug>/sprint-01/` existe com `sprint.md`, `fases.md` e `tasks.md`.
+- `docs/sprintx/features/<slug>/sprint-01/` existe com uma sprint válida em **um dos dois formatos** do contrato: condensado (`tasks.md` com `kind: plano`) ou três arquivos (`sprint.md`, `fases.md` e `tasks.md`). A regra única de resolução está em `references/00-schema.md`, "Como resolver o formato de uma sprint" — leia-a antes de concluir que falta arquivo. Uma sprint condensada **não é plano incompleto**.
 - Se não existe, a F3 não aconteceu: diga "Falta a F3 (plano). Vou executá-la primeiro." e execute `references/03-plano.md`.
 
 ## Passo único — Gerar ORQUESTRADOR.md
@@ -13,12 +13,19 @@ Use `assets/TEMPLATE-ORQUESTRADOR.md` (caminho relativo à raiz da skill). O arq
 
 1. **Objetivo** — o que esta feature entrega, em NO MÁXIMO 5 linhas.
 2. **Mapa e ordem de leitura** — todos os arquivos de `docs/sprintx/features/<slug>/` e em que ordem um executor deve lê-los (este arquivo primeiro; depois `00-DECISOES.md`; depois `base/00-INDICE.md`; depois cada `sprint-NN/` na ordem).
-3. **Rota de execução** — a sequência de sprints e fases, marcando explicitamente: o que roda em paralelo com o quê, e qual é o caminho crítico (a cadeia de dependências que define a duração total). Derive tudo de `fases.md` e dos `depende_de` das tasks — não invente paralelismo que o plano não declarou.
+3. **Rota de execução** — a sequência de sprints e fases, marcando explicitamente: o que roda em paralelo com o quê, e qual é o caminho crítico (a cadeia de dependências que define a duração total). Derive tudo das fases da sprint — `fases.md` nos três arquivos, a chave `fases` do `tasks.md` no condensado — e dos `depende_de` das tasks — não invente paralelismo que o plano não declarou.
 4. **Ferramentas** — MCPs e SDKs necessários; comandos exatos de teste, lint e typecheck do projeto; onde ficam os segredos (nome da variável e local — NUNCA o valor).
 5. **Agentes** — os três papéis: *implementador* (escreve teste e código da task), *revisor de testes* (confere que o teste falharia com implementação errada), *auditor de aceite* (confere o critério de aceite antes de marcar concluída). Explique como um agente único assume os três papéis em sequência dentro de cada task quando não há múltiplos agentes disponíveis.
 6. **Regras de autonomia** — copie as regras de execução: não perguntar, não pedir autorização; teste antes do código; dúvida nova → `00-BLOQUEIOS.md`, pular, seguir para a próxima paralelizável; critério de aceite não atendido = não avança; status atualizado em `tasks.md` a cada task.
 7. **Definição de pronto global** — o que precisa ser verdade para a feature inteira estar entregue (derive da definição de pronto do usuário em `00-DECISOES.md` + critérios de saída das sprints).
 8. **Como retomar uma sessão interrompida** — instrução literal: ler este arquivo, ler os `status` em cada `tasks.md`, ler `00-BLOQUEIOS.md`, e continuar da primeira task `pendente` ou `em_andamento` cujas dependências estão `concluida`.
+
+**Antes de escrever, enumere as sprints e resolva o formato de cada uma.** Percorra todos os
+`sprint-NN/` do trabalho e, para cada sprint, aplique a regra única de `references/00-schema.md`
+("Como resolver o formato de uma sprint"). Rota, paralelismo e caminho crítico saem dos **mesmos
+dados** nos dois formatos — só muda o arquivo onde eles moram. No mapa de leitura (seção 2),
+liste os arquivos que a sprint **de fato tem**: uma sprint condensada aparece com um `tasks.md`
+só, e isso está certo.
 
 Regras de escrita:
 

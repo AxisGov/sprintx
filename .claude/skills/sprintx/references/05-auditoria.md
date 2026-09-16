@@ -21,7 +21,11 @@ Se o agente não estiver disponível neste harness, faça a auditoria você mesm
 
 ## Passo 2 — Reler tudo com olhos de auditora
 
-Leia, nesta ordem: `ORQUESTRADOR.md`, `00-DECISOES.md`, `base/00-INDICE.md` (e os arquivos da base que ele lista), cada `sprint-NN/sprint.md`, `fases.md` e `tasks.md`.
+Leia, nesta ordem: `ORQUESTRADOR.md`, `00-DECISOES.md`, `base/00-INDICE.md` (e os arquivos da base que ele lista) e, por sprint, o plano dela.
+
+**Resolva o formato de cada sprint** pela regra única de `references/00-schema.md` ("Como resolver o formato de uma sprint"): no condensado (`tasks.md` com `kind: plano`) leia sprint, fases e tasks do frontmatter do próprio `tasks.md`, e **não cobre** `sprint.md` nem `fases.md` — a ausência deles é o formato, não achado. Nos três arquivos, leia `sprint.md`, `fases.md` e `tasks.md` como sempre.
+
+Os nove itens do Passo 3 valem **iguais** nos dois formatos: o formato muda onde a informação mora, nunca o rigor da auditoria.
 
 ## Passo 3 — Verificar cada item desta lista
 
@@ -49,6 +53,11 @@ Crie (ou sobrescreva, se é uma reauditoria) `docs/sprintx/features/<slug>/00-AU
 |---|---|---|---|
 | ALTA | sprint-02/tasks.md | ... | ... |
 ```
+
+A coluna `arquivo` traz o **caminho real** do achado. Numa sprint condensada isso é sempre
+`sprint-NN/tasks.md` — e, quando ajudar a achar o ponto, diga de qual bloco do frontmatter ele
+veio (`sprint`, `fases` ou `tasks`), por exemplo `sprint-02/tasks.md (fases: F-02.1)`. Nunca
+aponte para um `sprint.md` ou `fases.md` que aquela sprint não tem.
 
 Severidades: **ALTA** (invalida a execução autônoma), **MÉDIA** (risco real, execução ainda possível), **BAIXA** (melhoria).
 Se não houver achados, escreva "Nenhum achado." no lugar da tabela.
