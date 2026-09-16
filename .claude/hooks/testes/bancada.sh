@@ -264,6 +264,117 @@ FASES=$(sed -n '/^| Estado do disco | Fase atual |$/,/^$/p' "$SKILLMD" | grep -c
 # 10. Os dois harnesses enxergam a mesma integracao (Claude Code e OpenCode).
 tem "$EXEC" '.opencode/skills/mergex/SKILL.md'; afirma "deteccao-nos-dois-harnesses" $? "caminho OpenCode previsto"
 
+echo "== A. ignore local: rastro e estado fora do versionador =="
+ING="$SK/references/01-ingestao.md"
+
+# A1. contrato: a F1 nao manda mais editar o .gitignore versionado.
+tem "$ING" 'nunca modifica o `.gitignore` por conta própria'; afirma "a1-f1-nao-edita-gitignore" $? "ownership removido"
+if grep -qF 'Garanta a linha `docs/eventos/` no `.gitignore`' "$ING"; then false; else true; fi
+afirma "a1b-mandato-antigo-sumiu" $? "mandato antigo removido"
+
+# A2..A5, A8: o MECANISMO, contra um repositorio git real e um worktree ligado.
+# Nao testa o texto: testa que os comandos que o contrato manda usar de fato se
+# comportam como ele afirma. Padrao proprio, para nao colidir com a fixture.
+PAT="zz-teste-exclude/"
+
+# A2. padrao ja ignorado pela configuracao existente -> no-op.
+git -C "$W" check-ignore -q "docs/eventos/" 2>/dev/null
+afirma "a2-ja-ignorado-e-noop" $? "check-ignore acusa docs/eventos/ da fixture"
+
+# A3. padrao nao ignorado -> entra no arquivo devolvido pelo git.
+git -C "$W" check-ignore -q "$PAT" 2>/dev/null; [ $? -ne 0 ]
+afirma "a3a-ainda-nao-ignorado" $? "comeca nao ignorado"
+EXC="$(cd "$W" && git rev-parse --git-path info/exclude)"
+EXC_ABS="$(cd "$W" && cd "$(dirname "$EXC")" && pwd)/$(basename "$EXC")"
+mkdir -p "$(dirname "$EXC_ABS")"; printf '%s\n' "$PAT" >> "$EXC_ABS"
+git -C "$W" check-ignore -q "$PAT" 2>/dev/null
+afirma "a3b-entra-no-git-path-exclude" $? "passou a ser ignorado via info/exclude"
+
+# A4. segunda execucao nao duplica: o contrato manda acrescentar idempotentemente.
+if ! grep -qxF "$PAT" "$EXC_ABS"; then printf '%s\n' "$PAT" >> "$EXC_ABS"; fi
+N=$(grep -cxF "$PAT" "$EXC_ABS")
+[ "$N" -eq 1 ]; afirma "a4-idempotente" $? "$N ocorrencia(s) apos segunda passada"
+
+# A5. linked worktree: o caminho resolvido pelo git NAO e <worktree>/.git/info/exclude.
+# Num worktree ligado o .git e um ARQUIVO, entao o caminho hardcoded nao existe.
+[ -f "$WT/.git" ]; afirma "a5a-worktree-git-e-arquivo" $? "hardcode seria caminho invalido"
+EXC_WT="$(cd "$WT" && git rev-parse --git-path info/exclude)"
+case "$EXC_WT" in "$WT"/*) false ;; *) true ;; esac
+afirma "a5b-git-path-sai-do-worktree" $? "resolvido no repo principal"
+PAT_WT="zz-teste-worktree/"
+EXC_WT_ABS="$(cd "$WT" && cd "$(dirname "$EXC_WT")" && pwd)/$(basename "$EXC_WT")"
+printf '%s\n' "$PAT_WT" >> "$EXC_WT_ABS"
+git -C "$WT" check-ignore -q "$PAT_WT" 2>/dev/null
+afirma "a5c-caminho-resolvido-funciona" $? "padrao ignorado dentro do worktree"
+
+# A8. o ignore local nao suja a arvore: nada disso aparece em git status.
+SUJO_WT="$(git -C "$WT" status --porcelain --untracked-files=all 2>/dev/null | wc -l)"
+[ "$SUJO_WT" -eq 0 ]; afirma "a8-worktree-nao-suja" $? "$SUJO_WT linha(s) em git status"
+
+# A6/A7. contrato: sem .expx nao cria regra; sem git segue sem erro.
+tem "$ING" 'não crie nada e não acrescente a regra do'; afirma "a6-sem-expx-sem-regra" $? "condicao explicita"
+tem "$ING" 'Sem Git** não existe `info/exclude`'; afirma "a7-sem-git-nao-falha" $? "caminho sem git explicito"
+tem "$ING" 'git rev-parse --git-path info/exclude'; afirma "a-contrato-usa-git-path" $? "caminho resolvido pelo git"
+tem "$ING" 'git check-ignore'; afirma "a-contrato-checa-antes" $? "check-ignore antes de escrever"
+
+echo "== B. HISTORICO.md: artefato global de metodo, versionado =="
+# 9. a F6 continua exigindo o arquivo.
+tem "$EXEC" 'recebeu uma entrada por task concluída'; afirma "b9-f6-ainda-exige" $? "criterio de saida intacto"
+# 10. o contrato o nomeia artefato global de metodo.
+tem "$EXEC" 'artefato global de'; afirma "b10-nomeado-global-exec" $? "declarado em 06-execucao.md"
+tem "$SKILLMD" 'artefato global de método'; afirma "b10b-nomeado-global-skill" $? "declarado no SKILL.md"
+# 11. com mergex, o commit e ownership dela.
+tem "$EXEC" 'escreve** e a `mergex` **versiona'; afirma "b11-ownership-mergex" $? "ownership declarado"
+# 12. a sprintx nao commita por conta propria.
+if grep -qE '^[[:space:]]*git (commit|add|push)' "$EXEC"; then false; else true; fi
+afirma "b12-sem-git-commit-na-skill" $? "nenhum comando de commit na F6"
+grep -qF 'docs/sprintx/*' "$H/sprintx/arvore-limpa-antes-da-suite.sh"
+afirma "b-portao-isenta-artefato-metodo" $? "docs/sprintx/* isento no gate da suite"
+
+echo "== C. plano condensado e tres arquivos =="
+SCHEMA="$SK/references/00-schema.md"
+ORQ="$SK/references/04-orquestrador.md"
+AUD="$SK/references/05-auditoria.md"
+EST="$SK/references/07-estimativa.md"
+DIAG="$SK/references/09-diagrama.md"
+
+# A regra de resolucao existe UMA vez, e num lugar so.
+tem "$SCHEMA" 'Como resolver o formato de uma sprint'; afirma "c-regra-unica-existe" $? "descrita em 00-schema.md"
+NREGRA=$(grep -rlF '### Como resolver o formato de uma sprint' "$SK" | wc -l)
+[ "$NREGRA" -eq 1 ]; afirma "c-regra-nao-duplicada" $? "$NREGRA arquivo(s) com a descricao"
+
+# 13/14. F4 aceita os dois formatos e nao contradiz a F3.
+tem "$ORQ" 'ou três arquivos'; afirma "c13-f4-aceita-condensado" $? "pre-requisito dos dois formatos"
+tem "$ORQ" 'Como resolver o formato de uma sprint'; afirma "c14-f4-referencia-regra" $? "F4 aponta a regra unica"
+if grep -qF 'existe com `sprint.md`, `fases.md` e `tasks.md`.' "$ORQ"; then false; else true; fi
+afirma "c13b-f4-sem-exigencia-literal" $? "exigencia dos tres arquivos removida"
+
+# 15/16. F5 audita os dois formatos, sem perder rigor.
+tem "$AUD" 'Resolva o formato de cada sprint'; afirma "c15-f5-resolve-formato" $? "F5 resolve por sprint"
+tem "$AUD" 'nos dois formatos'; afirma "c16-f5-mesmo-rigor" $? "nove itens preservados"
+tem "$AUD" 'Numa sprint condensada isso é sempre'; afirma "c16b-f5-achado-caminho-real" $? "achado aponta caminho real"
+NAUD=$(sed -n '/^## Passo 3 — Verificar cada item desta lista/,/^## Passo 4/p' "$AUD" | grep -cE '^[0-9]+\. \*\*')
+[ "$NAUD" -eq 9 ]; afirma "c16c-f5-nove-itens" $? "$NAUD itens de auditoria (esperado 9)"
+
+# 17/18/19. F6 grava nos dois formatos.
+tem "$EXEC" 'Fechar fase atualiza o item correspondente em `fases`'; afirma "c17-19-f6-grava-condensado" $? "fase e sprint no condensado"
+tem "$EXEC" 'a mesma chave nos dois formatos'; afirma "c17-f6-task-igual" $? "task fecha igual nos dois"
+
+# 20/21. portoes nao afrouxam no condensado.
+tem "$EXEC" 'Nenhuma condição afrouxa por causa do formato'; afirma "c20-f6-portao-nao-afrouxa" $? "criterio_saida cobrado igual"
+tem "$EXEC" 'rode a suíte INTEIRA e exija 0 failed'; afirma "c21-f6-suite-inteira" $? "suite inteira continua exigida"
+
+# 22. ausencia de fases.md no condensado nao gera aviso.
+tem "$EXEC" 'sem registrar aviso'; afirma "c22-f6-sem-aviso-diagrama" $? "F6 pula diagrama em silencio"
+tem "$DIAG" 'Sprint condensada não tem diagrama'; afirma "c22b-diagrama-documenta" $? "09-diagrama.md explica"
+
+# 23. o formato de tres arquivos continua valido, sem regressao.
+tem "$SCHEMA" 'continuam válidos e não são descontinuados'; afirma "c23-tres-arquivos-vivos" $? "nenhum formato descontinuado"
+tem "$EXEC" 'fechar sprint atualiza `sprint.md`'; afirma "c23b-f6-tres-arquivos" $? "caminho dos tres arquivos preservado"
+tem "$EST" 'ou três arquivos'; afirma "c-f35-aceita-os-dois" $? "F3.5 tambem resolve"
+AGENTE=$(grep -lF 'kind: plano' "$H/../agents/auditor-plano.md" "$H/../../.opencode/agent/auditor-plano.md" 2>/dev/null | wc -l)
+[ "$AGENTE" -eq 2 ]; afirma "c-agente-nos-dois-harnesses" $? "$AGENTE/2 espelhos do auditor corrigidos"
+
 echo
 echo "  $ok ok, $falhou falhas"
 [ "$falhou" -eq 0 ]
