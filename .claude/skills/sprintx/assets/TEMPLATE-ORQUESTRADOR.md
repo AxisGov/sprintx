@@ -31,14 +31,14 @@ palavras_chave: [{{ate 8 termos, minusculo, sem acento}}]
 1. Este arquivo (`ORQUESTRADOR.md`)
 2. `00-DECISOES.md` — decisões que governam o plano
 3. `base/00-INDICE.md` — e os arquivos da base que ele lista
-4. `sprint-01/sprint.md` → `fases.md` → `tasks.md`
+4. `sprint-01/` — os arquivos que ela de fato tem: `sprint.md` → `fases.md` → `tasks.md` nos três arquivos, ou só `tasks.md` quando a sprint é condensada (`kind: plano`)
 5. {{`sprint-02/` em diante, na ordem}}
 6. `00-BLOQUEIOS.md` — bloqueios registrados durante a execução
 7. `00-AUDITORIA.md` — achados MÉDIA/BAIXA que permanecem válidos
 
 ## 3. Rota de execução
 
-{{Sequência de sprints e fases. Marque explicitamente o que roda em paralelo com o quê, derivado de fases.md e dos depende_de. Ex.:}}
+{{Sequência de sprints e fases. Marque explicitamente o que roda em paralelo com o quê, derivado das fases da sprint (de `fases.md`, ou da chave `fases` do `tasks.md` condensado) e dos depende_de. Ex.:}}
 
 - Sprint 01: F-01.1 → F-01.2
 - Sprint 02: F-02.1 ∥ F-02.2 (paralelas) → F-02.3
