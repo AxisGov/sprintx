@@ -116,7 +116,7 @@ A integração é condicional: sem a `mergex` instalada, a F6 roda exatamente co
 11. A F3 bloqueia se houver PENDENTE bloqueante em `00-DECISOES.md`. Se, ao planejar, a F3 encontrar algo que exigiria decisão humana em execução, essa é a única pergunta permitida fora da F2: pergunta na hora e registra a resposta como nova decisão D-NN.
 12. Granularidade: se os dois testes da task não cabem em uma frase cada, a task está grande demais — quebre.
 13. A primeira sprint entrega a capacidade de testar (config, client, harness, fixtures), não funcionalidade de negócio.
-14. Na F5 a IA é auditora: só aponta, nunca corrige; achado de severidade ALTA manda voltar para a F3 — nunca corrigir à mão o arquivo gerado.
+14. Na F5 a IA é auditora: só aponta, nunca corrige; achado de severidade ALTA manda voltar para a F3 — ou para o estado terminal `orcamento_esgotado`, quando a reprovação atinge o teto declarado pelo caller — nunca corrigir à mão o arquivo gerado.
 15. Proibido escrever código de implementação em qualquer fase antes da F6.
 16. Use sempre caminhos relativos; nunca escreva caminhos absolutos em nenhum artefato.
 17. Todo arquivo de estado é gravado com o frontmatter do contrato expx-schema v1, descrito em `references/00-schema.md`. Arquivo de estado sem frontmatter válido é considerado não entregue. Ao abrir uma pasta de trabalho que já existe e cujos arquivos não têm frontmatter, acrescente o frontmatter na próxima vez que gravar aquele arquivo, inferindo os valores da prosa existente; nunca reescreva em massa nem migre pastas que não vai tocar.

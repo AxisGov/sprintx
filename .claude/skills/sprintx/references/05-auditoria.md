@@ -166,7 +166,7 @@ relate. Não volte à F3 nem siga para a F6 com a rodada fora do histórico.
 
 ## Regra dura desta fase
 
-Achado ALTA manda voltar para a F3 — o plano é REGERADO por quem o gerou, endereçando cada achado. NUNCA corrija à mão o arquivo gerado durante a auditoria, nem "só esse detalhe". Auditora não edita plano.
+Achado ALTA manda voltar para a F3 — o plano é REGERADO por quem o gerou, endereçando cada achado —, **exceto** quando a reprovação atinge o teto declarado: aí o estado é `orcamento_esgotado`, terminal, e não há volta à F3. NUNCA corrija à mão o arquivo gerado durante a auditoria, nem "só esse detalhe". Auditora não edita plano.
 
 ## Critério de saída da fase
 
