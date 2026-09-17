@@ -17,8 +17,10 @@ reviews:
   # Revisão automática só na ABERTURA do PR (ou quando um rascunho vira "pronto
   # para revisão"). Os commits seguintes não disparam nova revisão: comente
   # `@coderabbitai review` (só o que mudou) ou `@coderabbitai full review` (tudo).
-  # PR de documentação (título começando com `docs:` ou `docs(`) não é revisado
-  # sozinho; o disparo manual continua valendo nele.
+  # PR de documentação não é revisado sozinho quando o título tem `docs:` ou `docs(`.
+  # Atenção: o CodeRabbit procura o trecho em QUALQUER parte do título, não só no
+  # começo (não existe filtro por prefixo). Use esses trechos só como prefixo de
+  # PR de documentação. O disparo manual continua valendo em qualquer PR.
   # Cota compartilhada do AxisGov: 1 revisão automática por hora para a organização
   # inteira. Se dois PRs abrirem na mesma hora, o segundo pode precisar do manual.
   auto_review:
