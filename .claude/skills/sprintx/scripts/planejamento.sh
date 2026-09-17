@@ -26,7 +26,9 @@
 #   0  ok — inclusive no-op idempotente e checkpoint ignorado com aviso (sem Git,
 #      branch que nao e feature/<slug>, pasta ignorada pelo versionador)
 #   2  checkpoint recusado: ha path staged fora de docs/sprintx/features/<slug>/
-#   3  persistencia_falhou: o commit do checkpoint foi rejeitado (hook do projeto)
+#   3  persistencia_falhou: o commit do checkpoint foi rejeitado (hook do projeto);
+#      ou persistencia pendente: em feature/<slug>, o estado do disco ainda nao
+#      esta no HEAD — `fase` responde CHECKPOINT e `avanca` recusa ate `checkpoint`
 #   4  contrato invalido (orcamento, arquivo, auditoria ou linha do revisor)
 #   5  transicao invalida para o estado atual (inclui estado terminal)
 #   64 uso incorreto
@@ -407,6 +409,55 @@ marco() {
   esac
 }
 
+# ------------------------------------------------------------------ persistencia
+
+# modo_git — G_MODO: canonico | sem_git | raiz | branch | pasta_ignorada.
+# `canonico` e o unico modo com HEAD duravel: Git, raiz do repositorio, branch
+# exatamente feature/<slug> e pasta da feature versionavel.
+modo_git() {
+  G_BRANCH=""
+  if ! git -C "$RAIZ" rev-parse --is-inside-work-tree >/dev/null 2>&1; then G_MODO=sem_git; return; fi
+  if [ -n "$(git -C "$RAIZ" rev-parse --show-prefix 2>/dev/null)" ]; then G_MODO=raiz; return; fi
+  G_BRANCH="$(git -C "$RAIZ" symbolic-ref --short -q HEAD 2>/dev/null)" || G_BRANCH=""
+  if [ "$G_BRANCH" != "feature/$SLUG" ]; then G_MODO=branch; return; fi
+  if git -C "$RAIZ" check-ignore -q "${PREFIXO}00-PLANEJAMENTO.md" 2>/dev/null; then G_MODO=pasta_ignorada; return; fi
+  G_MODO=canonico
+}
+
+# persistencia — PERSIST: duravel | pendente | disco | sem_marco. Exige o
+# planejamento ja lido (estado_efetivo).
+#
+# Checkpoint pendente e condicao OPERACIONAL, derivada do Git, nunca um valor de
+# `estado`: no modo canonico, com um estado que exige checkpoint, o
+# 00-PLANEJAMENTO.md do working tree ou do indice difere do HEAD (ou nem esta
+# nele). So o script escreve esse arquivo, e so numa transicao, imediatamente
+# antes do checkpoint: diferenca nele e exatamente uma transicao gravada e nao
+# persistida. O resto da pasta pode divergir do HEAD por trabalho em curso da
+# fase seguinte — e isso nao e pendencia; quando ha pendencia, o `checkpoint`
+# persiste a pasta inteira. Sem Git, fora de feature/<slug>, raiz diferente ou
+# pasta ignorada: `disco`, o estado do disco governa como sempre governou.
+persistencia() {
+  PERSIST=disco
+  [ -f "$ARQ" ] || return 0
+  marco
+  [ -n "$M_FASE" ] || { PERSIST=sem_marco; return 0; }
+  modo_git
+  [ "$G_MODO" = canonico ] || return 0
+  local rel="${PREFIXO}00-PLANEJAMENTO.md"
+  if git -C "$RAIZ" cat-file -e "HEAD:$rel" 2>/dev/null \
+    && git -C "$RAIZ" diff --quiet HEAD -- "$rel" 2>/dev/null \
+    && git -C "$RAIZ" diff --cached --quiet HEAD -- "$rel" 2>/dev/null; then
+    PERSIST=duravel
+  else
+    PERSIST=pendente
+  fi
+}
+
+pendente_msg() {
+  printf 'checkpoint pendente: o estado %s esta gravado no disco, mas nao no HEAD de feature/%s — execute `planejamento.sh checkpoint %s` antes de continuar' \
+    "$P_ESTADO" "$SLUG" "$SLUG"
+}
+
 # ------------------------------------------------------------------ checkpoint
 
 # checkpoint — commit LOCAL, na branch feature/<slug>, so da pasta da feature.
@@ -415,28 +466,25 @@ checkpoint() {
   le_planejamento; marco
   [ -n "$M_FASE" ] || falha "$E_TRANSICAO" "estado $P_ESTADO ainda nao tem marco de checkpoint (a F2 nao terminou)"
 
-  if ! git -C "$RAIZ" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    printf 'checkpoint=ignorado_sem_git\n'
-    rastro "$M_FASE" aviso "checkpoint ignorado: sem Git; estado $P_ESTADO so no disco"
-    return 0
-  fi
-  if [ -n "$(git -C "$RAIZ" rev-parse --show-prefix 2>/dev/null)" ]; then
-    printf 'checkpoint=ignorado_raiz\n'
-    rastro "$M_FASE" aviso "checkpoint ignorado: raiz da sprintx nao e a raiz do repositorio"
-    return 0
-  fi
-  local branch
-  branch="$(git -C "$RAIZ" symbolic-ref --short -q HEAD 2>/dev/null)" || branch=""
-  if [ "$branch" != "feature/$SLUG" ]; then
-    printf 'checkpoint=ignorado_branch\nbranch=%s\n' "${branch:-HEAD destacado}"
-    rastro "$M_FASE" aviso "checkpoint ignorado: branch '${branch:-HEAD destacado}' nao e feature/$SLUG; estado $P_ESTADO so no disco"
-    return 0
-  fi
-  if git -C "$RAIZ" check-ignore -q "${PREFIXO}00-PLANEJAMENTO.md" 2>/dev/null; then
-    printf 'checkpoint=ignorado_pasta_ignorada\n'
-    rastro "$M_FASE" aviso "checkpoint ignorado: $PREFIXO e ignorada pelo versionador do projeto"
-    return 0
-  fi
+  modo_git
+  case "$G_MODO" in
+    sem_git)
+      printf 'checkpoint=ignorado_sem_git\n'
+      rastro "$M_FASE" aviso "checkpoint ignorado: sem Git; estado $P_ESTADO so no disco"
+      return 0 ;;
+    raiz)
+      printf 'checkpoint=ignorado_raiz\n'
+      rastro "$M_FASE" aviso "checkpoint ignorado: raiz da sprintx nao e a raiz do repositorio"
+      return 0 ;;
+    branch)
+      printf 'checkpoint=ignorado_branch\nbranch=%s\n' "${G_BRANCH:-HEAD destacado}"
+      rastro "$M_FASE" aviso "checkpoint ignorado: branch '${G_BRANCH:-HEAD destacado}' nao e feature/$SLUG; estado $P_ESTADO so no disco"
+      return 0 ;;
+    pasta_ignorada)
+      printf 'checkpoint=ignorado_pasta_ignorada\n'
+      rastro "$M_FASE" aviso "checkpoint ignorado: $PREFIXO e ignorada pelo versionador do projeto"
+      return 0 ;;
+  esac
 
   guarda_staged "antes de preparar"
   git -C "$RAIZ" add -A -- "$PREFIXO" 2>/dev/null \
@@ -444,7 +492,7 @@ checkpoint() {
   guarda_staged "depois de preparar"
 
   if git -C "$RAIZ" diff --cached --quiet 2>/dev/null; then
-    printf 'checkpoint=sem_mudanca\nfase=%s\nrodada=%s\nestado=%s\n' "$M_FASE" "$M_RODADA" "$P_ESTADO"
+    printf 'checkpoint=sem_mudanca\nfase=%s\nrodada=%s\nestado=%s\npersistencia=duravel\n' "$M_FASE" "$M_RODADA" "$P_ESTADO"
     rastro "$M_FASE" ok "sem_mudanca: HEAD ja representa o estado $P_ESTADO"
     return 0
   fi
@@ -458,12 +506,12 @@ Trabalho: $SLUG
 Fase: $M_FASE
 Rodada: $M_RODADA
 Estado: $P_ESTADO" 2>&1)"; then
-    printf 'checkpoint=persistencia_falhou\n'
+    printf 'checkpoint=persistencia_falhou\npersistencia=pendente\n'
     rastro "$M_FASE" falha "persistencia_falhou: o commit do checkpoint foi rejeitado — $(printf '%s' "$saida" | tr '\n' ' ' | cut -c1-200)"
-    printf 'planejamento: persistencia_falhou — commit rejeitado; nada foi limpo nem descartado. PARE.\n%s\n' "$saida" >&2
+    printf 'planejamento: persistencia_falhou — commit rejeitado; nada foi limpo nem descartado. O estado %s fica pendente: resolva a causa e rode `planejamento.sh checkpoint %s`. PARE.\n%s\n' "$P_ESTADO" "$SLUG" "$saida" >&2
     exit "$E_PERSISTENCIA"
   fi
-  printf 'checkpoint=commitado\ncommit=%s\nfase=%s\nrodada=%s\nestado=%s\n' \
+  printf 'checkpoint=commitado\npersistencia=duravel\ncommit=%s\nfase=%s\nrodada=%s\nestado=%s\n' \
     "$(git -C "$RAIZ" rev-parse --short HEAD)" "$M_FASE" "$M_RODADA" "$P_ESTADO"
   rastro "$M_FASE" ok "commitado: checkpoint $rotulo, estado $P_ESTADO"
 }
@@ -517,7 +565,16 @@ cmd_avanca() {
   [ $# -eq 2 ] || falha "$E_USO" "uso: avanca <slug> f2|f3|f4|f5"
   contexto "$1"
   local alvo="$2" novo
+  case "$alvo" in f2|f3|f4|f5) ;; *) falha "$E_USO" "fase invalida: '$alvo' (f2|f3|f4|f5)" ;; esac
   estado_efetivo
+  # Transicao anterior gravada e nao persistida: nenhuma nova transicao governa
+  # em cima dela. Nada e reescrito; a unica saida e completar o checkpoint.
+  persistencia
+  if [ "$PERSIST" = pendente ]; then
+    printf 'estado=%s\nproxima=CHECKPOINT\npersistencia=pendente\n' "$E_ESTADO"
+    rastro "$M_FASE" bloqueado "avanca $alvo recusado: $(pendente_msg)"
+    falha "$E_PERSISTENCIA" "avanca $alvo recusado — $(pendente_msg)"
+  fi
   case "$alvo:$E_ESTADO" in
     f2:null|f2:aguardando_f3) novo=aguardando_f3 ;;
     f3:aguardando_f3|f3:replanejar|f3:aguardando_f4|f3:aguardando_f5) novo=aguardando_f4 ;;
@@ -573,7 +630,12 @@ cmd_fase() {
     printf 'fase=INCONSISTENTE\nestado=aprovado\nfonte=%s\n' "$E_FONTE"
     falha "$E_TRANSICAO" "estado aprovado, mas 00-AUDITORIA.md nao termina em VEREDITO: SIM"
   fi
-  printf 'fase=%s\nestado=%s\nfonte=%s\n' "$(fase_do_estado "$E_ESTADO")" "$E_ESTADO" "$E_FONTE"
+  persistencia
+  if [ "$PERSIST" = pendente ]; then
+    printf 'fase=CHECKPOINT\nestado=%s\nfonte=%s\npersistencia=pendente\n' "$E_ESTADO" "$E_FONTE"
+    falha "$E_PERSISTENCIA" "$(pendente_msg)"
+  fi
+  printf 'fase=%s\nestado=%s\nfonte=%s\npersistencia=%s\n' "$(fase_do_estado "$E_ESTADO")" "$E_ESTADO" "$E_FONTE" "$PERSIST"
 }
 
 cmd_valida_auditoria() {

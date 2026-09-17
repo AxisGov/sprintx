@@ -5,7 +5,7 @@ Você está na F6. A partir de agora você implementa até o fim, sob as regras 
 ## Pré-requisitos verificáveis
 
 - `docs/sprintx/features/<slug>/00-AUDITORIA.md` existe e contém `VEREDITO: SIM`.
-- O estado do planejamento é `aprovado`: `scripts/planejamento.sh fase <slug>` responde `F6`.
+- O estado do planejamento é `aprovado`: `scripts/planejamento.sh fase <slug>` responde `F6`. Com `fase=CHECKPOINT` a aprovação ainda não está no `HEAD` da `feature/<slug>`: a F6 **não começa** até `checkpoint <slug>` persistir o estado (`references/02-descoberta.md`).
 - Se contém `VEREDITO: NÃO`, volte para a F3. Se não existe, falta a F5: diga qual fase falta e execute-a primeiro.
 - Com o estado em `orcamento_esgotado` **não existe F6**: a F6 nunca começa, nem por pedido de retomada, nem com `ORQUESTRADOR.md` pronto.
 

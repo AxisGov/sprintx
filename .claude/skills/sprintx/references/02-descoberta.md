@@ -123,11 +123,7 @@ Se o usuário parou de responder no meio, registre o que já foi decidido, marqu
 
 ## Ao terminar
 
-Anuncie: "F2 concluída. Densidade `<densidade>`, construção `<modo>`. N decisões e M pendências em `docs/sprintx/features/<slug>/00-DECISOES.md`." No modo `autonomo`, acrescente quantas decisões foram por hipótese: "K das N decisões foram assumidas por pesquisa, marcadas `(HIPOTESE)` — revise antes da F3 se quiser corrigir alguma." Se houver PENDENTE bloqueante, diga quais e avise que a F3 está travada por eles. Caso contrário, siga para a F3 lendo `references/03-plano.md`.
-
-Grave `fase: f3` em `.expx/estado.json` (`references/09-estado.md`) ao passar para a F3. Se a F3 ficou travada por PENDENTE bloqueante, mantenha `fase: f2` — a barra mostra onde o trabalho está, não onde ele deveria estar.
-
-**Registre o fim da fase antes de seguir para a F3**, com `00-DECISOES.md` gravado:
+**Registre o fim da fase antes de anunciar e antes de seguir para a F3**, com `00-DECISOES.md` gravado:
 
 ```bash
 bash <raiz-da-skill>/scripts/planejamento.sh avanca <slug> f2
@@ -135,7 +131,12 @@ bash <raiz-da-skill>/scripts/planejamento.sh avanca <slug> f2
 
 O estado passa a `aguardando_f3` e o checkpoint abaixo roda. Com PENDENTE bloqueante a F2 ainda
 não terminou: não avance. Resolver pendência depois (reexecução da F2) roda `avanca <slug> f2` de
-novo — com o estado já em `aguardando_f3`, só o checkpoint roda.
+novo — com o estado já em `aguardando_f3`, só o checkpoint roda. Código diferente de `0`: **pare**
+e relate.
+
+Anuncie: "F2 concluída. Densidade `<densidade>`, construção `<modo>`. N decisões e M pendências em `docs/sprintx/features/<slug>/00-DECISOES.md`." No modo `autonomo`, acrescente quantas decisões foram por hipótese: "K das N decisões foram assumidas por pesquisa, marcadas `(HIPOTESE)` — revise antes da F3 se quiser corrigir alguma." Se houver PENDENTE bloqueante, diga quais e avise que a F3 está travada por eles. Caso contrário, siga para a F3 lendo `references/03-plano.md`.
+
+Grave `fase: f3` em `.expx/estado.json` (`references/09-estado.md`) ao passar para a F3. Se a F3 ficou travada por PENDENTE bloqueante, mantenha `fase: f2` — a barra mostra onde o trabalho está, não onde ele deveria estar.
 
 ## Checkpoint do planejamento — regra única
 
@@ -183,3 +184,26 @@ Estado: <estado>
 | `persistencia_falhou` | 3 | **PARE**: um hook do projeto rejeitou o commit; está no rastro como `persistencia_falhou`. Não contorne, não use `--no-verify`, não siga para a fase seguinte |
 
 Todo checkpoint grava `checkpoint_planejamento` no rastro (`references/08-rastro.md`).
+
+**Checkpoint pendente — o estado do disco só governa depois de estar no `HEAD`.** Quando o commit
+é rejeitado, o novo estado **fica** no working tree: é a evidência da tentativa, e nada é
+revertido, limpo, stashado nem descartado. Mas, na `feature/<slug>`, esse estado **ainda não é
+durável** e não pode decidir a fase seguinte. Enquanto o `00-PLANEJAMENTO.md` do working tree ou
+do índice diferir do `HEAD` num estado que exige checkpoint, o script trata o planejamento como
+**checkpoint pendente** — uma condição derivada do Git, nunca um valor de `estado`:
+
+- `planejamento.sh fase <slug>` responde `fase=CHECKPOINT`, `estado=<o do disco>` e
+  `persistencia=pendente`, com código `3` — nunca F3, F4, F5, F6 nem `PARAR`;
+- `planejamento.sh avanca <slug> <fase>` **recusa** qualquer transição, com código `3`: não
+  reescreve o estado, não soma reprovação, não registra rodada;
+- a única ação válida é completar o checkpoint já gravado, depois de resolver a causa da recusa
+  (sem `--no-verify`):
+
+```bash
+bash <raiz-da-skill>/scripts/planejamento.sh checkpoint <slug>
+```
+
+O `checkpoint` não gera rodada nova nem muda o estado: persiste a pasta da feature como está. Com o
+commit verde, `fase` volta a responder a fase do estado, com `persistencia=duravel`. Sem Git, fora
+de `feature/<slug>`, com a raiz diferente ou com a pasta ignorada, não existe `HEAD` durável: o
+estado do disco governa como sempre, e `fase` responde `persistencia=disco`.
