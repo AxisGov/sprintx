@@ -72,27 +72,6 @@ VEREDITO: NÃO — o plano não está pronto para execução autônoma.
 
 Regra do veredito: existe achado ALTA → `VEREDITO: NÃO`. Nenhum achado ALTA → `VEREDITO: SIM` (MÉDIA e BAIXA ficam registrados, não bloqueiam).
 
-## Regra dura desta fase
-
-Achado ALTA manda voltar para a F3 — o plano é REGERADO por quem o gerou, endereçando cada achado. NUNCA corrija à mão o arquivo gerado durante a auditoria, nem "só esse detalhe". Auditora não edita plano.
-
-## Critério de saída da fase
-
-- [ ] `00-AUDITORIA.md` existe com tabela (ou "Nenhum achado.") e a linha `VEREDITO:` no formato exato.
-- [ ] Nenhum arquivo do plano foi alterado nesta fase.
-- [ ] O `veredito_emitido` foi gravado no rastro, com o `agente` que o emitiu.
-
-## Quando o veredito é NÃO e o estado é `replanejar`
-
-Anuncie os achados ALTA, volte para a F3 (`references/03-plano.md`) levando `00-AUDITORIA.md` como entrada, regere o plano corrigindo a classe de cada defeito (Passo 1.1 da F3), refaça a F4 se o ORQUESTRADOR for afetado, e reaudite. O ciclo se repete até `VEREDITO: SIM` — ou até o orçamento se esgotar, quando houver teto.
-
-Grave `fase: f3` em `.expx/estado.json` ao voltar (`references/09-estado.md`): a barra mostra onde o trabalho está agora, e ele voltou para o plano.
-
-## Ao terminar com VEREDITO: SIM
-
-Anuncie: "F5 concluída. VEREDITO: SIM — plano pronto para execução autônoma. N achados MÉDIA/BAIXA registrados em `00-AUDITORIA.md`." Siga para a F6 lendo `references/06-execucao.md` (ou pare aqui se o usuário pediu só o planejamento).
-
-Grave `fase: f6` em `.expx/estado.json` (`references/09-estado.md`) ao entrar na execução. Se o usuário pediu só o planejamento e o trabalho para aqui, mantenha `fase: f5` — o trabalho continua aberto na auditoria, e só a conclusão da F6 zera `trabalho`, `fase` e `task`.
 ## Passo 5 — Registrar a rodada e fazer o checkpoint
 
 Com `00-AUDITORIA.md` gravado, **todo** veredito, SIM ou NÃO, é registrado antes de qualquer
@@ -126,6 +105,22 @@ sobrescrito a cada rodada: cada versão sobrevive no histórico Git, recuperáve
 Código diferente de `0` no checkpoint (`2` recusado, `3` `persistencia_falhou`): **pare** e
 relate. Não volte à F3 nem siga para a F6 com a rodada fora do histórico.
 
+## Regra dura desta fase
+
+Achado ALTA manda voltar para a F3 — o plano é REGERADO por quem o gerou, endereçando cada achado. NUNCA corrija à mão o arquivo gerado durante a auditoria, nem "só esse detalhe". Auditora não edita plano.
+
+## Critério de saída da fase
+
+- [ ] `00-AUDITORIA.md` existe com tabela (ou "Nenhum achado.") e a linha `VEREDITO:` no formato exato.
+- [ ] Nenhum arquivo do plano foi alterado nesta fase.
+- [ ] O `veredito_emitido` foi gravado no rastro, com o `agente` que o emitiu.
+
+## Quando o veredito é NÃO e o estado é `replanejar`
+
+Anuncie os achados ALTA, volte para a F3 (`references/03-plano.md`) levando `00-AUDITORIA.md` como entrada, regere o plano corrigindo a classe de cada defeito (Passo 1.1 da F3), refaça a F4 se o ORQUESTRADOR for afetado, e reaudite. O ciclo se repete até `VEREDITO: SIM` — ou até o orçamento se esgotar, quando houver teto.
+
+Grave `fase: f3` em `.expx/estado.json` ao voltar (`references/09-estado.md`): a barra mostra onde o trabalho está agora, e ele voltou para o plano.
+
 ## Quando o estado é `orcamento_esgotado`
 
 É o estado terminal da `sprintx` para um plano que o caller permitiu reprovar só até ali. **Pare
@@ -139,3 +134,8 @@ replanejar por fora, subir o teto — é de quem declarou o orçamento, nunca de
 
 Mantenha `fase: f5` em `.expx/estado.json`: o trabalho parou na auditoria.
 
+## Ao terminar com VEREDITO: SIM
+
+Anuncie: "F5 concluída. VEREDITO: SIM — plano pronto para execução autônoma. N achados MÉDIA/BAIXA registrados em `00-AUDITORIA.md`." Siga para a F6 lendo `references/06-execucao.md` (ou pare aqui se o usuário pediu só o planejamento).
+
+Grave `fase: f6` em `.expx/estado.json` (`references/09-estado.md`) ao entrar na execução. Se o usuário pediu só o planejamento e o trabalho para aqui, mantenha `fase: f5` — o trabalho continua aberto na auditoria, e só a conclusão da F6 zera `trabalho`, `fase` e `task`.
