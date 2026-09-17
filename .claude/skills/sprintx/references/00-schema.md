@@ -61,6 +61,8 @@ Valem para todo arquivo que leva frontmatter:
 | `metodo_agregacao` | `pert_quadratura` |
 | `densidade` | `mvp` \| `padrao` \| `completo` \| `profundo` |
 | `modo_construcao` | `entrevista` \| `autonomo` |
+| `estado` (planejamento) | `aguardando_f3` \| `aguardando_f4` \| `aguardando_f5` \| `replanejar` \| `aprovado` \| `orcamento_esgotado` (ou `null` antes do fim da F2) |
+| `veredito` (rodada da F5) | `sim` \| `nao` |
 
 Atenção a duas distinções que o painel trata como coisas diferentes:
 
@@ -560,6 +562,70 @@ Regras duras deste kind:
 - `fechado_em` é a data do sistema (`date +%Y-%m-%d`) no dia do fechamento.
 - Este kind não tem `atualizado_em`: o fechamento é um registro de um instante, não um
   arquivo de estado que evolui. `fechado_em` é a sua data.
+
+### `00-PLANEJAMENTO.md` → `kind: planejamento`
+
+**Kind exclusivo da `sprintx`** — a `sprintx` é a dona dele, e ele não é compartilhado com a
+runx. É o **estado durável do planejamento**: em que ponto do laço F3 ↔ F5 a feature está,
+quantas vezes a F5 reprovou o plano e qual é o teto de reprovações que o caller declarou.
+Nasce na F1, a partir de `assets/TEMPLATE-PLANEJAMENTO.md`, e é gravado **só** por
+`scripts/planejamento.sh` (caminho relativo à raiz da skill) — nunca à mão, em fase nenhuma.
+
+```yaml
+---
+expx_schema: 1
+expx_tool: sprintx
+kind: planejamento
+trabalho_id: exportacao-csv-relatorios
+max_reprovacoes_f5: 3
+orcamento_declarado_por: buildx
+estado: replanejar
+reprovacoes: 2
+atualizado_em: 2026-08-29
+historico:
+  - rodada: 1
+    veredito: nao
+    altas: 6
+    medias: 2
+    baixas: 5
+    auditado_em: 2026-08-28
+  - rodada: 2
+    veredito: nao
+    altas: 3
+    medias: 3
+    baixas: 1
+    auditado_em: 2026-08-29
+---
+```
+
+**É artefato de método, e só isso.** `00-PLANEJAMENTO.md` não é task, não é produto, não é
+entrega e não é desvio. Vive na pasta da feature, junto dos outros artefatos de método, e é
+tratado como eles por quem versiona e classifica (`docs/sprintx/features/<slug>/`).
+
+Regras duras deste kind:
+
+- `max_reprovacoes_f5` é `null` (sem teto) ou um inteiro `>= 1`: a quantidade máxima de
+  **vereditos NÃO** permitidos. Zero, negativo, texto ou qualquer outra forma é **erro de
+  contrato**, e o script recusa.
+- `orcamento_declarado_por` identifica quem declarou o teto (`buildx`, por exemplo). É `null`
+  se e somente se `max_reprovacoes_f5` for `null`: teto sem dono, ou dono sem teto, é erro de
+  contrato. A `sprintx` sozinha **nunca inventa orçamento** — ela grava `null`/`null`.
+- `estado` segue o enum `estado` (planejamento). É `null` da F1 até o fim da F2; a partir daí,
+  é sempre um dos seis valores. Nenhum outro estado existe.
+- `reprovacoes` é um inteiro `>= 0` e é sempre igual à quantidade de rodadas `nao` do
+  `historico`.
+- `historico` é **append-only**: uma entrada por veredito da F5, na ordem, com `rodada`
+  (1, 2, 3…), `veredito` (`sim` \| `nao`), as contagens `altas`, `medias` e `baixas` da tabela de
+  `00-AUDITORIA.md` e `auditado_em`. Rodada anterior nunca é reescrita nem removida. Sem
+  rodada, `historico: []`.
+- `aprovado` só existe com a última rodada `sim`; `orcamento_esgotado` só existe com
+  `reprovacoes >= max_reprovacoes_f5`. Arquivo que contradiz isso é contrato inválido e nada é
+  decidido em cima dele.
+
+**`kind: planejamento` e o painel.** O painel do `expxdev` pode ignorar este kind até ganhar
+suporte a ele. Isso **não afeta** a execução da `sprintx`: nenhuma lógica da skill depende de o
+painel reconhecer o kind — a máquina de estados lê o arquivo pelo script, localmente, sem
+`expxdev` instalado.
 
 ### Arquivos SEM frontmatter
 

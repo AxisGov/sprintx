@@ -19,6 +19,7 @@ Escrito pelos hooks e **pela própria skill nas transições de fase e de task**
 | `fase_iniciada` · `fase_concluida` | **a skill**, ao entrar e sair de cada fase |
 | `task_iniciada` · `task_concluida` · `task_bloqueada` | **a skill**, na F6 |
 | `veredito_emitido` | **a skill/agente**, na F5 (auditor) |
+| `checkpoint_planejamento` | **`scripts/planejamento.sh`**, ao fim da F2, F3, F4 e a cada veredito da F5. `resultado`: `ok` (`commitado`, `sem_mudanca`), `aviso` (checkpoint ignorado: sem Git, outra branch, pasta ignorada), `bloqueado` (path staged fora da pasta da feature) ou `falha` (`persistencia_falhou`: o commit foi rejeitado). O `detalhe` começa pelo resultado do checkpoint |
 | `agente_iniciado` · `agente_concluido` | hook `SubagentStop` e a skill |
 | `suite_executada` · `arquivo_alterado` | hook `PostToolUse` |
 | `regra_violada` | hook, em modo aviso |

@@ -569,6 +569,315 @@ tem "$EXEC" 'pule este passo inteiro, **sem registrar aviso**'; afirma "f11-f6-s
 tem "$EXEC" 'troque a classe na linha `class` do nó da task'; afirma "f12-tres-arquivos-atualiza-diagrama" $? "tres arquivos como antes"
 tem "$DIAG" '# O diagrama do grafo de tasks — bloco Mermaid em `fases.md`'; afirma "f12b-09-diagrama-preservado" $? "reference intacto"
 
+echo "== G. planejamento duravel, checkpoint e orcamento da F5 (P0.1) =="
+# Testa o MECANISMO contra repositorios git reais: scripts/planejamento.sh e o
+# unico escritor de 00-PLANEJAMENTO.md e o unico autor de checkpoint.
+PL="$SK/scripts/planejamento.sh"
+TPL="$SK/assets/TEMPLATE-PLANEJAMENTO.md"
+existe "g0-script-existe" "$PL"
+existe "g0-template-existe" "$TPL"
+bash -n "$PL"; afirma "g0-script-sintaxe" $? "bash -n"
+G="$(mktemp -d)"
+kv() { printf '%s\n' "$1" | sed -n "s/^$2=//p" | tail -1; }
+pl() { local d="$1"; shift; (cd "$d" && bash "$PL" "$@") 2>&1; }
+fmv() { tr -d '\r' < "$1" | awk -v k="$2" 'NR==1{next} $0=="---"{exit} index($0,k": ")==1{print substr($0,length(k)+3); exit}'; }
+trailer() { git -C "$1" log -1 --format="%(trailers:key=$2,valueonly)" | tr -d '\r' | sed '/^$/d'; }
+ncommits() { git -C "$1" rev-list --count HEAD; }
+nova_feature() { # nova_feature <dir> <slug> [branch]
+  local d="$1" s="$2" b="${3:-feature/$2}"
+  git init -q -b main "$d"; git -C "$d" config user.email t@t.local; git -C "$d" config user.name teste
+  git -C "$d" config commit.gpgsign false; git -C "$d" config core.autocrlf false
+  printf 'docs/eventos/\n' >> "$d/.git/info/exclude"
+  mkdir -p "$d/src"; printf 'export const x = 1\n' > "$d/src/app.ts"
+  git -C "$d" add -A; git -C "$d" commit -q -m init
+  [ "$b" = main ] || git -C "$d" switch -q -c "$b"
+  mkdir -p "$d/docs/sprintx/features/$s/base"; printf 'indice\n' > "$d/docs/sprintx/features/$s/base/00-INDICE.md"
+}
+fdir() { printf '%s/docs/sprintx/features/%s' "$1" "$2"; }
+auditoria() { # auditoria <dir> <slug> <rodada> <SIM|NAO>
+  if [ "$4" = NAO ]; then
+    printf '# Auditoria — %s\n\nRodada %s\n\n| severidade | arquivo | problema | correção sugerida |\n|---|---|---|---|\n| ALTA | sprint-02/tasks.md | [item 2][fraco:criterio] T-02.01 — cláusula: - — passaria com: item no grupo errado na rodada %s | Matriz item x grupo |\n| MÉDIA | sprint-03/tasks.md | [item 2][fraco:teste] T-03.01 — cláusula: D-13 — passaria com: contadores trocados entre itens | Afirmar cada contador |\n| BAIXA | sprint-04/tasks.md | [item 3] T-04.01 criterio com adjetivo | Reescrever |\n\nVEREDITO: NÃO — o plano não está pronto para execução autônoma.\n' "$2" "$3" "$3"
+  else
+    printf '# Auditoria — %s\n\nRodada %s\n\n| severidade | arquivo | problema | correção sugerida |\n|---|---|---|---|\n| MÉDIA | sprint-03/tasks.md | [item 2][fraco:teste] T-03.01 — cláusula: D-13 — passaria com: contadores trocados entre itens | Afirmar cada contador |\n\nVEREDITO: SIM — o plano está pronto para execução autônoma.\n' "$2" "$3"
+  fi > "$(fdir "$1" "$2")/00-AUDITORIA.md"
+}
+ate_f5() { # ate_f5 <dir> <slug> [max por] — F1..F4 com checkpoints
+  local f; f="$(fdir "$1" "$2")"
+  if [ $# -ge 4 ]; then pl "$1" criar "$2" "$3" "$4" >/dev/null; else pl "$1" criar "$2" >/dev/null; fi
+  printf 'decisoes\n' > "$f/00-DECISOES.md"; pl "$1" avanca "$2" f2 >/dev/null
+  mkdir -p "$f/sprint-01"; printf 'plano\n' > "$f/sprint-01/tasks.md"; pl "$1" avanca "$2" f3 >/dev/null
+  printf 'orquestrador\n' > "$f/ORQUESTRADOR.md"; pl "$1" avanca "$2" f4 >/dev/null
+}
+replaneja() { # replaneja <dir> <slug> <n> — a F3 muda o plano e a F4 roda de novo
+  local f; f="$(fdir "$1" "$2")"
+  printf 'plano v%s\n' "$3" > "$f/sprint-01/tasks.md"; pl "$1" avanca "$2" f3 >/dev/null
+  printf 'orquestrador v%s\n' "$3" > "$f/ORQUESTRADOR.md"; pl "$1" avanca "$2" f4 >/dev/null
+}
+
+# A. F1 cria 00-PLANEJAMENTO; orcamento validado; template e script concordam.
+D="$G/a"; nova_feature "$D" menu
+s="$(pl "$D" criar menu)"; rc=$?; A_ARQ="$(fdir "$D" menu)/00-PLANEJAMENTO.md"
+[ "$rc" -eq 0 ] && [ -f "$A_ARQ" ] && [ "$(fmv "$A_ARQ" kind)" = planejamento ] && [ "$(fmv "$A_ARQ" estado)" = null ] \
+  && [ "$(fmv "$A_ARQ" max_reprovacoes_f5)" = null ] && [ "$(fmv "$A_ARQ" orcamento_declarado_por)" = null ] \
+  && [ "$(fmv "$A_ARQ" reprovacoes)" = 0 ] && [ "$(fmv "$A_ARQ" trabalho_id)" = menu ]
+afirma "ga-f1-cria-planejamento-sem-teto" $? "kind planejamento, estado null, null/null"
+grep -q '{{' "$A_ARQ"; [ $? -ne 0 ]; afirma "ga2-sem-placeholder" $? "nenhum {{marcador}} no gerado"
+CHAVES_T="$(tr -d '\r' < "$TPL" | awk 'NR==1{next} $0=="---"{exit} /^[a-z_]+:/{sub(/:.*/,""); print}' | tr '\n' ' ')"
+CHAVES_G="$(tr -d '\r' < "$A_ARQ" | awk 'NR==1{next} $0=="---"{exit} /^[a-z_]+:/{sub(/:.*/,""); print}' | tr '\n' ' ')"
+[ "$CHAVES_T" = "$CHAVES_G" ]; afirma "ga3-template-e-script-concordam" $? "$CHAVES_G"
+D="$G/a2"; nova_feature "$D" menu
+s="$(pl "$D" criar menu 3 buildx)"; rc=$?; A_ARQ="$(fdir "$D" menu)/00-PLANEJAMENTO.md"
+[ "$rc" -eq 0 ] && [ "$(fmv "$A_ARQ" max_reprovacoes_f5)" = 3 ] && [ "$(fmv "$A_ARQ" orcamento_declarado_por)" = buildx ]
+afirma "ga4-caller-declara-orcamento" $? "max 3 declarado por buildx"
+pl "$D" criar menu 3 buildx >/dev/null; afirma "ga5-criar-de-novo-e-noop" $? "mesmo orcamento: no-op"
+pl "$D" criar menu 5 buildx >/dev/null; [ $? -eq 4 ]; afirma "ga6-orcamento-nao-muda-em-silencio" $? "outro teto: erro de contrato"
+for ruim in "0 buildx" "-1 buildx" "tres buildx" "2.5 buildx" "3 null" "null buildx" "3 BuildX"; do
+  D="$G/a-ruim"; rm -rf "$D"; nova_feature "$D" menu
+  # shellcheck disable=SC2086
+  pl "$D" criar menu $ruim >/dev/null; rc=$?
+  [ "$rc" -eq 4 ] && [ ! -f "$(fdir "$D" menu)/00-PLANEJAMENTO.md" ]
+  afirma "ga7-orcamento-invalido-$(printf '%s' "$ruim" | tr ' .' '__')" $? "rc=$rc, nada gravado"
+done
+
+# B/C/D. Fim da F2, F3 e F4: estado + checkpoint com trailers.
+D="$G/b"; nova_feature "$D" menu; F="$(fdir "$D" menu)"
+pl "$D" criar menu >/dev/null; N0="$(ncommits "$D")"
+printf 'decisoes\n' > "$F/00-DECISOES.md"
+s="$(pl "$D" avanca menu f2)"; rc=$?
+[ "$rc" -eq 0 ] && [ "$(kv "$s" checkpoint)" = commitado ] && [ "$(fmv "$F/00-PLANEJAMENTO.md" estado)" = aguardando_f3 ] \
+  && [ "$(ncommits "$D")" -eq $((N0 + 1)) ] && [ "$(trailer "$D" Fase)" = f2 ] && [ "$(trailer "$D" Estado)" = aguardando_f3 ] \
+  && [ "$(trailer "$D" Planejamento)" = checkpoint ] && [ "$(trailer "$D" Trabalho)" = menu ] && [ "$(trailer "$D" Rodada)" = 0 ]
+afirma "gb-fim-f2-checkpoint-aguardando-f3" $? "commit $(kv "$s" commit), trailers f2/aguardando_f3"
+git -C "$D" log -1 --format=%s | grep -qxF 'chore(sprintx): checkpoint de planejamento menu — f2'
+afirma "gb2-mensagem-canonica" $? "$(git -C "$D" log -1 --format=%s)"
+git -C "$D" log -1 --format=%B | grep -q '^Task:'; [ $? -ne 0 ]; afirma "gb3-sem-trailer-task" $? "nao e commit E1"
+git -C "$D" cat-file -e HEAD:docs/sprintx/features/menu/00-DECISOES.md 2>/dev/null; afirma "gb4-decisoes-no-historico" $? "00-DECISOES.md no HEAD"
+mkdir -p "$F/sprint-01"; printf 'plano\n' > "$F/sprint-01/tasks.md"
+s="$(pl "$D" avanca menu f3)"; rc=$?
+[ "$rc" -eq 0 ] && [ "$(kv "$s" checkpoint)" = commitado ] && [ "$(fmv "$F/00-PLANEJAMENTO.md" estado)" = aguardando_f4 ] \
+  && [ "$(trailer "$D" Fase)" = f3 ] && [ "$(trailer "$D" Estado)" = aguardando_f4 ] \
+  && git -C "$D" cat-file -e HEAD:docs/sprintx/features/menu/sprint-01/tasks.md 2>/dev/null
+afirma "gc-fim-f3-checkpoint-aguardando-f4" $? "plano no HEAD, trailers f3/aguardando_f4"
+printf 'orquestrador\n' > "$F/ORQUESTRADOR.md"
+s="$(pl "$D" avanca menu f4)"; rc=$?
+[ "$rc" -eq 0 ] && [ "$(kv "$s" checkpoint)" = commitado ] && [ "$(fmv "$F/00-PLANEJAMENTO.md" estado)" = aguardando_f5 ] \
+  && [ "$(trailer "$D" Fase)" = f4 ] && [ "$(trailer "$D" Estado)" = aguardando_f5 ] \
+  && git -C "$D" cat-file -e HEAD:docs/sprintx/features/menu/ORQUESTRADOR.md 2>/dev/null
+afirma "gd-fim-f4-checkpoint-aguardando-f5" $? "orquestrador no HEAD, trailers f4/aguardando_f5"
+[ "$(kv "$(pl "$D" fase menu)" fase)" = F5 ]; afirma "gd2-aguardando-f5-e-f5" $? "fase F5"
+
+# Q. Idempotencia: mesmo estado, nada a commitar -> no-op, HEAD e arquivo intactos.
+H0="$(git -C "$D" rev-parse HEAD)"; CK0="$(cksum < "$F/00-PLANEJAMENTO.md")"
+s="$(pl "$D" checkpoint menu)"; rc=$?
+[ "$rc" -eq 0 ] && [ "$(kv "$s" checkpoint)" = sem_mudanca ] && [ "$(git -C "$D" rev-parse HEAD)" = "$H0" ]
+afirma "gq-checkpoint-repetido-e-noop" $? "$(kv "$s" checkpoint)"
+s="$(pl "$D" avanca menu f4)"; rc=$?
+[ "$rc" -eq 0 ] && [ "$(kv "$s" checkpoint)" = sem_mudanca ] && [ "$(git -C "$D" rev-parse HEAD)" = "$H0" ] \
+  && [ "$(cksum < "$F/00-PLANEJAMENTO.md")" = "$CK0" ]
+afirma "gq2-avanca-repetido-e-noop" $? "HEAD e 00-PLANEJAMENTO.md intactos"
+
+# E. F5 SIM: aprovado + checkpoint + F6.
+cp -R "$D" "$G/e"; D="$G/e"; F="$(fdir "$D" menu)"
+auditoria "$D" menu 1 SIM
+s="$(pl "$D" avanca menu f5)"; rc=$?
+[ "$rc" -eq 0 ] && [ "$(kv "$s" estado)" = aprovado ] && [ "$(kv "$s" proxima)" = F6 ] && [ "$(kv "$s" checkpoint)" = commitado ] \
+  && [ "$(trailer "$D" Fase)" = f5 ] && [ "$(trailer "$D" Rodada)" = 1 ] && [ "$(trailer "$D" Estado)" = aprovado ] \
+  && [ "$(kv "$(pl "$D" fase menu)" fase)" = F6 ]
+afirma "ge-f5-sim-aprovado-checkpoint-f6" $? "aprovado, rodada 1, fase F6"
+[ "$(fmv "$F/00-PLANEJAMENTO.md" reprovacoes)" = 0 ] && tr -d '\r' < "$F/00-PLANEJAMENTO.md" | grep -qx '    veredito: sim'
+afirma "ge2-sim-nao-consome-orcamento" $? "reprovacoes 0, historico sim"
+pl "$D" avanca menu f5 >/dev/null; [ $? -eq 5 ]; afirma "ge3-aprovado-nao-reaudita" $? "nova F5 recusada"
+
+# F. F5 NAO sem teto: replanejar + checkpoint + F3.
+D="$G/f"; nova_feature "$D" menu; ate_f5 "$D" menu; F="$(fdir "$D" menu)"
+auditoria "$D" menu 1 NAO
+s="$(pl "$D" avanca menu f5)"; rc=$?
+[ "$rc" -eq 0 ] && [ "$(kv "$s" estado)" = replanejar ] && [ "$(kv "$s" proxima)" = F3 ] && [ "$(kv "$s" checkpoint)" = commitado ] \
+  && [ "$(trailer "$D" Estado)" = replanejar ] && [ "$(fmv "$F/00-PLANEJAMENTO.md" reprovacoes)" = 1 ]
+afirma "gf-f5-nao-null-replanejar-f3" $? "replanejar, reprovacoes 1, checkpoint"
+
+# I. replanejar nunca vai direto para a F5.
+[ "$(kv "$(pl "$D" fase menu)" fase)" = F3 ]; afirma "gi-replanejar-e-f3" $? "fase F3"
+CK0="$(cksum < "$F/00-PLANEJAMENTO.md")"; pl "$D" avanca menu f5 >/dev/null; rc=$?
+[ "$rc" -eq 5 ] && [ "$(cksum < "$F/00-PLANEJAMENTO.md")" = "$CK0" ]
+afirma "gi2-replanejar-recusa-f5" $? "rc=$rc, nenhuma rodada nova"
+for r in 2 3 4; do replaneja "$D" menu "$r"; auditoria "$D" menu "$r" NAO; pl "$D" avanca menu f5 >/dev/null; done
+[ "$(fmv "$F/00-PLANEJAMENTO.md" estado)" = replanejar ] && [ "$(fmv "$F/00-PLANEJAMENTO.md" reprovacoes)" = 4 ]
+afirma "gf2-null-nunca-esgota" $? "4 reprovacoes sem teto: replanejar"
+
+# G/H/J/K. Teto 3: o piloto. Terceiro NAO -> orcamento_esgotado; historico no Git.
+D="$G/g"; nova_feature "$D" menu; git init -q --bare "$G/remoto.git"; git -C "$D" remote add origin "$G/remoto.git"
+ate_f5 "$D" menu 3 buildx; F="$(fdir "$D" menu)"
+printf 'export const y = 2\n' >> "$D/src/app.ts"; printf 'novo\n' > "$D/src/novo.ts"   # produto sujo, fora do indice
+auditoria "$D" menu 1 NAO; s1="$(pl "$D" avanca menu f5)"
+replaneja "$D" menu 2; auditoria "$D" menu 2 NAO; s2="$(pl "$D" avanca menu f5)"
+replaneja "$D" menu 3; auditoria "$D" menu 3 NAO; s3="$(pl "$D" avanca menu f5)"; rc3=$?
+[ "$(kv "$s1" estado)" = replanejar ] && [ "$(kv "$s1" reprovacoes)" = 1 ] && [ "$(kv "$s2" estado)" = replanejar ] \
+  && [ "$(kv "$s2" reprovacoes)" = 2 ] && [ "$rc3" -eq 0 ] && [ "$(kv "$s3" estado)" = orcamento_esgotado ] \
+  && [ "$(kv "$s3" reprovacoes)" = 3 ] && [ "$(kv "$s3" checkpoint)" = commitado ] && [ "$(trailer "$D" Estado)" = orcamento_esgotado ]
+afirma "gg-max3-terceiro-nao-esgota" $? "1 replanejar, 2 replanejar, 3 orcamento_esgotado"
+[ "$(kv "$s3" proxima)" = PARAR ] && [ "$(kv "$(pl "$D" fase menu)" fase)" = PARAR ]; afirma "gh-esgotado-e-terminal" $? "fase PARAR"
+H0="$(git -C "$D" rev-parse HEAD)"; bad=0
+for fz in f2 f3 f4 f5; do pl "$D" avanca menu "$fz" >/dev/null; [ $? -eq 5 ] || bad=1; done
+[ "$bad" -eq 0 ] && [ "$(git -C "$D" rev-parse HEAD)" = "$H0" ] && [ "$(fmv "$F/00-PLANEJAMENTO.md" estado)" = orcamento_esgotado ]
+afirma "gh2-esgotado-nunca-f6-nem-f5-nem-f3" $? "toda transicao recusada, estado preservado"
+case "$(pl "$D" fase menu)" in *F6*) false ;; *) true ;; esac; afirma "gh3-esgotado-nunca-f6" $? "fase nunca F6"
+NAUDH="$(git -C "$D" log --format=%H -- docs/sprintx/features/menu/00-AUDITORIA.md | wc -l | tr -d ' ')"
+LOGP="$(git -C "$D" log -p -- docs/sprintx/features/menu/00-AUDITORIA.md)"
+[ "$NAUDH" -eq 3 ] && printf '%s' "$LOGP" | grep -q '^+Rodada 1$' && printf '%s' "$LOGP" | grep -q '^+Rodada 2$' \
+  && printf '%s' "$LOGP" | grep -q '^+Rodada 3$'
+afirma "gj-tres-auditorias-no-git-log" $? "$NAUDH versao(oes) de 00-AUDITORIA.md recuperaveis"
+ls "$F" | grep -qE '^AUDITORIA-[0-9]'; [ $? -ne 0 ]; afirma "gj2-sem-auditoria-numerada" $? "uma fonte viva"
+R1="$(git -C "$D" log --format=%H -- docs/sprintx/features/menu/00-AUDITORIA.md | tail -1)"
+H1="$(git -C "$D" show "$R1:docs/sprintx/features/menu/00-PLANEJAMENTO.md" | tr -d '\r' | sed -n '/^  - rodada: 1$/,/auditado_em/p')"
+HN="$(tr -d '\r' < "$F/00-PLANEJAMENTO.md" | sed -n '/^  - rodada: 1$/,/auditado_em/p')"
+[ -n "$H1" ] && [ "$H1" = "$HN" ] && [ "$(tr -d '\r' < "$F/00-PLANEJAMENTO.md" | grep -c '^  - rodada: ')" -eq 3 ]
+afirma "gj3-historico-append-only" $? "rodada 1 identica depois de 3 rodadas"
+fora=0
+for c in $(git -C "$D" log --format=%H --grep='^Planejamento: checkpoint$'); do
+  for p in $(git -C "$D" show --name-only --format= "$c"); do
+    case "$p" in docs/sprintx/features/menu/*) ;; *) fora=1 ;; esac
+  done
+done
+NCP="$(git -C "$D" log --format=%H --grep='^Planejamento: checkpoint$' | wc -l | tr -d ' ')"
+[ "$fora" -eq 0 ] && [ "$NCP" -eq 10 ]; afirma "gk-checkpoint-so-pasta-da-feature" $? "$NCP checkpoints, nenhum path fora do prefixo"
+git -C "$D" status --porcelain --untracked-files=all -- src | grep -q ' src/app.ts' \
+  && git -C "$D" status --porcelain --untracked-files=all -- src | grep -q '?? src/novo.ts'
+afirma "gk2-produto-sujo-intocado" $? "src/app.ts e src/novo.ts continuam sujos, fora dos commits"
+
+# P. Nenhum push feito pelo checkpoint.
+[ -z "$(git -C "$G/remoto.git" for-each-ref)" ] && [ -z "$(git -C "$D" for-each-ref refs/remotes)" ]
+afirma "gp-nenhum-push" $? "remoto sem nenhuma ref depois de $NCP checkpoints"
+grep -vE '^[[:space:]]*#' "$PL" | grep -qE 'git[^|;]*[[:space:]]push'; [ $? -ne 0 ]; afirma "gp2-script-sem-push" $? "nenhum git push no codigo"
+grep -vE '^[[:space:]]*#' "$PL" | grep -qF -- '--no-verify'; [ $? -ne 0 ]; afirma "go2-script-sem-no-verify" $? "nunca --no-verify"
+
+# L. Arquivo de produto staged: checkpoint recusa, sem limpar nada.
+D="$G/l"; nova_feature "$D" menu; pl "$D" criar menu >/dev/null; F="$(fdir "$D" menu)"
+printf 'decisoes\n' > "$F/00-DECISOES.md"
+printf 'export const z = 3\n' >> "$D/src/app.ts"; git -C "$D" add src/app.ts
+H0="$(git -C "$D" rev-parse HEAD)"
+s="$(pl "$D" avanca menu f2)"; rc=$?
+[ "$rc" -eq 2 ] && [ "$(kv "$s" checkpoint)" = recusado_paths ] && [ "$(git -C "$D" rev-parse HEAD)" = "$H0" ] \
+  && git -C "$D" diff --cached --name-only | grep -qx 'src/app.ts'
+afirma "gl-produto-staged-recusa" $? "rc=$rc, HEAD intacto, src/app.ts continua staged"
+grep -q '"resultado":"bloqueado"' "$D/docs/eventos/menu.jsonl" 2>/dev/null; afirma "gl2-recusa-no-rastro" $? "checkpoint_planejamento bloqueado"
+for prod in package.json docs/projeto/PROJETO.md docs/stack/CONVENCOES.md docs/entregas/menu/ENTREGA.md tests/a.test.ts docs/sprintx/features/menu-outra/x.md; do
+  D="$G/l2"; rm -rf "$D"; nova_feature "$D" menu; pl "$D" criar menu >/dev/null; F="$(fdir "$D" menu)"
+  printf 'decisoes\n' > "$F/00-DECISOES.md"; mkdir -p "$D/$(dirname "$prod")"; printf 'x\n' > "$D/$prod"; git -C "$D" add -f "$prod"
+  pl "$D" avanca menu f2 >/dev/null; [ $? -eq 2 ]; afirma "gl3-recusa-$(printf '%s' "$prod" | tr '/.' '__')" $? "staged fora do prefixo"
+done
+
+# M. Branch principal: estado gravado, nenhum commit.
+D="$G/m"; nova_feature "$D" menu main; pl "$D" criar menu >/dev/null; F="$(fdir "$D" menu)"
+printf 'decisoes\n' > "$F/00-DECISOES.md"; N0="$(ncommits "$D")"
+s="$(pl "$D" avanca menu f2)"; rc=$?
+[ "$rc" -eq 0 ] && [ "$(kv "$s" checkpoint)" = ignorado_branch ] && [ "$(ncommits "$D")" -eq "$N0" ] \
+  && [ "$(fmv "$F/00-PLANEJAMENTO.md" estado)" = aguardando_f3 ] && grep -q '"resultado":"aviso"' "$D/docs/eventos/menu.jsonl"
+afirma "gm-main-nao-commita" $? "ignorado_branch, estado no disco, aviso no rastro"
+D="$G/m2"; nova_feature "$D" menu feature/outra; pl "$D" criar menu >/dev/null; printf 'd\n' > "$(fdir "$D" menu)/00-DECISOES.md"
+N0="$(ncommits "$D")"; s="$(pl "$D" avanca menu f2)"
+[ "$(kv "$s" checkpoint)" = ignorado_branch ] && [ "$(ncommits "$D")" -eq "$N0" ]; afirma "gm2-outra-feature-nao-commita" $? "branch exatamente feature/<slug>"
+
+# N. Sem Git: degradacao graciosa.
+D="$G/semgit/n"; mkdir -p "$D/docs/sprintx/features/menu/base"; F="$(fdir "$D" menu)"
+s="$(cd "$D" && GIT_CEILING_DIRECTORIES="$G/semgit" bash "$PL" criar menu 2>&1)"; rc1=$?
+printf 'decisoes\n' > "$F/00-DECISOES.md"
+s="$(cd "$D" && GIT_CEILING_DIRECTORIES="$G/semgit" bash "$PL" avanca menu f2 2>&1)"; rc=$?
+[ "$rc1" -eq 0 ] && [ "$rc" -eq 0 ] && [ "$(kv "$s" checkpoint)" = ignorado_sem_git ] \
+  && [ "$(fmv "$F/00-PLANEJAMENTO.md" estado)" = aguardando_f3 ] && grep -q 'sem Git' "$D/docs/eventos/menu.jsonl"
+afirma "gn-sem-git-degrada" $? "ignorado_sem_git, estado gravado, aviso no rastro"
+
+# O. Hook do projeto rejeita o commit: persistencia_falhou, nada limpo.
+D="$G/o"; nova_feature "$D" menu; pl "$D" criar menu >/dev/null; F="$(fdir "$D" menu)"
+printf '#!/bin/sh\necho "hook do projeto recusou" >&2\nexit 1\n' > "$D/.git/hooks/pre-commit"; chmod +x "$D/.git/hooks/pre-commit"
+printf 'decisoes\n' > "$F/00-DECISOES.md"; H0="$(git -C "$D" rev-parse HEAD)"
+s="$(pl "$D" avanca menu f2)"; rc=$?
+[ "$rc" -eq 3 ] && [ "$(kv "$s" checkpoint)" = persistencia_falhou ] && [ "$(git -C "$D" rev-parse HEAD)" = "$H0" ] \
+  && grep -q 'persistencia_falhou' "$D/docs/eventos/menu.jsonl" && [ -f "$F/00-DECISOES.md" ]
+afirma "go-hook-rejeita-persistencia-falhou" $? "rc=$rc, HEAD intacto, rastro registra"
+rm -f "$D/.git/hooks/pre-commit"; s="$(pl "$D" checkpoint menu)"
+[ "$(kv "$s" checkpoint)" = commitado ] && [ "$(trailer "$D" Estado)" = aguardando_f3 ]; afirma "go3-checkpoint-refeito" $? "retry pelo comando checkpoint"
+
+# R/S. Feature legada, sem 00-PLANEJAMENTO.md.
+legado() { # legado <dir> <conteudo-da-auditoria|->
+  mkdir -p "$1/docs/sprintx/features/velha/base" "$1/docs/sprintx/features/velha/sprint-01"
+  printf 'i\n' > "$1/docs/sprintx/features/velha/base/00-INDICE.md"; printf 'd\n' > "$1/docs/sprintx/features/velha/00-DECISOES.md"
+  printf 't\n' > "$1/docs/sprintx/features/velha/sprint-01/tasks.md"; printf 'o\n' > "$1/docs/sprintx/features/velha/ORQUESTRADOR.md"
+  [ "$2" = - ] || printf '%s\n' "$2" > "$1/docs/sprintx/features/velha/00-AUDITORIA.md"
+}
+AUD_NAO_LEGADA='# Auditoria — velha
+
+| severidade | arquivo | problema | correção sugerida |
+|---|---|---|---|
+| ALTA | sprint-02/tasks.md | revisor-testes `fraco`: passaria com item no grupo errado | Caso por grupo |
+| BAIXA | sprint-02/tasks.md | contagem errada | Reescrever |
+
+VEREDITO: NÃO — o plano não está pronto para execução autônoma.'
+D="$G/r"; nova_feature "$D" velha; legado "$D" "$AUD_NAO_LEGADA"
+s="$(pl "$D" fase velha)"; [ "$(kv "$s" fase)" = F3 ] && [ "$(kv "$s" fonte)" = legado ]; afirma "gr-legado-nao-retoma-f3" $? "fase $(kv "$s" fase), fonte legado"
+pl "$D" avanca velha f5 >/dev/null; rc=$?
+[ "$rc" -eq 5 ] && [ ! -f "$(fdir "$D" velha)/00-PLANEJAMENTO.md" ]
+afirma "gr2-legado-nao-nunca-reaudita" $? "avanca f5 recusado (rc=$rc)"
+printf 't v2\n' > "$(fdir "$D" velha)/sprint-01/tasks.md"; s="$(pl "$D" avanca velha f3)"; rc=$?
+[ "$rc" -eq 0 ] && [ "$(kv "$s" estado)" = aguardando_f4 ] && [ "$(fmv "$(fdir "$D" velha)/00-PLANEJAMENTO.md" reprovacoes)" = 1 ]
+afirma "gr3-legado-migra-na-transicao" $? "rodada legada preservada, aguardando_f4"
+D="$G/r2"; nova_feature "$D" velha; legado "$D" -
+[ "$(kv "$(pl "$D" fase velha)" fase)" = F5 ]; afirma "gr4-legado-sem-auditoria-tabela-antiga" $? "ORQUESTRADOR sem auditoria: F5"
+D="$G/s"; nova_feature "$D" velha; legado "$D" '# Auditoria
+
+Nenhum achado.
+
+VEREDITO: SIM — o plano está pronto para execução autônoma.'
+[ "$(kv "$(pl "$D" fase velha)" fase)" = F6 ]; afirma "gs-legado-sim-f6" $? "veredito SIM preservado"
+D="$G/s2"; nova_feature "$D" velha; legado "$D" 'Historico: rodada 1 dizia
+VEREDITO: SIM — o plano está pronto para execução autônoma.
+
+| severidade | arquivo | problema | correção sugerida |
+|---|---|---|---|
+| ALTA | sprint-01/tasks.md | contradicao | corrigir |
+
+VEREDITO: NÃO — o plano não está pronto para execução autônoma.'
+[ "$(kv "$(pl "$D" fase velha)" fase)" = F3 ]; afirma "gs2-ultimo-veredito-decide" $? "SIM antigo nao lava o NAO final"
+D="$G/s3"; nova_feature "$D" velha; legado "$D" '| severidade | arquivo | problema | correção sugerida |
+|---|---|---|---|
+| ALTA | sprint-01/tasks.md | teste fraco | corrigir |
+
+VEREDITO: SIM — o plano está pronto para execução autônoma.'
+pl "$D" criar velha 3 buildx >/dev/null; rc=$?
+[ "$rc" -eq 4 ] && [ ! -f "$(fdir "$D" velha)/00-PLANEJAMENTO.md" ]; afirma "gs3-sim-com-alta-nao-e-lavado" $? "rc=$rc, nada gravado"
+
+# Contrato: kind planejamento, dono sprintx, sem expxdev, nao e produto.
+tem "$SCHEMA" '### `00-PLANEJAMENTO.md` → `kind: planejamento`' && tem "$SCHEMA" '**Kind exclusivo da `sprintx`**'
+afirma "g-kind-planejamento-no-contrato" $? "00-schema.md"
+tem "$SCHEMA" '`00-PLANEJAMENTO.md` não é task, não é produto, não é' ; afirma "g-planejamento-nao-e-produto" $? "artefato de metodo"
+tem "$SCHEMA" 'O painel do `expxdev` pode ignorar este kind' && tem "$SCHEMA" 'nenhuma lógica da skill depende de o'
+afirma "g-expxdev-pode-ignorar" $? "documentado"
+grep -qi expxdev "$PL"; [ $? -ne 0 ]; afirma "g-script-nao-depende-de-expxdev" $? "nenhuma referencia"
+[ ! -e "$G/b/.expx" ] && [ ! -e "$G/g/.expx" ] && ! command -v expxdev >/dev/null 2>&1
+afirma "g-ciclo-completo-sem-expxdev" $? "F1..F5 e orcamento_esgotado sem .expx e sem expxdev"
+# MergeX somente leitura: aceita 00-PLANEJAMENTO.md como artefato de metodo, sem mudanca nela.
+MX="${MERGEX_DIR:-$H/../../../mergex}"
+MXH="$MX/.claude/hooks/mergex/arquivo-fora-do-plano.sh"
+if [ -f "$MXH" ] && command -v jq >/dev/null 2>&1; then
+  D="$G/mx"; nova_feature "$D" menu; pl "$D" criar menu >/dev/null; F="$(fdir "$D" menu)"
+  mkdir -p "$F/sprint-01" "$D/docs/entregas/menu"
+  printf -- '---\nexpx_schema: 1\nexpx_tool: sprintx\nkind: tasks\ntrabalho_id: menu\ntasks:\n  - id: T-01.01\n    status: pendente\n    arquivos:\n      cria: [src/menu.ts]\n      altera: []\n---\n' > "$F/sprint-01/tasks.md"
+  printf -- '---\nexpx_schema: 1\nexpx_tool: sprintx\nkind: entrega\ntrabalho_id: menu\nbranch: feature/menu\n---\n' > "$D/docs/entregas/menu/ENTREGA.md"
+  mx_ev() { printf '{"cwd":"%s","tool_name":"Bash","tool_input":{"command":"git commit -m checkpoint"}}' "$D"; }
+  git -C "$D" add "$F/00-PLANEJAMENTO.md"
+  : > "$G/marco-mergex"; sleep 1
+  s="$(mx_ev | (cd "$D" && bash "$MXH") 2>&1)"; rc=$?
+  [ "$rc" -eq 0 ] && case "$s" in *"nenhuma task declarou"*) false ;; *) true ;; esac
+  afirma "g-mergex-aceita-planejamento" $? "arquivo-fora-do-plano isenta a pasta da feature (rc=$rc)"
+  printf 'x\n' > "$D/src/intruso.ts"; git -C "$D" add src/intruso.ts
+  s="$(mx_ev | (cd "$D" && bash "$MXH") 2>&1)"
+  case "$s" in *"nenhuma task declarou"*) true ;; *) false ;; esac; afirma "g-mergex-controle-acusa-produto" $? "o hook esta ativo de verdade"
+  [ -z "$(find "$MX" -newer "$G/marco-mergex" -not -path '*/.git/*' 2>/dev/null | head -1)" ]; afirma "g-mergex-intocada" $? "nenhum arquivo da mergex escrito pelo teste"
+else
+  pula "g-mergex-aceita-planejamento" "mergex nao encontrada em \$MERGEX_DIR/../mergex, ou sem jq"
+fi
+rm -rf "$G"
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado pulados"
 [ "$falhou" -eq 0 ]
