@@ -1,0 +1,43 @@
+# CodeRabbit — configuração de review (sprintx)
+# Schema: https://docs.coderabbit.ai/reference/configuration
+#
+# Mesmo modelo dos outros repositórios do AxisGov: a review da nuvem roda sozinha
+# só uma vez, quando o PR é aberto; depois disso, só por disparo manual.
+language: 'pt-BR'
+early_access: false
+
+reviews:
+  profile: 'assertive'
+  request_changes_workflow: true
+  high_level_summary: true
+  review_status: true
+  poem: false
+  collapse_walkthrough: false
+
+  # Revisão automática só na ABERTURA do PR (ou quando um rascunho vira "pronto
+  # para revisão"). Os commits seguintes não disparam nova revisão: comente
+  # `@coderabbitai review` (só o que mudou) ou `@coderabbitai full review` (tudo).
+  # PR de documentação (título começando com `docs:` ou `docs(`) não é revisado
+  # sozinho; o disparo manual continua valendo nele.
+  # Cota compartilhada do AxisGov: 1 revisão automática por hora para a organização
+  # inteira. Se dois PRs abrirem na mesma hora, o segundo pode precisar do manual.
+  auto_review:
+    enabled: true
+    auto_incremental_review: false
+    drafts: false
+    ignore_title_keywords:
+      - 'docs:'
+      - 'docs('
+
+  finishing_touches:
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: false
+
+  path_filters:
+    - '!**/package-lock.json'
+    - '!**/pnpm-lock.yaml'
+    - '!**/yarn.lock'
+    - '!**/node_modules/**'
+    - '!**/dist/**'
