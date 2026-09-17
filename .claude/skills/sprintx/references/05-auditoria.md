@@ -14,7 +14,52 @@ Você está na F5. Você agora é AUDITORA do plano, não autora. Você NÃO cor
 
 O `auditor-plano` tem **somente ferramentas de leitura**. É isso que torna "aponta, não corrige" impossível de violar — não uma promessa, uma impossibilidade técnica.
 
-Passe a ele o caminho da feature e peça a tabela de achados e o veredito, no formato do Passo 4. Acione também o agente `revisor-testes` sobre as tasks: ele responde à pergunta que mais escapa — *esse teste passaria mesmo com a implementação errada?* — e devolve `solido` ou `fraco` por task. Todo `fraco` vira um achado da tabela (item 2 da lista do Passo 3); a severidade é sua.
+Passe a ele o caminho da feature e peça a tabela de achados e o veredito, no formato do Passo 4. Acione também o agente `revisor-testes` sobre as tasks: ele responde à pergunta que mais escapa — *esse teste passaria mesmo com a implementação errada?* — e devolve uma linha por task no formato determinístico abaixo. Todo `fraco` vira um achado da tabela (item 2 da lista do Passo 3), com a severidade que a tabela "Severidade determinística do item 2" fixa — **nenhuma sessão escolhe essa severidade**.
+
+## Passo 1.1 — O teste fraco tipado
+
+O `revisor-testes` responde, por task, exatamente uma destas formas:
+
+```
+T-NN.MM | solido
+T-NN.MM | fraco | <ausente|criterio|teste> | <clausula-ou-> | <implementacao-errada>
+```
+
+| Tipo | Quando |
+|---|---|
+| `fraco:ausente` | o teste obrigatório da task não existe (não declarado, vazio ou genérico) |
+| `fraco:criterio` | a implementação errada **também satisfaz** o `criterio_aceite`, ou não existe uma cláusula autoritativa que permita dizer que ela está errada |
+| `fraco:teste` | a implementação errada **viola uma cláusula autoritativa já citável**, mas o teste declarado não a discrimina |
+
+**Cláusula autoritativa** é uma destas, citada na forma exata: `criterio_aceite` (o da própria
+task), uma decisão `D-NN`, um fato da base (`base/<arquivo>`) ou um contrato de origem
+explicitamente ingerido (`origem:<referência>`). **Sem cláusula citável, o tipo é `criterio`** —
+nunca `teste`: se nenhuma regra diz que a implementação está errada, falta regra, não teste.
+
+Normalize a saída do agente pelo script, que aplica essa regra e devolve a linha pronta para a
+tabela:
+
+```bash
+bash <raiz-da-skill>/scripts/planejamento.sh revisor < saida-do-revisor.txt
+```
+
+## Severidade determinística do item 2
+
+| Achado | Severidade |
+|---|---|
+| `fraco:ausente` | **ALTA** |
+| `fraco:criterio` | **ALTA** |
+| `fraco:teste` | **MÉDIA** |
+
+Vale igualmente para a linha do `revisor-testes` **e** para o achado equivalente que o
+`auditor-plano` fizer por conta própria no item 2: todo achado do item 2 carrega o tipo, e o tipo
+decide a severidade (`scripts/planejamento.sh severidade <tipo>`). Ninguém infla nem deflaciona.
+
+**Por que `fraco:teste` pode ser MÉDIA.** Nesse caso o comportamento correto já está definido
+numa cláusula autoritativa: não há decisão de produto a inventar. O problema é só que o teste
+declarado ainda não prova a cláusula — e isso a F6 resolve **antes** de escrever produto, pela
+obrigação de endurecer o teste (`references/06-execucao.md`, Passo 2.0). Sem essa obrigação, o
+MÉDIA não existiria.
 
 Grave no rastro o `veredito_emitido` com `agente: auditor-plano` (formato em `references/08-rastro.md`).
 
@@ -60,7 +105,21 @@ A coluna `arquivo` traz o **caminho real** do achado. Numa sprint condensada iss
 veio (`sprint`, `fases` ou `tasks`), por exemplo `sprint-02/tasks.md (fases: F-02.1)`. Nunca
 aponte para um `sprint.md` ou `fases.md` que aquela sprint não tem.
 
-Severidades: **ALTA** (invalida a execução autônoma), **MÉDIA** (risco real, execução ainda possível), **BAIXA** (melhoria).
+**A coluna `problema` começa pelo item** do Passo 3 que gerou o achado: `[item 1]` a `[item 9]`
+(e `[item 10]`, a granularidade que o `auditor-plano` também confere). Achado do item 2 traz o
+tipo logo em seguida e a forma fixa:
+
+```
+[item 2][fraco:ausente] T-02.01 — cláusula: - — passaria com: <implementação errada>
+[item 2][fraco:criterio] T-02.01 — cláusula: - — passaria com: <implementação errada>
+[item 2][fraco:teste] T-03.01 — cláusula: D-13 — passaria com: <implementação errada>
+```
+
+É esse prefixo que torna a severidade verificável, permite classificar a causa de uma
+reprovação depois e deixa o histórico Git da auditoria legível. A prosa do achado continua
+depois dele, como sempre.
+
+Severidades: **ALTA** (invalida a execução autônoma), **MÉDIA** (risco real, execução ainda possível), **BAIXA** (melhoria). No item 2 a severidade não é julgamento: é a tabela "Severidade determinística do item 2".
 Se não houver achados, escreva "Nenhum achado." no lugar da tabela.
 
 3. O veredito, em uma linha, literalmente em um destes dois formatos:
@@ -114,6 +173,8 @@ Achado ALTA manda voltar para a F3 — o plano é REGERADO por quem o gerou, end
 - [ ] `00-AUDITORIA.md` existe com tabela (ou "Nenhum achado.") e a linha `VEREDITO:` no formato exato.
 - [ ] Nenhum arquivo do plano foi alterado nesta fase.
 - [ ] O `veredito_emitido` foi gravado no rastro, com o `agente` que o emitiu.
+- [ ] Todo achado da tabela começa por `[item N]`; todo achado do item 2 traz `[fraco:<tipo>]` e a severidade da tabela determinística.
+- [ ] `scripts/planejamento.sh avanca <slug> f5` rodou: a rodada está no `historico`, o estado é `aprovado`, `replanejar` ou `orcamento_esgotado`, e o checkpoint terminou com código `0`.
 
 ## Quando o veredito é NÃO e o estado é `replanejar`
 
@@ -136,6 +197,6 @@ Mantenha `fase: f5` em `.expx/estado.json`: o trabalho parou na auditoria.
 
 ## Ao terminar com VEREDITO: SIM
 
-Anuncie: "F5 concluída. VEREDITO: SIM — plano pronto para execução autônoma. N achados MÉDIA/BAIXA registrados em `00-AUDITORIA.md`." Siga para a F6 lendo `references/06-execucao.md` (ou pare aqui se o usuário pediu só o planejamento).
+O estado gravado é `aprovado`. Anuncie: "F5 concluída. VEREDITO: SIM — plano pronto para execução autônoma. N achados MÉDIA/BAIXA registrados em `00-AUDITORIA.md`." Se algum deles é `[fraco:teste]`, diga quantos: a F6 endurece esses testes antes de escrever produto. Siga para a F6 lendo `references/06-execucao.md` (ou pare aqui se o usuário pediu só o planejamento).
 
 Grave `fase: f6` em `.expx/estado.json` (`references/09-estado.md`) ao entrar na execução. Se o usuário pediu só o planejamento e o trabalho para aqui, mantenha `fase: f5` — o trabalho continua aberto na auditoria, e só a conclusão da F6 zera `trabalho`, `fase` e `task`.

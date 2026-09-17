@@ -8,7 +8,9 @@ Você está na F3. Seu objetivo é gerar a árvore de sprints/fases/tasks. Nesta
 - **Nenhum PENDENTE bloqueante** em `00-DECISOES.md`. Se houver, PARE: liste os PENDENTEs, diga o que cada um trava e pergunte só o necessário para resolvê-los (isso é resolução de pendência da F2, não uma nova entrevista). Só gere o plano com todos os bloqueantes resolvidos.
 - Se `00-DECISOES.md` não existe, a F2 não aconteceu: diga "Falta a F2 (descoberta). Vou executá-la primeiro." e execute `references/02-descoberta.md`.
 
-Se este é um retorno da F5 (auditoria com achado ALTA), leia `00-AUDITORIA.md` antes de regerar: cada achado ALTA e MÉDIA deve ser endereçado na nova versão do plano.
+- O estado do planejamento é `aguardando_f3` ou `replanejar` (`scripts/planejamento.sh fase <slug>` responde `F3`). Com `orcamento_esgotado` **não há F3**: o estado é terminal e nada continua automaticamente.
+
+Se este é um retorno da F5 (estado `replanejar`), leia `00-AUDITORIA.md` antes de regerar: cada achado ALTA e MÉDIA deve ser endereçado na nova versão do plano — pela classe, não pelo exemplo (Passo 1.1).
 
 ## Passo 0 — Consultar o histórico dos arquivos (quando houver `memox`)
 
@@ -46,6 +48,30 @@ Com a base (`base/`) e as decisões (`00-DECISOES.md`) na mão, desenhe Sprints 
 **Paralelismo declarado:** para CADA task, declare `paralelizavel` e `depende_de`; para CADA fase, declare com qual outra fase pode rodar em paralelo (ou "nenhuma"). A execução nunca decidirá isso — se você não declarar, é sequencial.
 
 **Sem decisão humana em execução:** se ao planejar você encontrar algo que exigiria decisão humana durante a execução, transforme em decisão AGORA: pergunte ao usuário na hora, registre a resposta como nova linha D-NN em `00-DECISOES.md` e só então continue o plano. Esta é a única pergunta permitida na F3.
+
+## Passo 1.1 — Replanejar corrige a classe do defeito, não o exemplo
+
+Num retorno da F5, cada achado de `00-AUDITORIA.md` traz o item da auditoria que o gerou
+(`[item N]`) e, quando veio do `revisor-testes`, o tipo do teste fraco (`[fraco:<tipo>]`, ver
+`references/05-auditoria.md`). A implementação errada citada no achado é **um exemplo** do
+defeito, não o defeito inteiro.
+
+Corrija a **classe** do defeito em todo o escopo que ele atinge:
+
+- Identifique a cláusula que o achado cita (`criterio_aceite`, `D-NN`, fato da base, contrato de
+  origem) e todos os casos que essa mesma cláusula governa na task — e nas outras tasks que a
+  citam.
+- Se um teste só verifica que um item está presente e o achado mostra que ele poderia estar no
+  grupo errado, e a mesma regra de agrupamento vale para vários itens, **não** acrescente uma
+  asserção só para o item citado: declare a verificação para todos os itens que a regra cobre.
+- Quando a cláusula é matricial (item × grupo, perfil × permissão, entrada × saída), declare o
+  teste como **tabela/matriz** que percorre todas as combinações que a cláusula define.
+- **Não invente generalização além da cláusula.** A classe é delimitada pelo que a cláusula
+  afirma; comportamento que nenhuma cláusula define não entra no teste por conta própria — se
+  faltar regra, isso é decisão (D-NN), não teste.
+
+Um `[fraco:criterio]` pede cláusula antes de pedir teste: sem regra autoritativa, não há o que o
+teste prove. Resolva-o no `criterio_aceite` ou numa decisão D-NN, e só então no teste.
 
 ## Passo 2 — Escrever os arquivos
 
@@ -196,6 +222,8 @@ Antes de declarar a F3 concluída, confira você mesmo:
 
 - [ ] `sprint-01/` (e demais sprints) existem: sprint de fase única com `tasks.md` (`kind: plano`); as demais com `sprint.md`, `fases.md` e `tasks.md` completos.
 - [ ] Checklist do Passo 3 toda atendida.
+- [ ] Num retorno da F5, cada achado foi corrigido pela classe do defeito (Passo 1.1), não só pelo exemplo citado.
+- [ ] `scripts/planejamento.sh avanca <slug> f3` rodou: estado `aguardando_f4` e checkpoint com código `0`.
 
 ## Quando o critério não é atendido
 

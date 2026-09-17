@@ -65,6 +65,30 @@ depois, a task está reivindicada — não a abra. Pule para a próxima paraleli
 dependências estão satisfeitas; sem nenhuma, registre um bloqueio.
 
 1. Marque `status: em_andamento` em `tasks.md` e grave `task_iniciada` no rastro (`references/08-rastro.md`). Grave `task: T-NN.MM` em `.expx/estado.json` (`references/09-estado.md`).
+
+   **Passo 2.0 — obrigação de `fraco:teste`, antes de qualquer código de produto.** Liste as
+   obrigações que a última F5 deixou:
+
+   ```bash
+   bash <raiz-da-skill>/scripts/planejamento.sh obrigacoes-f6 <slug>
+   ```
+
+   Cada linha é `task`, `cláusula` e `implementação errada`, de um achado `[fraco:teste]` (MÉDIA).
+   Para toda task que aparece ali, **antes de escrever qualquer código de produto**, e não no
+   fechamento da task:
+
+   1. localize a cláusula citada (`criterio_aceite`, `D-NN`, `base/<arquivo>` ou `origem:<ref>`);
+   2. fortaleça o teste declarado, ou crie o que falta, para provar essa cláusula;
+   3. demonstre que o teste **discrimina explicitamente** a implementação errada registrada — o
+      teste precisa falhar contra ela;
+   4. rode e obtenha **vermelho pelo motivo esperado**: a asserção da cláusula, não erro de
+      compilação, import ou fixture;
+   5. **somente então** implemente (passo 3).
+
+   **Se não conseguir tornar o teste discriminante, registre bloqueio da task** (Regra de
+   bloqueio, abaixo) e **não implemente**. É TDD sem atalho: teste discriminante primeiro, produto
+   depois — um `fraco:teste` que chega à implementação sem ter sido endurecido deixa de ser MÉDIA
+   e vira exatamente o teste verde e falso que a F5 existia para impedir.
 2. **Escreva o teste de integração e o teste funcional ANTES de qualquer código de implementação**, exatamente como a task os descreve. Rode-os e confirme que falham (vermelho).
 3. Implemente até os dois testes passarem (verde). **Rode o subconjunto de testes afetado pela task** — os que ela criou ou alterou, mais os que cobrem os arquivos em `arquivos.cria` e `arquivos.altera` — e grave `suite: parcial`.
 
@@ -73,7 +97,7 @@ dependências estão satisfeitas; sem nenhuma, registre um bloqueio.
    O que não muda: **task com teste vermelho não fecha**, seja o subconjunto ou a suíte inteira. `parcial` significa "o que era desta task passou", nunca "passou mais ou menos".
 4. Assuma os três papéis do ORQUESTRADOR, em sequência: implementador (passos 2–3), revisor de testes, auditor de aceite (o `criterio_aceite` é verdade agora? verifique de fato, não presuma).
 
-   **O papel de revisor de testes é do agente `revisor-testes`, quando ele existir neste harness.** Acione-o sobre a task que está fechando: ele lê os testes e responde `solido` ou `fraco`, com o motivo em uma linha. Um `fraco` significa que o teste passaria com a implementação errada — e teste fraco é pior que teste ausente, porque produz suíte verde e falsa confiança. Task com teste `fraco` NÃO fecha: corrija o teste até ele discriminar, e só então siga. Sem o agente disponível, faça você mesma a pergunta, com o mesmo rigor.
+   **O papel de revisor de testes é do agente `revisor-testes`, quando ele existir neste harness.** Acione-o sobre a task que está fechando: ele lê os testes e responde no formato determinístico (`T-NN.MM | solido`, ou `T-NN.MM | fraco | <tipo> | <cláusula> | <implementação errada>`). Passe a ele também as implementações erradas que a última F5 registrou como `[fraco:teste]` para esta task (`obrigacoes-f6`): além do julgamento normal, ele confere que **cada uma delas é discriminada** pelo teste escrito. **A task não conclui se alguma delas continuar passando.** Um `fraco` significa que o teste passaria com a implementação errada — e teste fraco é pior que teste ausente, porque produz suíte verde e falsa confiança. Task com teste `fraco` NÃO fecha: corrija o teste até ele discriminar, e só então siga. Sem o agente disponível, faça você mesma a pergunta, com o mesmo rigor.
 5. Só então marque `status: concluida` em `tasks.md` e grave `task_concluida` no rastro, acrescentando na linha da task: data (obtenha com `date +%Y-%m-%d` do sistema) e resultado da suíte (ex.: `2026-08-26 · suíte: 42 passed, 0 failed`). Em seguida grave em `.expx/estado.json` (`references/09-estado.md`) o novo `tasks_concluidas` e o campo `task`: o id da próxima task que você vai abrir, ou `null` se não houver próxima.
 6. **Registre o esforço real da task**, em horas de trabalho focado, na mesma linha (ex.: `2026-08-26 · suíte: 42 passed, 0 failed · real: 3,5 h`). O real cobre o que a task de fato custou — escrever os dois testes, implementar, rodar a suíte e verificar o critério de aceite — e NÃO inclui reunião, revisão de código, deploy nem ida e volta com o cliente. Isso alimenta a calibração das estimativas futuras (ver "Passo 4"); anote no momento de concluir, não reconstrua de memória no fim do trabalho.
 7. Critério de aceite não atendido ou teste não passando: a task NÃO é concluída. Não existe "concluído com ressalva".
@@ -311,6 +335,7 @@ quais módulos ele declara — é assim que o usuário sabe que a feature entrou
 - [ ] Em todo arquivo de estado tocado, o frontmatter está válido e coerente com a prosa: `status`, `concluida_em`, `suite` e `atualizado_em` refletem o estado real (`references/00-schema.md`).
 - [ ] Se o trabalho inteiro foi entregue, `ORQUESTRADOR.md` teve `estagio`, `status`, `concluido_em` e `atualizado_em` reescritos; sprints e fases concluídas tiveram `status` atualizado onde o formato daquela sprint o guarda — `sprint.md` e `fases.md` nos três arquivos, `sprint.status` e `fases[].status` do `tasks.md` no condensado.
 - [ ] Toda task concluída tem o esforço real registrado em `tasks.md`.
+- [ ] Toda task que chegou da F5 com `[fraco:teste]` teve o teste endurecido e vermelho pelo motivo esperado antes do primeiro código de produto, e o `revisor-testes` confirmou que cada implementação errada registrada é discriminada — ou a task está `bloqueada` sem implementação.
 - [ ] `docs/sprintx/estimativas/HISTORICO.md` recebeu uma entrada por task concluída, com o desvio calculado (ou `null` quando não houve estimativa), e a tabela de calibração por tipo foi recalculada.
 - [ ] `ORQUESTRADOR.md` teve `arquivos_alterados` agregado (união sem repetição dos `arquivos` das tasks concluídas) e `modulo_afetado` conferido contra o que a execução de fato tocou.
 - [ ] `FECHAMENTO.md` existe em `docs/sprintx/features/<slug>/` com frontmatter `kind: fechamento` válido e a prosa correspondente abaixo dele.
