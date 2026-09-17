@@ -86,6 +86,28 @@ recurso da base NÃO levam frontmatter.
 Use `assets/TEMPLATE-BLOQUEIOS.md` e `assets/TEMPLATE-base-indice.md` (caminhos relativos à
 raiz da skill) como ponto de partida desses dois arquivos.
 
+**O estado durável do planejamento nasce aqui.** Crie `00-PLANEJAMENTO.md` (`kind: planejamento`,
+`references/00-schema.md`) sempre pelo script, nunca à mão:
+
+```bash
+bash <raiz-da-skill>/scripts/planejamento.sh criar <slug> [max_reprovacoes_f5] [orcamento_declarado_por]
+```
+
+- **A `sprintx` sozinha** — ninguém declarou orçamento: rode só `criar <slug>`. O arquivo nasce
+  com `max_reprovacoes_f5: null` e `orcamento_declarado_por: null`, e o laço F3 ↔ F5 não tem teto.
+- **Um caller declarou orçamento** — o pedido que acionou a `sprintx` traz
+  `max_reprovacoes_f5: <n>` e `orcamento_declarado_por: <quem>` (a `buildx`, por exemplo, declara
+  `3` e `buildx`): repasse os dois exatamente como vieram, `criar <slug> 3 buildx`. Não arredonde,
+  não complete e não invente um dos dois.
+- **Orçamento inválido** — zero, negativo, texto, teto sem dono ou dono sem teto: o script sai
+  com código `4` (erro de contrato) e não grava nada. Isso não é bloqueio a contornar: devolva o
+  erro a quem pediu, e não siga com um teto que ninguém declarou.
+- Numa retomada o arquivo já existe: `criar` com o mesmo orçamento é no-op; com orçamento
+  diferente é erro de contrato — o teto não muda em silêncio no meio do trabalho.
+
+O arquivo nasce com `estado: null`: o planejamento só ganha estado ao fim da F2. A F1 **não** faz
+checkpoint.
+
 **O rastro e o estado ficam fora do versionador — sem tocar no `.gitignore`.** O rastro de
 eventos (`references/08-rastro.md`) e o `.expx/estado.json` (`references/09-estado.md`) são
 **estado local da máquina** de quem executou: crescem rápido, são reescritos a cada transição,
@@ -228,6 +250,7 @@ Use `assets/TEMPLATE-base-recurso.md` (caminho relativo à raiz da skill). Todo 
 - [ ] `00-LACUNAS.md` registra tudo que não foi encontrado (ou declara que não há lacunas).
 - [ ] Nenhum campo inventado; todo número referenciado.
 - [ ] `00-BLOQUEIOS.md` e `base/00-INDICE.md` têm frontmatter válido conforme `references/00-schema.md`.
+- [ ] `00-PLANEJAMENTO.md` existe, criado por `scripts/planejamento.sh criar`, com o orçamento que o caller declarou — ou `null`/`null` sem declaração.
 
 ## Quando o critério não é atendido
 

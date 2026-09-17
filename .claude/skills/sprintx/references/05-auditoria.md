@@ -6,6 +6,7 @@ Você está na F5. Você agora é AUDITORA do plano, não autora. Você NÃO cor
 
 - `docs/sprintx/features/<slug>/ORQUESTRADOR.md` existe.
 - Se não existe, a F4 não aconteceu: diga "Falta a F4 (orquestrador). Vou executá-la primeiro." e execute `references/04-orquestrador.md`.
+- O estado do planejamento é `aguardando_f5` (`scripts/planejamento.sh fase <slug>` responde `F5`). Com `replanejar` a F5 **não roda**: o plano reprovado ainda não mudou, e a fase é a F3. Com `orcamento_esgotado` nada roda: o estado é terminal. `ORQUESTRADOR.md` existir nunca basta para entrar aqui.
 
 ## Passo 1 — Delegar ao agente `auditor-plano`
 
@@ -81,9 +82,9 @@ Achado ALTA manda voltar para a F3 — o plano é REGERADO por quem o gerou, end
 - [ ] Nenhum arquivo do plano foi alterado nesta fase.
 - [ ] O `veredito_emitido` foi gravado no rastro, com o `agente` que o emitiu.
 
-## Quando o veredito é NÃO
+## Quando o veredito é NÃO e o estado é `replanejar`
 
-Anuncie os achados ALTA, volte para a F3 (`references/03-plano.md`) levando `00-AUDITORIA.md` como entrada, regere o plano, refaça a F4 se o ORQUESTRADOR for afetado, e reaudite. Repita o ciclo até `VEREDITO: SIM`.
+Anuncie os achados ALTA, volte para a F3 (`references/03-plano.md`) levando `00-AUDITORIA.md` como entrada, regere o plano corrigindo a classe de cada defeito (Passo 1.1 da F3), refaça a F4 se o ORQUESTRADOR for afetado, e reaudite. O ciclo se repete até `VEREDITO: SIM` — ou até o orçamento se esgotar, quando houver teto.
 
 Grave `fase: f3` em `.expx/estado.json` ao voltar (`references/09-estado.md`): a barra mostra onde o trabalho está agora, e ele voltou para o plano.
 
@@ -92,3 +93,49 @@ Grave `fase: f3` em `.expx/estado.json` ao voltar (`references/09-estado.md`): a
 Anuncie: "F5 concluída. VEREDITO: SIM — plano pronto para execução autônoma. N achados MÉDIA/BAIXA registrados em `00-AUDITORIA.md`." Siga para a F6 lendo `references/06-execucao.md` (ou pare aqui se o usuário pediu só o planejamento).
 
 Grave `fase: f6` em `.expx/estado.json` (`references/09-estado.md`) ao entrar na execução. Se o usuário pediu só o planejamento e o trabalho para aqui, mantenha `fase: f5` — o trabalho continua aberto na auditoria, e só a conclusão da F6 zera `trabalho`, `fase` e `task`.
+## Passo 5 — Registrar a rodada e fazer o checkpoint
+
+Com `00-AUDITORIA.md` gravado, **todo** veredito, SIM ou NÃO, é registrado antes de qualquer
+outro passo:
+
+```bash
+bash <raiz-da-skill>/scripts/planejamento.sh avanca <slug> f5
+```
+
+O script confere o relatório (prefixo `[item N]` em todo achado, `[fraco:<tipo>]` e forma fixa no
+item 2, severidade determinística, `fraco:teste` com cláusula citável, veredito coerente com a
+presença de ALTA) — relatório fora do contrato sai com código `4` e **nada** é registrado:
+corrija o relatório, não o plano. Depois ele acrescenta a rodada ao `historico` de
+`00-PLANEJAMENTO.md`, decide o estado e faz o checkpoint (regra única em
+`references/02-descoberta.md`, "Checkpoint do planejamento"). `00-AUDITORIA.md` continua sendo
+sobrescrito a cada rodada: cada versão sobrevive no histórico Git, recuperável com
+`git log -p -- docs/sprintx/features/<slug>/00-AUDITORIA.md`. Não crie `AUDITORIA-1.md`,
+`AUDITORIA-2.md` nem cópia nenhuma.
+
+| Veredito | Orçamento (`max_reprovacoes_f5`) | Estado gravado | Próxima fase |
+|---|---|---|---|
+| SIM | qualquer | `aprovado` | F6 |
+| NÃO | `null` | `replanejar` | F3 |
+| NÃO | `reprovacoes` < teto | `replanejar` | F3 |
+| NÃO | `reprovacoes` = teto | `orcamento_esgotado` | **nenhuma** — pare |
+
+`max_reprovacoes_f5` é a quantidade máxima de vereditos NÃO. Com teto `3`: rodada 1 NÃO →
+`reprovacoes: 1`, `replanejar`; rodada 2 NÃO → `2`, `replanejar`; rodada 3 NÃO → `3`,
+`orcamento_esgotado`. Duas voltas de replanejamento; a terceira reprovação termina.
+
+Código diferente de `0` no checkpoint (`2` recusado, `3` `persistencia_falhou`): **pare** e
+relate. Não volte à F3 nem siga para a F6 com a rodada fora do histórico.
+
+## Quando o estado é `orcamento_esgotado`
+
+É o estado terminal da `sprintx` para um plano que o caller permitiu reprovar só até ali. **Pare
+aqui.** Não volte à F3, não rode nova F5, não entre na F6 — nem automaticamente, nem "só mais uma
+vez". A rodada que esgotou o orçamento já está no `historico` e no checkpoint.
+
+Anuncie: "F5 concluída. VEREDITO: NÃO — orçamento de reprovações esgotado (N de N, declarado por
+`<quem>`). O planejamento parou em `orcamento_esgotado`; a F6 não começa." Devolva o controle a
+quem acionou a `sprintx`: decidir o que fazer com um plano esgotado — recortar a feature,
+replanejar por fora, subir o teto — é de quem declarou o orçamento, nunca desta skill.
+
+Mantenha `fase: f5` em `.expx/estado.json`: o trabalho parou na auditoria.
+

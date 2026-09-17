@@ -878,6 +878,21 @@ else
 fi
 rm -rf "$G"
 
+echo "== H. contrato do planejamento nas fases (P0.1) =="
+L_PRIM=$(linha_de "$SKILLMD" '| `replanejar` | F3 — **nunca** F5 direto')
+L_ESG=$(linha_de "$SKILLMD" '| `orcamento_esgotado` | **terminal**')
+[ -n "$L_PRIM" ] && [ -n "$L_ESG" ] && tem "$SKILLMD" 'Nunca infira F5 só porque `ORQUESTRADOR.md` existe.' \
+  && tem "$SKILLMD" '| Última linha `VEREDITO:` de `00-AUDITORIA.md` é `VEREDITO: NÃO` | F3 |'
+afirma "g-skill-deteccao-documentada" $? "tabela primaria e legado corrigido"
+tem "$SK/references/02-descoberta.md" '## Checkpoint do planejamento — regra única'
+NCHK=$(grep -rlF '## Checkpoint do planejamento — regra única' "$SK" | wc -l)
+[ "$NCHK" -eq 1 ]; afirma "g-regra-checkpoint-unica" $? "$NCHK arquivo(s)"
+for ref in 02-descoberta:f2 03-plano:f3 04-orquestrador:f4 05-auditoria:f5; do
+  tem "$SK/references/${ref%%:*}.md" "scripts/planejamento.sh avanca <slug> ${ref##*:}"; afirma "g-fase-${ref##*:}-avanca" $? "${ref%%:*}.md"
+done
+tem "$SK/references/01-ingestao.md" 'scripts/planejamento.sh criar <slug>'; afirma "g-f1-cria" $? "01-ingestao.md"
+
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado pulados"
 [ "$falhou" -eq 0 ]

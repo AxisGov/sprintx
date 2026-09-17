@@ -58,12 +58,23 @@ frontmatter `kind: orquestrador` do contrato expx-schema v1, descrito em
 - [ ] Nenhum segredo com valor; nenhum caminho absoluto.
 - [ ] `ORQUESTRADOR.md` tem frontmatter `kind: orquestrador` válido conforme `references/00-schema.md`, com `caminho_critico` igual ao da seção 3.
 - [ ] `modulo_afetado` e `palavras_chave` preenchidos (minúscula, sem acento) e `arquivos_alterados: []` presente.
+- [ ] `scripts/planejamento.sh avanca <slug> f4` rodou: estado `aguardando_f5` e checkpoint com código `0`.
 
 ## Quando o critério não é atendido
 
 Complete a seção faltante antes de encerrar. Se uma informação de Ferramentas não existe no repositório (ex.: não há comando de lint), escreva "NÃO EXISTE NO PROJETO" na linha — não invente comando.
 
 ## Ao terminar
+
+Registre o fim da fase antes de anunciar:
+
+```bash
+bash <raiz-da-skill>/scripts/planejamento.sh avanca <slug> f4
+```
+
+O estado passa a `aguardando_f5` e o checkpoint roda (regra única em
+`references/02-descoberta.md`, "Checkpoint do planejamento"). Código diferente de `0`: **pare** e
+relate.
 
 Anuncie: "F4 concluída. `docs/sprintx/features/<slug>/ORQUESTRADOR.md` gerado. Próxima fase: F5 AUDITORIA." Siga para a F5 lendo `references/05-auditoria.md`.
 

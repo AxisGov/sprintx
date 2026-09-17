@@ -5,7 +5,9 @@ Você está na F6. A partir de agora você implementa até o fim, sob as regras 
 ## Pré-requisitos verificáveis
 
 - `docs/sprintx/features/<slug>/00-AUDITORIA.md` existe e contém `VEREDITO: SIM`.
+- O estado do planejamento é `aprovado`: `scripts/planejamento.sh fase <slug>` responde `F6`.
 - Se contém `VEREDITO: NÃO`, volte para a F3. Se não existe, falta a F5: diga qual fase falta e execute-a primeiro.
+- Com o estado em `orcamento_esgotado` **não existe F6**: a F6 nunca começa, nem por pedido de retomada, nem com `ORQUESTRADOR.md` pronto.
 
 ## Passo 1 — Carregar o mapa
 
@@ -32,8 +34,9 @@ daqui em diante este arquivo diz só "se a `mergex` existir".
 
 A F1 já abriu `feature/<slug>` e o worktree da feature (regra 21). O E0 **adota** o que existe:
 não troca de branch, não cria uma segunda, não renomeia a da F1, não remove worktree e **não
-exige árvore limpa** para isso — os artefatos de F1 a F5 estão na árvore, ainda não commitados,
-que é exatamente onde deveriam estar. Ele registra a branch no `ORQUESTRADOR.md` e cria
+exige árvore limpa** para isso — os artefatos de F1 a F5 estão na árvore e, com Git, já nos
+checkpoints de planejamento da `feature/<slug>` (`references/02-descoberta.md`), que é
+exatamente onde deveriam estar. Ele registra a branch no `ORQUESTRADOR.md` e cria
 `docs/entregas/<slug>/ENTREGA.md`.
 
 Se **não** houver branch para este trabalho (execução sem git, "sem worktree" explícito, ou
@@ -174,7 +177,8 @@ artefato de método declarado, não arquivo fora do plano. Continua sujeito à v
 segredo como qualquer outro arquivo do commit.
 
 Sem a `mergex`, a `sprintx` grava o arquivo do mesmo jeito e **não commita**: versionamento
-nunca é trabalho desta skill. Um `HISTORICO.md` não rastreado ao fim de uma execução standalone
+nunca é trabalho desta skill na F6 — a única exceção são os checkpoints de planejamento, que
+terminam antes dela (`references/02-descoberta.md`). Um `HISTORICO.md` não rastreado ao fim de uma execução standalone
 é o resultado esperado, não uma pendência.
 
 Uma entrada por task **concluída**, com: `trabalho_id`, `task_id`, `tipo_task`, `area`, `sinais`, `estimado_min`, `estimado_max`, `estimado_media`, `real` e `desvio`. Task `bloqueada` não entra — ela não tem real completo a registrar.

@@ -115,6 +115,7 @@ sempre. Reescreva `atualizado_em` a cada gravação.
 - [ ] `00-DECISOES.md` tem frontmatter válido e a lista `decisoes:` cobre todas as linhas D-NN e PENDENTE-NN da prosa.
 - [ ] Contradições com a base foram apontadas ao usuário no momento em que surgiram, em qualquer modo.
 - [ ] No modo `autonomo`: toda decisão fechada sem resposta do usuário está marcada `(HIPOTESE)` com evidência, e o resumo de hipóteses foi mostrado ao usuário antes do fim da fase.
+- [ ] `scripts/planejamento.sh avanca <slug> f2` rodou: `00-PLANEJAMENTO.md` está em `aguardando_f3` e o checkpoint terminou com código `0`.
 
 ## Quando o critério não é atendido
 
@@ -125,3 +126,60 @@ Se o usuário parou de responder no meio, registre o que já foi decidido, marqu
 Anuncie: "F2 concluída. Densidade `<densidade>`, construção `<modo>`. N decisões e M pendências em `docs/sprintx/features/<slug>/00-DECISOES.md`." No modo `autonomo`, acrescente quantas decisões foram por hipótese: "K das N decisões foram assumidas por pesquisa, marcadas `(HIPOTESE)` — revise antes da F3 se quiser corrigir alguma." Se houver PENDENTE bloqueante, diga quais e avise que a F3 está travada por eles. Caso contrário, siga para a F3 lendo `references/03-plano.md`.
 
 Grave `fase: f3` em `.expx/estado.json` (`references/09-estado.md`) ao passar para a F3. Se a F3 ficou travada por PENDENTE bloqueante, mantenha `fase: f2` — a barra mostra onde o trabalho está, não onde ele deveria estar.
+
+**Registre o fim da fase antes de seguir para a F3**, com `00-DECISOES.md` gravado:
+
+```bash
+bash <raiz-da-skill>/scripts/planejamento.sh avanca <slug> f2
+```
+
+O estado passa a `aguardando_f3` e o checkpoint abaixo roda. Com PENDENTE bloqueante a F2 ainda
+não terminou: não avance. Resolver pendência depois (reexecução da F2) roda `avanca <slug> f2` de
+novo — com o estado já em `aguardando_f3`, só o checkpoint roda.
+
+## Checkpoint do planejamento — regra única
+
+Esta é a única descrição do checkpoint; F3, F4 e F5 apontam para cá. Ele é feito **sempre** pelo
+`scripts/planejamento.sh` — dentro de `avanca`, ou sozinho com `checkpoint <slug>` para refazer
+um que falhou —, nunca por comando de versionamento digitado na sessão.
+
+**Quando.** Ao fim da F2 (`aguardando_f3`), da F3 (`aguardando_f4`), da F4 (`aguardando_f5`), a
+cada veredito da F5, SIM ou NÃO (`aprovado`, `replanejar`), e ao chegar ao estado terminal
+`orcamento_esgotado`. A F5 é checkpointada **antes** de qualquer volta à F3: é isso que preserva
+cada versão de `00-AUDITORIA.md` no histórico, embora o arquivo continue sendo sobrescrito.
+
+**Só existe quando** o diretório é um repositório Git, a branch atual é **exatamente**
+`feature/<slug>` e a pasta `docs/sprintx/features/<slug>/` existe. Sem Git, com "sem worktree"
+explícito, noutra branch (inclusive a principal) ou com a pasta ignorada pelo versionador do
+projeto: **nenhum commit**, um aviso no rastro, e o método segue como sempre — a `sprintx`
+standalone não passa a exigir Git.
+
+**O que entra.** Somente `docs/sprintx/features/<slug>/**`. Nunca `src/**`, `tests/**`,
+`package.json`, arquivo de produto, `docs/projeto/**`, `docs/stack/**` nem `docs/entregas/**`.
+Antes e depois de preparar, o script prova que **todo** path staged começa exatamente por
+`docs/sprintx/features/<slug>/`. Qualquer outro path staged: ele **recusa** (código `2`) sem
+limpar, descartar, stashar nem tentar corrigir. **PARE** e relate o path.
+
+**O commit.** Local, nunca push, nunca `--no-verify`, e não é um commit de task (E1):
+
+```
+chore(sprintx): checkpoint de planejamento <slug> — <f2|f3|f4|f5 rodada N>
+
+Planejamento: checkpoint
+Trabalho: <slug>
+Fase: <f2|f3|f4|f5>
+Rodada: <n, ou 0 fora da F5>
+Estado: <estado>
+```
+
+**Os resultados**, na linha `checkpoint=` da saída:
+
+| Resultado | Código | O que fazer |
+|---|---|---|
+| `commitado` | 0 | siga |
+| `sem_mudanca` | 0 | no-op idempotente: a pasta já está igual ao `HEAD`, que já representa o estado; siga |
+| `ignorado_sem_git`, `ignorado_branch`, `ignorado_raiz`, `ignorado_pasta_ignorada` | 0 | aviso no rastro; siga sem commit |
+| `recusado_paths` | 2 | **PARE**: há path fora da pasta staged; não mexa no índice |
+| `persistencia_falhou` | 3 | **PARE**: um hook do projeto rejeitou o commit; está no rastro como `persistencia_falhou`. Não contorne, não use `--no-verify`, não siga para a fase seguinte |
+
+Todo checkpoint grava `checkpoint_planejamento` no rastro (`references/08-rastro.md`).

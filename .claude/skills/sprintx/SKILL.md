@@ -21,7 +21,24 @@ A **F3.5 ESTIMATIVA é a única fase opcional** do método e é a única exceç�
 
 Toda transição desta máquina — entrar numa fase, abrir ou fechar uma task, registrar ou resolver bloqueio, concluir o trabalho — atualiza também `.expx/estado.json`, o arquivo de exibição que a barra de status lê (`references/09-estado.md`). Ele é **derivado e descartável**: a fase continua sendo detectada pelo disco, como na tabela abaixo, e nunca por ele. Se `.expx/` não existir no projeto, a skill segue sem gravar, sem erro e sem aviso.
 
-Antes de agir, descubra em que fase está inspecionando o disco em `docs/sprintx/features/<slug-da-feature>/`:
+Antes de agir, descubra em que fase está rodando `scripts/planejamento.sh fase <slug>` (caminho relativo à raiz desta skill). Ele lê o disco em `docs/sprintx/features/<slug-da-feature>/` e responde de forma determinística; na falta de bash, aplique as mesmas duas tabelas abaixo, na mesma ordem.
+
+**Com `00-PLANEJAMENTO.md` (`kind: planejamento`), ele é a fonte primária** — o campo `estado` decide, e nenhum outro arquivo o contradiz:
+
+| `estado` em `00-PLANEJAMENTO.md` | Fase atual |
+|---|---|
+| `null`, `base/` não existe | F1 |
+| `null`, `base/` existe | F2 |
+| `aguardando_f3` | F3 |
+| `aguardando_f4` | F4 |
+| `aguardando_f5` | F5 |
+| `replanejar` | F3 — **nunca** F5 direto: o plano reprovado ainda não mudou |
+| `aprovado` | F6 |
+| `orcamento_esgotado` | **terminal** — pare; não continue automaticamente, nem para a F3, nem para a F5, nem para a F6 |
+
+Nunca infira F5 só porque `ORQUESTRADOR.md` existe.
+
+**Sem `00-PLANEJAMENTO.md` (feature legada)**, o estado sai do disco pela tabela antiga, com uma correção — um veredito NÃO nunca devolve a feature à F5 sobre o mesmo plano:
 
 | Estado do disco | Fase atual |
 |---|---|
@@ -29,8 +46,15 @@ Antes de agir, descubra em que fase está inspecionando o disco em `docs/sprintx
 | `base/` existe, `00-DECISOES.md` não | F2 |
 | `00-DECISOES.md` existe, `sprint-01/` não | F3 |
 | `sprint-01/` existe, `ORQUESTRADOR.md` não | F4 |
-| `ORQUESTRADOR.md` existe, sem auditoria aprovada | F5 |
-| Auditoria aprovada: `00-AUDITORIA.md` existe e contém `VEREDITO: SIM` | F6 |
+| `ORQUESTRADOR.md` existe, `00-AUDITORIA.md` não | F5 |
+| Última linha `VEREDITO:` de `00-AUDITORIA.md` é `VEREDITO: NÃO` | F3 |
+| Última linha `VEREDITO:` de `00-AUDITORIA.md` é `VEREDITO: SIM` | F6 |
+
+A primeira transição gravada numa feature legada cria o `00-PLANEJAMENTO.md` com o estado que o disco mostra, sem teto (`references/00-schema.md`, `kind: planejamento`); dali em diante, vale a primeira tabela.
+
+**Orçamento de reprovações da F5.** Quem aciona a `sprintx` pode declarar um teto de vereditos NÃO (`max_reprovacoes_f5`, com `orcamento_declarado_por`); a F1 o grava. Sem declaração, não há teto e o laço F3 ↔ F5 segue até `VEREDITO: SIM`, como sempre. Com teto, a reprovação que o atinge leva ao estado terminal `orcamento_esgotado`: a skill para ali, sem F6 e sem nova F5 automática (`references/05-auditoria.md`).
+
+**Checkpoints do planejamento.** Com Git e na branch `feature/<slug>`, o fim da F2, da F3, da F4 e todo veredito da F5 viram um commit **local** só da pasta da feature — é o que faz o planejamento sobreviver à sessão antes da F6. Sem Git, ou fora dessa branch, nada é commitado e o método segue como sempre (`references/00-schema.md`, e "Checkpoint do planejamento" em `references/02-descoberta.md`).
 
 A F3.5 não aparece na tabela porque não é um estado da máquina: ela é um desvio opcional a partir da F3, disparado por pedido do usuário (ou pelo comando `/sprintx-estimar`), e o disco continua indicando F4 com ou sem `00-ESTIMATIVA.md`.
 
@@ -140,6 +164,7 @@ MimoCode não é suportado por esta skill.
 | Todas as que gravam transição | `references/08-rastro.md` — formato do rastro de eventos, lido pelo painel | — |
 | Todas as que gravam transição | `references/09-estado.md` — contrato `expx-estado` v1: o `.expx/estado.json` que a barra de status lê | — |
 | F3 e F6 (ao gravar `fases.md` e ao fechar task) | `references/09-diagrama.md` — o bloco Mermaid do grafo de tasks dentro de `fases.md`. Derivado: sua ausência é inofensiva e nunca bloqueia | `assets/TEMPLATE-fases.md` |
+| F1 a F5 (estado do planejamento) | `scripts/planejamento.sh` — cria, avança, detecta a fase e faz o checkpoint; único escritor de `00-PLANEJAMENTO.md` | `assets/TEMPLATE-PLANEJAMENTO.md` |
 | F1 INGESTÃO | `references/01-ingestao.md` | `assets/TEMPLATE-base-recurso.md`, `assets/TEMPLATE-base-indice.md`, `assets/TEMPLATE-BLOQUEIOS.md` |
 | F2 DESCOBERTA | `references/02-descoberta.md` | `assets/TEMPLATE-DECISOES.md` |
 | F3 PLANO | `references/03-plano.md` | `assets/TEMPLATE-sprint.md`, `assets/TEMPLATE-fases.md`, `assets/TEMPLATE-tasks.md` |
@@ -198,6 +223,7 @@ Todo artefato desta skill vive sob `docs/sprintx/`, nunca solto em `docs/`. A es
 ```
 docs/sprintx/
   features/<slug-da-feature>/    um diretório por feature, com a estrutura completa
+    00-PLANEJAMENTO.md           estado durável do laço F3 ↔ F5, nascido na F1
     FECHAMENTO.md                gravado ao fim da F6: o que a feature entregou, e onde
   estimativas/HISTORICO.md       esforço real do projeto inteiro (atravessa features)
 ```
@@ -208,6 +234,14 @@ não é produto, não pertence a task nenhuma, atravessa trabalhos e é **delibe
 versionado**, porque a calibração precisa sobreviver a máquina, sessão e worktree. Os dois são
 artefatos de método e, com a `mergex` instalada, entram no commit de artefatos que antecede o
 push — a `sprintx` escreve, a `mergex` versiona.
+
+**A exceção deliberada: os checkpoints do planejamento.** Antes da F6 a `mergex` ainda não
+entrou, e um plano que só existe na árvore morre com a sessão. Por isso a `sprintx` é a dona de
+um único tipo de commit: o **checkpoint de planejamento**, local, na branch `feature/<slug>`,
+contendo **somente** `docs/sprintx/features/<slug>/**`, feito pelo `scripts/planejamento.sh` ao
+fim da F2, da F3, da F4, a cada veredito da F5 e ao chegar a `orcamento_esgotado`. Nunca push,
+nunca `--no-verify`, nunca arquivo de produto. Sem Git o checkpoint vira aviso no rastro, e a
+`sprintx` standalone continua sem exigir Git.
 
 Fora disso ficam o rastro (`docs/eventos/`) e o `.expx/estado.json`: **estado local da
 máquina**, reescritos a cada transição e mantidos fora do versionador pelo `info/exclude` do

@@ -220,3 +220,13 @@ Anuncie: "F3 concluída. Plano em `docs/sprintx/features/<slug>/sprint-*/` (N sp
 Grave a fase de destino em `.expx/estado.json` (`references/09-estado.md`): `fase: f4` ao seguir direto para a F4, ou `fase: f3.5` se o usuário pediu estimativa e a F3.5 vai rodar antes.
 
 Se o usuário pediu estimativa (ou acionou `/sprintx-estimar`), rode antes a F3.5 lendo `references/07-estimativa.md` e só então siga para a F4. Sem esse pedido, vá direto para a F4 — a F3.5 nunca é executada por conta própria e nunca bloqueia a passagem.
+Registre o fim da fase **antes** de anunciar e antes de qualquer F3.5 ou F4:
+
+```bash
+bash <raiz-da-skill>/scripts/planejamento.sh avanca <slug> f3
+```
+
+O estado passa a `aguardando_f4` e o checkpoint roda (regra única em
+`references/02-descoberta.md`, "Checkpoint do planejamento"). Código diferente de `0`: **pare**
+e relate — não siga para a F4 com o plano fora do histórico.
+

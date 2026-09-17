@@ -250,7 +250,7 @@ Os comandos de fase **recusam execução fora de ordem**: peça o plano sem a in
 F1 INGESTÃO → F2 DESCOBERTA → F3 PLANO → [F3.5 ESTIMATIVA] → F4 ORQUESTRADOR → F5 AUDITORIA → F6 EXECUÇÃO
 ```
 
-Estritamente sequenciais. A skill descobre onde está **inspecionando o disco**, não perguntando — você nunca precisa dizer "estou na fase X".
+Estritamente sequenciais. A skill descobre onde está **inspecionando o disco**, não perguntando — você nunca precisa dizer "estou na fase X". A fonte primária é o `00-PLANEJAMENTO.md` da feature, o estado durável do laço F3 ↔ F5; com Git, cada fim de F2, F3, F4 e cada veredito da F5 vira um checkpoint local na branch `feature/<slug>`, só da pasta da feature, para o planejamento sobreviver à sessão antes da execução.
 
 A elas se soma uma única fase **opcional**, a F3.5 (estimativa), que roda entre a F3 e a F4 apenas quando você pede — e cuja ausência nunca impede nada.
 
@@ -331,6 +331,7 @@ docs/sprintx/
   features/
     <slug-da-feature>/
       ORQUESTRADOR.md      mapa e porta de entrada da execução
+      00-PLANEJAMENTO.md   estado durável do laço F3 ↔ F5 e orçamento de reprovações
       00-DECISOES.md       uma linha por decisão tomada no planejamento
       00-BLOQUEIOS.md      bloqueios registrados durante a execução
       00-AUDITORIA.md      relatório e veredito da F5
@@ -401,6 +402,8 @@ Os kinds `orquestrador`, `sprint`, `fases`, `tasks`, `bloqueios` e `base_indice`
       <uma por fase>            roteiro operacional detalhado (as 6 + a F3.5 opcional)
     assets/
       TEMPLATE-*.md             templates preenchíveis usados pelas fases
+    scripts/
+      planejamento.sh           estado, orçamento, fase e checkpoints do planejamento
   commands/
     sprintx*.md                 atalhos de comando para cada fase
   hooks/
