@@ -63,7 +63,7 @@ Valem para todo arquivo que leva frontmatter:
 | `metodo_agregacao` | `pert_quadratura` |
 | `densidade` | `mvp` \| `padrao` \| `completo` \| `profundo` |
 | `modo_construcao` | `entrevista` \| `autonomo` |
-| `estado` (planejamento) | `aguardando_f3` \| `aguardando_f4` \| `aguardando_f5` \| `replanejar` \| `aprovado` \| `orcamento_esgotado` (ou `null` antes do fim da F2) |
+| `estado` (planejamento) | `aguardando_f3` \| `aguardando_f4` \| `aguardando_f5` \| `replanejar` \| `aprovado` \| `orcamento_esgotado` \| `replanejar_execucao` \| `replanejamento_execucao_esgotado` (ou `null` antes do fim da F2) |
 | `veredito` (rodada da F5) | `sim` \| `nao` |
 | `classe` (bloqueio) | `defeito_de_plano` \| `lacuna_de_decisao` \| `prerequisito_ausente` \| `suite_vermelha` \| `task_reivindicada` |
 
@@ -382,6 +382,14 @@ Regras duras de `classe`:
 - **Imutável.** Gravada, a classe não muda: nem quando a descrição é reescrita, nem quando o
   bloqueio é resolvido (`resolvido_em` deixa de ser `null` e a classe fica). Classe errada não se
   edita; o bloqueio é resolvido e um B-NN novo é registrado com a classe certa.
+- **Resolução.** Só por `scripts/bloqueios.sh resolver <slug> <B-NN>`, nunca editando
+  `resolvido_em` à mão. Ele grava **somente** `resolvido_em` (data do sistema), `atualizado_em` e o
+  sufixo ` · resolvido em AAAA-MM-DD` na linha `B-NN | …` da prosa; `id`, `task`, `classe`,
+  `aberto_em` e `descricao` ficam byte a byte. B-NN já resolvido: nada muda (código `0`). Um
+  `defeito_de_plano` só é resolvido quando `scripts/planejamento.sh pode-resolver` aceita — o B-NN
+  abriu a rodada de replanejamento da execução (`bloqueios_replanejamento_f6`) e o plano
+  replanejado já voltou a `aprovado` pela F5; fora disso, código `5` e nada gravado. Editar o plano
+  não resolve um defeito de plano. As demais classes, e o legado, são resolvidas diretamente.
 - **Legado.** Entrada sem a chave `classe` é anterior a este contrato: continua legível, e
   `scripts/bloqueios.sh listar` a devolve como `legado`. **Ela nunca recebe classe inferida** —
   nem na leitura, nem na migração, nem quando o arquivo é regravado com um B-NN novo (a entrada
@@ -615,9 +623,14 @@ expx_tool: sprintx
 kind: planejamento
 trabalho_id: exportacao-csv-relatorios
 max_reprovacoes_f5: 3
+max_replanejamentos_f6: 1
 orcamento_declarado_por: buildx
 estado: replanejar
 reprovacoes: 2
+replanejamentos_f6: 0
+bloqueios_replanejamento_f6: []
+tasks_congeladas: []
+assinatura_congeladas: null
 atualizado_em: 2026-08-29
 historico:
   - rodada: 1
@@ -645,10 +658,11 @@ Regras duras deste kind:
   **vereditos NÃO** permitidos. Zero, negativo, texto ou qualquer outra forma é **erro de
   contrato**, e o script recusa.
 - `orcamento_declarado_por` identifica quem declarou o teto (`buildx`, por exemplo). É `null`
-  se e somente se `max_reprovacoes_f5` for `null`: teto sem dono, ou dono sem teto, é erro de
-  contrato. A `sprintx` sozinha **nunca inventa orçamento** — ela grava `null`/`null`.
+  se e somente se `max_reprovacoes_f5` e `max_replanejamentos_f6` forem ambos `null`: teto sem
+  dono, ou dono sem teto, é erro de contrato. A `sprintx` sozinha **nunca inventa orçamento** —
+  ela grava `null`/`null`.
 - `estado` segue o enum `estado` (planejamento). É `null` da F1 até o fim da F2; a partir daí,
-  é sempre um dos seis valores. Nenhum outro estado existe.
+  é sempre um dos oito valores. Nenhum outro estado existe.
 - `reprovacoes` é um inteiro `>= 0` e é sempre igual à quantidade de rodadas `nao` do
   `historico`.
 - `historico` é **append-only**: uma entrada por veredito da F5, na ordem, com `rodada`
@@ -658,6 +672,39 @@ Regras duras deste kind:
 - `aprovado` só existe com a última rodada `sim`; `orcamento_esgotado` só existe com
   `reprovacoes >= max_reprovacoes_f5`. Arquivo que contradiz isso é contrato inválido e nada é
   decidido em cima dele.
+
+**O eixo da F6 — replanejamento da execução.** Quando a F6 registra `defeito_de_plano`, o plano
+volta ao planejamento por um estado próprio, `replanejar_execucao`, com orçamento próprio. Ele
+não é o `replanejar` da F5 e não mexe no orçamento dela.
+
+- `max_replanejamentos_f6` é `null` ou um inteiro `>= 1`: quantas rodadas de replanejamento da
+  execução o caller permite. **Mesmo dono** do orçamento da F5 (`orcamento_declarado_por`), passado
+  pelo mesmo caminho — o quarto argumento de `planejamento.sh criar`. `null` é "não declarado": a
+  `sprintx` sozinha não inventa orçamento, e **sem orçamento o replanejamento da execução não abre**.
+  Diferente do `null` da F5 (sem teto), mas pela mesma razão: nos dois eixos `null` preserva o
+  comportamento de antes do contrato — laço até SIM na F5, nenhum caminho de volta na F6.
+- `replanejamentos_f6` é um inteiro `>= 0`, nunca acima do teto, e `0` enquanto o teto for `null`.
+  É consumido quando uma rodada **nova** é aceita; retomar a mesma rodada não consome de novo.
+- `bloqueios_replanejamento_f6` lista, em ordem crescente de id, os B-NN `defeito_de_plano` abertos
+  que abriram a rodada ativa. Lista preenchida = rodada ativa; `[]` = nenhuma. É o que torna a
+  rodada retomável sem memória da sessão.
+- `tasks_congeladas` e `assinatura_congeladas` congelam, durante a rodada, as tasks `concluida`:
+  os ids e a assinatura (`cksum`) do item de cada uma no frontmatter do `tasks.md` e do seu bloco
+  na prosa. `[]`/`null` sem rodada ativa. Todo portão da rodada (`avanca f3`, `f4`, `f5` e o
+  fechamento) recalcula e recusa com código `4` qualquer diferença.
+- `replanejar_execucao` só existe com rodada ativa e a última rodada da F5 `sim`; os estados do laço
+  que a rodada percorre (`aguardando_f4`, `aguardando_f5`, `replanejar`, `orcamento_esgotado`)
+  aceitam a lista preenchida. `replanejamento_execucao_esgotado` só existe sem rodada ativa e com
+  `replanejamentos_f6 >= max_replanejamentos_f6`. `aprovado` com a lista ainda preenchida é um
+  fechamento de rodada gravado e não terminado: `fase` responde `CHECKPOINT` e só `checkpoint`
+  completa.
+- No `historico`, uma rodada depois de um `sim` só existe quando um replanejamento da execução a
+  abriu: no máximo uma sequência assim por unidade de `replanejamentos_f6`.
+- **Legado.** `00-PLANEJAMENTO.md` gravado antes deste eixo não tem as cinco chaves: continua
+  válido, é lido como `orcamento_f6=legado` e **nunca ganha orçamento** — nem na leitura, nem numa
+  regravação, nem num `criar` de retomada (pedir teto da F6 a um arquivo legado é erro de contrato,
+  código `4`). As cinco chaves existem todas ou nenhuma. Arquivo novo, inclusive o de migração da
+  tabela antiga, nasce com as cinco.
 
 **`kind: planejamento` e o painel.** O painel do `expxdev` pode ignorar este kind até ganhar
 suporte a ele. Isso **não afeta** a execução da `sprintx`: nenhuma lógica da skill depende de o

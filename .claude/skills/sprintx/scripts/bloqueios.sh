@@ -16,14 +16,22 @@
 # Uso (a partir de qualquer diretorio do repositorio; SPRINTX_RAIZ sobrescreve a raiz):
 #
 #   bloqueios.sh registrar <slug> <T-NN.MM|null> <classe> <descricao> <o que destravaria>
+#   bloqueios.sh resolver <slug> <B-NN>
 #   bloqueios.sh listar <slug>      id TAB task TAB classe|legado TAB aberto|resolvido
 #   bloqueios.sh validar <slug>
 #   bloqueios.sh classes            o enum, um valor por linha
 #
+# Resolver (L4) grava SO `resolvido_em` (data do sistema), `atualizado_em` e o
+# sufixo " · resolvido em AAAA-MM-DD" da linha B-NN da prosa. A classe nunca muda.
+# `defeito_de_plano` so e resolvido quando `planejamento.sh pode-resolver` aceita:
+# o B-NN abriu a rodada de replanejamento da execucao e o plano replanejado ja
+# voltou a `aprovado`. Editar o plano nao basta.
+#
 # Codigos de saida:
-#   0  ok
+#   0  ok (inclusive resolver um B-NN ja resolvido: nada muda)
 #   4  contrato invalido (classe ausente ou fora do enum, arquivo sem frontmatter,
-#      entrada malformada, bloqueio novo sem classe)
+#      entrada malformada, bloqueio novo sem classe, B-NN inexistente)
+#   5  resolucao recusada: defeito_de_plano fora de uma rodada aprovada
 #   64 uso incorreto
 
 set -uo pipefail
@@ -31,7 +39,7 @@ set -uo pipefail
 SK="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEMPLATE="$SK/assets/TEMPLATE-BLOQUEIOS.md"
 
-E_CONTRATO=4; E_USO=64
+E_CONTRATO=4; E_TRANSICAO=5; E_USO=64
 
 # O enum `classe` (bloqueio) de references/00-schema.md. `legado` NAO e classe:
 # e o que a leitura devolve para entrada sem a chave, e nunca e gravado.
@@ -49,8 +57,28 @@ contexto() { # contexto <slug>
   SLUG="$1"
   printf '%s' "$SLUG" | grep -Eq '^[a-z0-9]+(-[a-z0-9]+)*$' \
     || falha "$E_USO" "slug invalido: '$SLUG' (a-z, 0-9 e hifen)"
-  PASTA="$(resolve_raiz)/docs/sprintx/features/$SLUG"
+  RAIZ="$(resolve_raiz)"
+  PASTA="$RAIZ/docs/sprintx/features/$SLUG"
   ARQ="$PASTA/00-BLOQUEIOS.md"
+}
+
+json_esc() {
+  local s="$1"
+  s="${s//\\/\\\\}"; s="${s//\"/\\\"}"; s="${s//	/\\t}"; s="${s//$'\r'/\\r}"; s="${s//$'\n'/\\n}"
+  printf '%s' "$s"
+}
+
+# evento <evento> <task|null> <resultado> <detalhe> — contrato expx-eventos v1,
+# append-only, falha aberta: o rastro nunca derruba a gravacao do bloqueio.
+evento() {
+  local task="null" dir="$RAIZ/docs/eventos"
+  [ "$2" != null ] && [ "$2" != "-" ] && task="\"$2\""
+  {
+    mkdir -p "$dir" || return 0
+    printf '{"ts":"%s","expx_eventos":1,"trabalho_id":"%s","ferramenta":"sprintx","origem":"skill","evento":"%s","fase":null,"task":%s,"agente":"principal","resultado":"%s","detalhe":"%s","arquivos":["docs/sprintx/features/%s/00-BLOQUEIOS.md"]}\n' \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SLUG" "$1" "$task" "$3" "$(json_esc "$4")" "$SLUG" >> "$dir/$SLUG.jsonl"
+  } 2>/dev/null || true
+  return 0
 }
 
 hoje() { date +%Y-%m-%d; }
@@ -198,14 +226,54 @@ cmd_registrar() { # <task|null> <classe> <descricao> <destravaria>
   printf 'id=%s\ntask=%s\nclasse=%s\n' "$id" "$task" "$classe"
 }
 
+cmd_resolver() { # <B-NN>
+  local alvo="$1" linha task classe resolvido nc lida tmp="$ARQ.tmp.$$"
+  printf '%s' "$alvo" | grep -Eq '^B-[0-9]{2,}$' || falha "$E_USO" "id invalido: '$alvo' (B-NN)"
+  valida
+  linha="$(entradas "$ARQ" | awk -F'\t' -v b="$alvo" '$1 == b')"
+  [ -n "$linha" ] || falha "$E_CONTRATO" "$alvo nao existe em 00-BLOQUEIOS.md"
+  IFS=$'\t' read -r _ task classe resolvido nc <<EOF
+$linha
+EOF
+  lida="$(classe_lida "$classe" "$nc")"
+  case "$resolvido" in
+    null|-) ;;
+    *) printf 'id=%s\nresolvido=ja_resolvido\nresolvido_em=%s\nclasse=%s\n' "$alvo" "$resolvido" "$lida"; return 0 ;;
+  esac
+  # A classe (a chave, nunca a descricao) decide quem pode resolver.
+  if [ "$lida" = defeito_de_plano ]; then
+    SPRINTX_RAIZ="$RAIZ" bash "$SK/scripts/planejamento.sh" pode-resolver "$SLUG" "$alvo" >/dev/null 2>&1 \
+      || falha "$E_TRANSICAO" "$alvo e defeito_de_plano: so e resolvido quando a rodada de replanejamento da execucao que ele abriu volta a aprovado pela F5 (planejamento.sh pode-resolver recusou). Editar o plano nao resolve. Nada foi gravado."
+  fi
+  tr -d '\r' < "$ARQ" | BL_ALVO="$alvo" BL_HOJE="$(hoje)" awk '
+    BEGIN { alvo = ENVIRON["BL_ALVO"]; hoje = ENVIRON["BL_HOJE"] }
+    NR == 1 { print; next }
+    !fim && $0 == "---" { fim = 1; print; next }
+    !fim && /^atualizado_em:/ { print "atualizado_em: " hoje; next }
+    !fim && /^  - id:/ { id = $3 }
+    !fim && id == alvo && /^    resolvido_em:[ \t]*null[ \t]*$/ { print "    resolvido_em: " hoje; feito = 1; next }
+    fim && !com && index($0, alvo " |") == 1 { print $0 " · resolvido em " hoje; next }
+    fim && index($0, "<!--") { com = 1 }
+    fim && index($0, "-->") { com = 0 }
+    { print }
+    END { if (!feito) exit 3 }' > "$tmp" || { rm -f "$tmp"; falha "$E_CONTRATO" "nao consegui gravar a resolucao de $alvo"; }
+  ( ARQ="$tmp"; valida ) || { rm -f "$tmp"; exit "$E_CONTRATO"; }
+  mv "$tmp" "$ARQ" || { rm -f "$tmp"; falha "$E_CONTRATO" "nao consegui gravar $ARQ"; }
+  evento bloqueio_resolvido "$task" ok "$alvo ($lida) resolvido; classe inalterada"
+  printf 'id=%s\nresolvido=sim\nresolvido_em=%s\nclasse=%s\n' "$alvo" "$(hoje)" "$lida"
+}
+
 # ------------------------------------------------------------------ entrada
 
-[ $# -ge 1 ] || falha "$E_USO" "uso: bloqueios.sh registrar|listar|validar|classes ..."
+[ $# -ge 1 ] || falha "$E_USO" "uso: bloqueios.sh registrar|resolver|listar|validar|classes ..."
 cmd="$1"; shift
 case "$cmd" in
   registrar)
     [ $# -eq 5 ] || falha "$E_USO" "uso: bloqueios.sh registrar <slug> <T-NN.MM|null> <classe> <descricao> <o que destravaria>"
     contexto "$1"; shift; cmd_registrar "$@" ;;
+  resolver)
+    [ $# -eq 2 ] || falha "$E_USO" "uso: bloqueios.sh resolver <slug> <B-NN>"
+    contexto "$1"; cmd_resolver "$2" ;;
   listar)  [ $# -eq 1 ] || falha "$E_USO" "uso: bloqueios.sh listar <slug>";  contexto "$1"; cmd_listar ;;
   validar) [ $# -eq 1 ] || falha "$E_USO" "uso: bloqueios.sh validar <slug>"; contexto "$1"; valida; printf 'valido=sim\n' ;;
   classes) [ $# -eq 0 ] || falha "$E_USO" "uso: bloqueios.sh classes"; printf '%s\n' $CLASSES ;;

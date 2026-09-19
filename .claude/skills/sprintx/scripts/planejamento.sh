@@ -3,18 +3,23 @@
 #
 # Dono de docs/sprintx/features/<slug>/00-PLANEJAMENTO.md (kind: planejamento):
 # a maquina F3 <-> F5, o orcamento de reprovacoes da F5 declarado pelo caller,
-# o estado terminal `orcamento_esgotado` e os checkpoints Git LOCAIS de metodo
-# que tornam o planejamento duravel antes da F6.
+# o estado terminal `orcamento_esgotado`, o retorno da F6 ao planejamento
+# (`replanejar_execucao`, com orcamento proprio e o estado terminal
+# `replanejamento_execucao_esgotado`), o congelamento das tasks concluidas
+# durante esse retorno e os checkpoints Git LOCAIS de metodo que tornam o
+# planejamento duravel.
 #
 # Tudo aqui e deterministico: nenhuma decisao depende do modelo lembrar de
 # alguma coisa. Sem jq, sem python, sem rede. Bash 3.2 (macOS) compativel.
 #
 # Uso (a partir de qualquer diretorio do repositorio; SPRINTX_RAIZ sobrescreve a raiz):
 #
-#   planejamento.sh criar <slug> [max_reprovacoes_f5|null] [declarado_por|null]
+#   planejamento.sh criar <slug> [max_reprovacoes_f5|null] [declarado_por|null] [max_replanejamentos_f6|null]
 #   planejamento.sh avanca <slug> f2|f3|f4|f5
+#   planejamento.sh replanejar-execucao <slug>
 #   planejamento.sh checkpoint <slug>
 #   planejamento.sh fase <slug>
+#   planejamento.sh pode-resolver <slug> <B-NN>
 #   planejamento.sh valida-auditoria <slug>
 #   planejamento.sh obrigacoes-f6 <slug>
 #   planejamento.sh severidade ausente|criterio|teste
@@ -23,14 +28,19 @@
 # Saida: linhas chave=valor no stdout; motivo de erro no stderr.
 #
 # Codigos de saida:
-#   0  ok — inclusive no-op idempotente e checkpoint ignorado com aviso (sem Git,
-#      branch que nao e feature/<slug>, pasta ignorada pelo versionador)
-#   2  checkpoint recusado: ha path staged fora de docs/sprintx/features/<slug>/
+#   0  ok — inclusive no-op idempotente, retomada da mesma rodada e checkpoint
+#      ignorado com aviso (sem Git, branch que nao e feature/<slug>, pasta ignorada)
+#   2  checkpoint recusado: ha path staged fora de docs/sprintx/features/<slug>/;
+#      ou fronteira insegura: produto sujo na arvore ao entrar em replanejar_execucao
 #   3  persistencia_falhou: o commit do checkpoint foi rejeitado (hook do projeto);
 #      ou persistencia pendente: em feature/<slug>, o estado do disco ainda nao
-#      esta no HEAD — `fase` responde CHECKPOINT e `avanca` recusa ate `checkpoint`
-#   4  contrato invalido (orcamento, arquivo, auditoria ou linha do revisor)
-#   5  transicao invalida para o estado atual (inclui estado terminal)
+#      esta no HEAD — `fase` responde CHECKPOINT e `avanca` recusa ate `checkpoint`;
+#      ou fechamento pendente: rodada de replanejamento aprovada e ainda nao fechada
+#   4  contrato invalido (orcamento, arquivo, auditoria, linha do revisor, task
+#      concluida alterada durante o replanejamento da execucao)
+#   5  transicao invalida para o estado atual (inclui estado terminal, replanejamento
+#      recusado pela classe dos bloqueios ou pela falta de orcamento da F6, e
+#      resolucao de defeito_de_plano fora de uma rodada aprovada)
 #   64 uso incorreto
 
 set -uo pipefail
@@ -51,9 +61,21 @@ resolve_raiz() {
 }
 
 valida_slug() {
-  printf '%s' "$1" | grep -Eq '^[a-z0-9]+(-[a-z0-9]+)*$' \
-    || falha "$E_USO" "slug invalido: '$1' (a-z, 0-9 e hifen)"
+  case "$1" in
+    ""|-*|*-|*--*|*[!a-z0-9-]*) falha "$E_USO" "slug invalido: '$1' (a-z, 0-9 e hifen)" ;;
+  esac
 }
+
+# Validacoes por padrao de shell, sem processo novo: no Windows cada fork custa caro.
+inteiro() { case "$1" in 0) return 0 ;; ""|0*|*[!0-9]*) return 1 ;; esac; return 0; }
+positivo() { case "$1" in ""|0*|*[!0-9]*) return 1 ;; esac; return 0; }
+id_bloqueio() { case "$1" in B-[0-9][0-9]*) case "${1#B-}" in *[!0-9]*) return 1 ;; esac; return 0 ;; esac; return 1; }
+id_task() {
+  case "$1" in T-[0-9][0-9]*.[0-9][0-9]*) ;; *) return 1 ;; esac
+  local a="${1#T-}"; local b="${a#*.}"; a="${a%%.*}"
+  case "$a$b" in *[!0-9]*) return 1 ;; esac; return 0
+}
+data_iso() { case "$1" in [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) return 0 ;; esac; return 1; }
 
 contexto() { # contexto <slug>
   SLUG="$1"; valida_slug "$SLUG"
@@ -62,6 +84,8 @@ contexto() { # contexto <slug>
   PASTA="$RAIZ/docs/sprintx/features/$SLUG"
   ARQ="$PASTA/00-PLANEJAMENTO.md"
   AUD="$PASTA/00-AUDITORIA.md"
+  # Sem 00-PLANEJAMENTO.md nao ha eixo F6: le_planejamento sobrescreve.
+  P_F6=legado; P_MAX6=null; P_N6=0; P_BLQ=""; P_CONG=""; P_ASS=null
 }
 
 hoje() { date +%Y-%m-%d; }
@@ -74,19 +98,23 @@ json_esc() {
   printf '%s' "$s"
 }
 
-# rastro <fase|-> <resultado> <detalhe> — contrato expx-eventos v1, append-only.
-# Falha aberta: o rastro nunca derruba o planejamento.
-rastro() {
-  local fase="null" dir="$RAIZ/docs/eventos"
-  [ "$1" != "-" ] && fase="\"$1\""
+# evento <evento> <fase|-> <task|-> <resultado> <detalhe> [arquivo] — contrato
+# expx-eventos v1, append-only. Falha aberta: o rastro nunca derruba o planejamento.
+evento() {
+  local fase="null" task="null" dir="$RAIZ/docs/eventos" arq="${6:-${PREFIXO}00-PLANEJAMENTO.md}"
+  [ "$2" != "-" ] && fase="\"$2\""
+  [ "$3" != "-" ] && task="\"$3\""
   {
     mkdir -p "$dir" || return 0
-    printf '{"ts":"%s","expx_eventos":1,"trabalho_id":"%s","ferramenta":"sprintx","origem":"skill","evento":"checkpoint_planejamento","fase":%s,"task":null,"agente":"principal","resultado":"%s","detalhe":"%s","arquivos":["%s"]}\n' \
-      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SLUG" "$fase" "$2" "$(json_esc "$3")" "${PREFIXO}00-PLANEJAMENTO.md" \
+    printf '{"ts":"%s","expx_eventos":1,"trabalho_id":"%s","ferramenta":"sprintx","origem":"skill","evento":"%s","fase":%s,"task":%s,"agente":"principal","resultado":"%s","detalhe":"%s","arquivos":["%s"]}\n' \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SLUG" "$1" "$fase" "$task" "$4" "$(json_esc "$5")" "$arq" \
       >> "$dir/$SLUG.jsonl"
   } 2>/dev/null || true
   return 0
 }
+
+# rastro <fase|-> <resultado> <detalhe> — o evento do checkpoint.
+rastro() { evento checkpoint_planejamento "$1" - "$2" "$3"; }
 
 # ------------------------------------------------------------------ orcamento
 
@@ -94,15 +122,14 @@ valida_orcamento() { # valida_orcamento <max> <declarado_por>
   local max="$1" por="$2"
   case "$max" in
     null) ;;
-    *) printf '%s' "$max" | grep -Eq '^[1-9][0-9]*$' \
-         || falha "$E_CONTRATO" "max_reprovacoes_f5 invalido: '$max' (inteiro >= 1 ou null)" ;;
+    *) positivo "$max" || falha "$E_CONTRATO" "max_reprovacoes_f5 invalido: '$max' (inteiro >= 1 ou null)" ;;
   esac
   case "$por" in
     null) ;;
-    *) printf '%s' "$por" | grep -Eq '^[a-z][a-z0-9_-]*$' \
-         || falha "$E_CONTRATO" "orcamento_declarado_por invalido: '$por' (identificador minusculo ou null)" ;;
+    [a-z]*) case "$por" in *[!a-z0-9_-]*) falha "$E_CONTRATO" "orcamento_declarado_por invalido: '$por' (identificador minusculo ou null)" ;; esac ;;
+    *) falha "$E_CONTRATO" "orcamento_declarado_por invalido: '$por' (identificador minusculo ou null)" ;;
   esac
-  if [ "$max" = null ] && [ "$por" != null ]; then
+  if [ "$max" = null ] && [ "${3:-null}" = null ] && [ "$por" != null ]; then
     falha "$E_CONTRATO" "orcamento_declarado_por sem max_reprovacoes_f5: quem declara orcamento declara o teto"
   fi
   if [ "$max" != null ] && [ "$por" = null ]; then
@@ -110,14 +137,41 @@ valida_orcamento() { # valida_orcamento <max> <declarado_por>
   fi
 }
 
+# valida_orcamento_f6 <max6> <declarado_por> — mesmo dono do orcamento da F5.
+# `null` e "nao declarado": sem orcamento, o replanejamento da execucao nao abre.
+valida_orcamento_f6() {
+  case "$1" in
+    null) ;;
+    *) positivo "$1" || falha "$E_CONTRATO" "max_replanejamentos_f6 invalido: '$1' (inteiro >= 1 ou null)"
+       [ "$2" != null ] || falha "$E_CONTRATO" "max_replanejamentos_f6 sem orcamento_declarado_por: o teto precisa de dono" ;;
+  esac
+}
+
 # ------------------------------------------------------------------ leitura
 
-fm_valor() { # fm_valor <arquivo> <chave> — escalar de topo do primeiro bloco YAML
-  tr -d '\r' < "$1" | awk -v k="$2" '
+# fm_carrega <arquivo> — uma passada so pelo primeiro bloco YAML: FM_<chave> recebe o
+# escalar de topo (primeira ocorrencia, sem espacos nas pontas) e FM_CHAVES lista as
+# chaves presentes. fm_em <var> <chave> copia o valor; fm_presente <chave> diz se existe.
+fm_carrega() {
+  local linha k v
+  for k in $FM_CHAVES; do unset "FM_$k"; done
+  FM_CHAVES=" "
+  while IFS= read -r linha; do
+    k="${linha%%"$TAB"*}"; v="${linha#*"$TAB"}"
+    case "$k" in ""|*[!a-z0-9_]*) continue ;; esac
+    case "$FM_CHAVES" in *" $k "*) continue ;; esac
+    FM_CHAVES="$FM_CHAVES$k "
+    eval "FM_$k=\$v"
+  done <<EOF
+$(tr -d '\r' < "$1" | awk '
     NR == 1 { if ($0 != "---") exit; next }
     $0 == "---" { exit }
-    index($0, k ":") == 1 { v = substr($0, length(k) + 2); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v); print v; exit }'
+    /^[a-z_][a-z0-9_]*:/ { k = $0; sub(/:.*/, "", k); v = substr($0, length(k) + 2); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v); print k "\t" v }')
+EOF
 }
+TAB="$(printf '\t')"; FM_CHAVES=""
+fm_em() { eval "$1=\${FM_$2-}"; }   # fm_em <variavel> <chave> — sem subshell
+fm_presente() { case "$FM_CHAVES" in *" $1 "*) return 0 ;; esac; return 1; }
 
 hist_tsv() { # rodada TAB veredito TAB altas TAB medias TAB baixas TAB auditado_em
   tr -d '\r' < "$1" | awk '
@@ -137,40 +191,298 @@ hist_tsv() { # rodada TAB veredito TAB altas TAB medias TAB baixas TAB auditado_
     END { sai() }'
 }
 
-inteiro() { printf '%s' "$1" | grep -Eq '^(0|[1-9][0-9]*)$'; }
+# lista_em <variavel> <valor> — "[a, b]" -> "a b"; "[]" -> "". Outra forma: LIXO.
+lista_em() {
+  local nome="$1" v r
+  case "$2" in
+    "[]") r="" ;;
+    "["*"]") v="${2#[}"; v="${v%]}"; v="${v//,/ }"
+             case "$v" in *[!A-Za-z0-9.\ -]*) r=LIXO ;; *) set -- $v; r="$*" ;; esac ;;
+    *) r=LIXO ;;
+  esac
+  eval "$nome=\$r"
+}
+
+em_lista() { case " $2 " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+
+# As chaves do eixo F6, na ordem em que sao gravadas. Presentes todas, ou nenhuma
+# (planejamento anterior a este contrato: legado — nunca ganha orcamento retroativo).
+CHAVES_F6="max_replanejamentos_f6 replanejamentos_f6 bloqueios_replanejamento_f6 tasks_congeladas assinatura_congeladas"
+
+# le_f6 — P_F6 (presente|legado), P_MAX6, P_N6, P_BLQ, P_CONG, P_ASS.
+le_f6() {
+  local k tem=0 falta=0 x ant=0 n
+  for k in $CHAVES_F6; do if fm_presente "$k"; then tem=$((tem + 1)); else falta=$((falta + 1)); fi; done
+  if [ "$tem" -eq 0 ]; then
+    P_F6=legado; P_MAX6=null; P_N6=0; P_BLQ=""; P_CONG=""; P_ASS=null
+    return 0
+  fi
+  [ "$falta" -eq 0 ] || falha "$E_CONTRATO" "eixo F6 incompleto: as chaves $CHAVES_F6 existem todas ou nenhuma"
+  P_F6=presente
+  fm_em P_MAX6 max_replanejamentos_f6; fm_em P_N6 replanejamentos_f6; fm_em P_ASS assinatura_congeladas
+  local bruto
+  fm_em bruto bloqueios_replanejamento_f6; lista_em P_BLQ "$bruto"
+  fm_em bruto tasks_congeladas; lista_em P_CONG "$bruto"
+  case "$P_MAX6" in
+    null) ;;
+    *) positivo "$P_MAX6" || falha "$E_CONTRATO" "max_replanejamentos_f6 invalido: '$P_MAX6'" ;;
+  esac
+  inteiro "$P_N6" || falha "$E_CONTRATO" "replanejamentos_f6 invalido: '$P_N6'"
+  if [ "$P_MAX6" = null ]; then
+    [ "$P_N6" -eq 0 ] || falha "$E_CONTRATO" "replanejamentos_f6=$P_N6 sem orcamento da F6 declarado"
+  else
+    [ "$P_N6" -le "$P_MAX6" ] || falha "$E_CONTRATO" "replanejamentos_f6=$P_N6 acima do teto $P_MAX6"
+  fi
+  [ "$P_BLQ" != LIXO ] || falha "$E_CONTRATO" "bloqueios_replanejamento_f6 fora da forma [B-NN, ...]"
+  [ "$P_CONG" != LIXO ] || falha "$E_CONTRATO" "tasks_congeladas fora da forma [T-NN.MM, ...]"
+  for x in $P_BLQ; do
+    id_bloqueio "$x" || falha "$E_CONTRATO" "bloqueios_replanejamento_f6 com id invalido: '$x'"
+    n="${x#B-}"; while [ "${n#0}" != "$n" ] && [ -n "${n#0}" ]; do n="${n#0}"; done; n=$((n + 0))
+    [ "$n" -gt "$ant" ] || falha "$E_CONTRATO" "bloqueios_replanejamento_f6 fora da ordem crescente de id: $P_BLQ"
+    ant="$n"
+  done
+  for x in $P_CONG; do
+    id_task "$x" || falha "$E_CONTRATO" "tasks_congeladas com id invalido: '$x'"
+  done
+  if [ -n "$P_BLQ" ]; then
+    [ "$P_N6" -ge 1 ] || falha "$E_CONTRATO" "rodada de replanejamento da execucao ativa com replanejamentos_f6=0"
+    case "$P_ASS" in [0-9]*-[0-9]*) case "${P_ASS%%-*}${P_ASS#*-}" in *[!0-9]*) P_ASS=LIXO ;; esac ;; *) P_ASS=LIXO ;; esac
+    [ "$P_ASS" != LIXO ] || falha "$E_CONTRATO" "rodada ativa sem assinatura_congeladas valida"
+  else
+    [ -z "$P_CONG" ] && [ "$P_ASS" = null ] || falha "$E_CONTRATO" "tasks_congeladas/assinatura_congeladas preenchidas sem rodada ativa"
+  fi
+}
+
+# ------------------------------------------------------------------ tasks do plano
+
+# arquivos_tasks — os sprint-NN/tasks.md da feature, em ordem, relativos a PASTA.
+arquivos_tasks() {
+  local f
+  for f in "$PASTA"/sprint-*/tasks.md; do [ -f "$f" ] && printf '%s\n' "${f#"$PASTA/"}"; done | LC_ALL=C sort
+}
+
+# tasks_tsv <arquivo> — id TAB status de cada item da chave `tasks:` do frontmatter.
+tasks_tsv() {
+  tr -d '\r' < "$1" | awk '
+    NR == 1 { if ($0 != "---") exit; next }
+    $0 == "---" { exit }
+    /^tasks:/ { t = 1; next }
+    t && /^[^ ]/ { t = 0 }
+    !t { next }
+    /^  - id:/ { if (id != "") print id "\t" st; id = $3; st = ""; next }
+    /^    status:/ { st = $2; next }
+    END { if (id != "") print id "\t" st }'
+}
+
+# status_da_task <id> — arquivo TAB status, ou nada se a task nao existe no plano.
+status_da_task() {
+  local rel id st
+  while IFS= read -r rel; do
+    [ -n "$rel" ] || continue
+    while IFS="$(printf '\t')" read -r id st; do
+      [ "$id" = "$1" ] && { printf '%s\t%s\n' "$rel" "$st"; return 0; }
+    done <<EOF
+$(tasks_tsv "$PASTA/$rel")
+EOF
+  done <<EOF
+$(arquivos_tasks)
+EOF
+  return 0
+}
+
+# congeladas — o texto que congela as tasks concluidas: para cada sprint-NN/tasks.md,
+# o item inteiro do frontmatter de cada task `concluida` e, na prosa, o bloco ```yaml
+# com o mesmo id mais o que a F6 escreveu depois dele (data, suite, esforco real) ate
+# o proximo `---`, bloco ou titulo — tudo precedido do caminho. Mover, renumerar,
+# reabrir, apagar ou editar uma delas muda este texto; concluir outra task tambem.
+congeladas() {
+  local rel
+  while IFS= read -r rel; do
+    [ -n "$rel" ] || continue
+    tr -d '\r' < "$PASTA/$rel" | awk -v rel="$rel" '
+      function fecha() { if (id != "" && st == "concluida") { ok[id] = 1; print "== " rel " " id; printf "%s", buf } id = ""; buf = ""; st = "" }
+      function solta() { if (cauda && (pid in ok)) { print "-- " rel " " pid; printf "%s", pb } cauda = 0; pb = "" }
+      NR == 1 { if ($0 == "---") fm = 1; next }
+      fm && $0 == "---" { fecha(); fm = 0; corpo = 1; next }
+      fm && /^tasks:/ { t = 1; next }
+      fm && t && /^[^ ]/ { fecha(); t = 0 }
+      fm && t && /^  - id:/ { fecha(); id = $3 }
+      fm && t && id != "" { buf = buf $0 "\n"; if ($0 ~ /^    status:/) st = $2; next }
+      !corpo { next }
+      /^```yaml[ \t]*$/ { solta(); bl = 1; pb = $0 "\n"; pid = ""; next }
+      bl && /^```[ \t]*$/ { pb = pb $0 "\n"; bl = 0; cauda = 1; next }
+      bl { pb = pb $0 "\n"; if ($0 ~ /^id:[ \t]/) { pid = $2 }; next }
+      cauda && ($0 == "---" || /^#/) { solta(); next }
+      cauda { pb = pb $0 "\n" }
+      END { solta() }'
+  done <<EOF
+$(arquivos_tasks)
+EOF
+}
+
+# calcula_congeladas — C_IDS (ids das concluidas, em ordem) e C_ASS (cksum do texto).
+calcula_congeladas() {
+  local txt l ck
+  txt="$(congeladas)"
+  C_IDS=""
+  while IFS= read -r l; do
+    case "$l" in "== "*) l="${l#== }"; C_IDS="$C_IDS${C_IDS:+ }${l#* }" ;; esac
+  done <<EOF
+$txt
+EOF
+  ck="$(printf '%s\n' "$txt" | cksum)"; set -- $ck; C_ASS="$1-$2"
+}
+
+# confere_congeladas — durante a rodada, as concluidas continuam exatamente como estavam.
+confere_congeladas() {
+  local ids ass
+  calcula_congeladas; ids="$C_IDS"; ass="$C_ASS"
+  if [ "$ids" != "$P_CONG" ] || [ "$ass" != "$P_ASS" ]; then
+    evento replanejamento_execucao_recusado "${1:-f3}" - bloqueado "task concluida alterada durante o replanejamento da execucao: congeladas [$P_CONG], agora [$ids]"
+    falha "$E_CONTRATO" "task concluida alterada durante o replanejamento da execucao (congeladas: [$P_CONG]; agora: [$ids]; assinatura $P_ASS -> $ass). Tasks concluidas sao congeladas: nao apague, renumere, reabra nem reescreva. Nada foi registrado. PARE."
+  fi
+}
+
+# reabre_task <id> — bloqueada -> pendente, no frontmatter e no bloco ```yaml da prosa.
+# So toca o item com esse id e so a linha `status: bloqueada`.
+reabre_task() {
+  local linha rel st arq tmp
+  linha="$(status_da_task "$1")"
+  [ -n "$linha" ] || { evento task_reaberta f5 "$1" aviso "task $1 nao existe mais no plano replanejado: nada a reabrir"; return 0; }
+  rel="$(printf '%s' "$linha" | cut -f1)"; st="$(printf '%s' "$linha" | cut -f2)"
+  case "$st" in
+    pendente) return 0 ;;
+    bloqueada) ;;
+    *) falha "$E_CONTRATO" "task $1 em $st: so uma task bloqueada volta a pendente" ;;
+  esac
+  arq="$PASTA/$rel"; tmp="$arq.tmp.$$"
+  tr -d '\r' < "$arq" | awk -v alvo="$1" -v hoje="$(hoje)" '
+    NR == 1 { if ($0 == "---") fm = 1; print; next }
+    fm && $0 == "---" { fm = 0; corpo = 1; print; next }
+    fm && /^atualizado_em:/ { print "atualizado_em: " hoje; next }
+    fm && /^tasks:/ { t = 1; print; next }
+    fm && t && /^[^ ]/ { t = 0 }
+    fm && t && /^  - id:/ { id = $3 }
+    fm && t && id == alvo && $0 == "    status: bloqueada" { print "    status: pendente"; next }
+    corpo && /^```yaml[ \t]*$/ { bl = 1; pid = ""; print; next }
+    corpo && bl && /^```[ \t]*$/ { bl = 0; print; next }
+    corpo && bl && /^id:[ \t]/ { pid = $2 }
+    corpo && bl && pid == alvo && $0 ~ /^status:[ \t]*bloqueada[ \t]*$/ { print "status: pendente"; next }
+    { print }' > "$tmp" || { rm -f "$tmp"; falha "$E_CONTRATO" "falha ao reabrir $1 em $rel"; }
+  mv -f "$tmp" "$arq"
+  [ "$(status_da_task "$1" | cut -f2)" = pendente ] || falha "$E_CONTRATO" "reabertura de $1 nao gravou status: pendente em $rel"
+  evento task_reaberta f5 "$1" ok "$1 bloqueada -> pendente: o replanejamento da execucao foi aprovado" "$PREFIXO$rel"
+}
+
+# ------------------------------------------------------------------ bloqueios
+
+BLOQ_SH() { SPRINTX_RAIZ="$RAIZ" bash "$SK/scripts/bloqueios.sh" "$@"; }
+
+# le_bloqueios — B_TSV: a saida de `bloqueios.sh listar` (id TAB task TAB classe|legado
+# TAB aberto|resolvido). A classe e a CHAVE gravada; a descricao nunca e lida aqui.
+le_bloqueios() {
+  B_TSV=""
+  [ -f "$PASTA/00-BLOQUEIOS.md" ] || return 0
+  B_TSV="$(BLOQ_SH listar "$SLUG")" || falha "$E_CONTRATO" "00-BLOQUEIOS.md invalido (bloqueios.sh listar recusou)"
+  B_TSV="$(printf '%s' "$B_TSV" | tr -d '\r')"
+}
+
+# campo_bloqueio <B-NN> <2|3|4> — task, classe ou aberto|resolvido, de B_TSV.
+campo_bloqueio() {
+  local i t c e
+  while IFS="$TAB" read -r i t c e; do
+    [ "$i" = "$1" ] || continue
+    case "$2" in 2) printf '%s' "$t" ;; 3) printf '%s' "$c" ;; 4) printf '%s' "$e" ;; esac
+    return 0
+  done <<EOF
+$B_TSV
+EOF
+}
+
+# abertos_tsv — id TAB task TAB classe dos B-NN abertos, em ordem crescente de id.
+abertos_tsv() {
+  local i t c e n
+  le_bloqueios
+  while IFS="$TAB" read -r i t c e; do
+    [ "$e" = aberto ] || continue
+    n="${i#B-}"; while [ "${n#0}" != "$n" ] && [ -n "${n#0}" ]; do n="${n#0}"; done
+    printf '%s\t%s\t%s\t%s\n' "$n" "$i" "$t" "$c"
+  done <<EOF
+$B_TSV
+EOF
+}
+abertos_ordenados() { abertos_tsv | sort -n -k1,1 | cut -f2-; }
+
+estado_do_bloqueio() { le_bloqueios; campo_bloqueio "$1" 4; }
+task_do_bloqueio() { le_bloqueios; campo_bloqueio "$1" 2; }
+
+# ------------------------------------------------------------------ fronteira segura
+
+# fronteira_segura — ao entrar em replanejar_execucao nao pode haver produto sujo
+# na arvore (editado, novo ou staged): so artefatos de metodo. Nunca limpa,
+# stasha nem descarta: recusa e lista.
+fronteira_segura() {
+  # Sem Git nao ha produto versionado a proteger: a fronteira nao e verificavel.
+  git -C "$RAIZ" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+  local pre p sujos=""
+  pre="$(git -C "$RAIZ" rev-parse --show-prefix 2>/dev/null)"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    p="${p#???}"; case "$p" in *" -> "*) p="${p##* -> }" ;; esac
+    p="${p#\"}"; p="${p%\"}"
+    case "$p" in
+      "${pre}docs/sprintx/features/$SLUG/"*|"${pre}docs/sprintx/estimativas/HISTORICO.md"|"${pre}docs/entregas/$SLUG/"*) ;;
+      *) sujos="$sujos $p" ;;
+    esac
+  done <<EOF
+$(git -C "$RAIZ" -c core.quotepath=false -c status.relativePaths=false status --porcelain --untracked-files=all 2>/dev/null)
+EOF
+  if [ -n "$sujos" ]; then
+    printf 'replanejamento=recusado\nmotivo=fronteira_insegura\nestado=%s\n' "$P_ESTADO"
+    evento replanejamento_execucao_recusado f6 - bloqueado "fronteira insegura: produto sujo na arvore:$sujos"
+    printf 'planejamento: replanejamento da execucao recusado — fronteira insegura, ha produto sujo na arvore:%s. Nada foi limpo, stashado, descartado nem gravado. PARE.\n' "$sujos" >&2
+    exit "$E_RECUSADO"
+  fi
+}
 
 # le_planejamento — carrega e valida o arquivo inteiro. Arquivo que nao passa
 # aqui e contrato invalido: nada e decidido em cima dele.
 le_planejamento() {
   [ -f "$ARQ" ] || falha "$E_CONTRATO" "${PREFIXO}00-PLANEJAMENTO.md nao existe"
-  [ "$(fm_valor "$ARQ" expx_schema)" = 1 ] || falha "$E_CONTRATO" "expx_schema deve ser 1"
-  [ "$(fm_valor "$ARQ" expx_tool)" = sprintx ] || falha "$E_CONTRATO" "expx_tool deve ser sprintx"
-  [ "$(fm_valor "$ARQ" kind)" = planejamento ] || falha "$E_CONTRATO" "kind deve ser planejamento"
-  [ "$(fm_valor "$ARQ" trabalho_id)" = "$SLUG" ] || falha "$E_CONTRATO" "trabalho_id nao e $SLUG"
+  fm_carrega "$ARQ"
+  [ "${FM_expx_schema-}" = 1 ] || falha "$E_CONTRATO" "expx_schema deve ser 1"
+  [ "${FM_expx_tool-}" = sprintx ] || falha "$E_CONTRATO" "expx_tool deve ser sprintx"
+  [ "${FM_kind-}" = planejamento ] || falha "$E_CONTRATO" "kind deve ser planejamento"
+  [ "${FM_trabalho_id-}" = "$SLUG" ] || falha "$E_CONTRATO" "trabalho_id nao e $SLUG"
 
-  P_MAX="$(fm_valor "$ARQ" max_reprovacoes_f5)"
-  P_POR="$(fm_valor "$ARQ" orcamento_declarado_por)"
-  P_ESTADO="$(fm_valor "$ARQ" estado)"
-  P_REPROV="$(fm_valor "$ARQ" reprovacoes)"
-  valida_orcamento "$P_MAX" "$P_POR"
+  fm_em P_MAX max_reprovacoes_f5; fm_em P_POR orcamento_declarado_por
+  fm_em P_ESTADO estado; fm_em P_REPROV reprovacoes
+  le_f6
+  valida_orcamento "$P_MAX" "$P_POR" "$P_MAX6"
   case "$P_ESTADO" in
     null|aguardando_f3|aguardando_f4|aguardando_f5|replanejar|aprovado|orcamento_esgotado) ;;
+    replanejar_execucao|replanejamento_execucao_esgotado) ;;
     *) falha "$E_CONTRATO" "estado fora do enum: '$P_ESTADO'" ;;
   esac
   inteiro "$P_REPROV" || falha "$E_CONTRATO" "reprovacoes invalido: '$P_REPROV'"
 
   P_HIST="$(hist_tsv "$ARQ")"
   P_RODADAS=0
-  local nao=0 ultimo="" linha r v a m b d
+  local nao=0 ultimo="" linha r v a m b d reabertas=0
   if [ -n "$P_HIST" ]; then
     while IFS="$(printf '\t')" read -r r v a m b d; do
       [ "$r" != LIXO ] || falha "$E_CONTRATO" "linha inesperada em historico: $v"
       P_RODADAS=$((P_RODADAS + 1))
       [ "$r" = "$P_RODADAS" ] || falha "$E_CONTRATO" "historico fora de sequencia: rodada $r na posicao $P_RODADAS"
       case "$v" in sim|nao) ;; *) falha "$E_CONTRATO" "veredito invalido na rodada $r: '$v'" ;; esac
-      [ "$ultimo" != sim ] || falha "$E_CONTRATO" "rodada $r depois de um veredito sim"
+      # Rodada depois de um SIM so existe quando a F6 devolveu o plano ao planejamento:
+      # no maximo uma sequencia assim por replanejamento da execucao ja aceito.
+      if [ "$ultimo" = sim ]; then
+        reabertas=$((reabertas + 1))
+        [ "$reabertas" -le "$P_N6" ] || falha "$E_CONTRATO" "rodada $r depois de um veredito sim sem replanejamento da execucao que a abrisse"
+      fi
       for linha in "$a" "$m" "$b"; do inteiro "$linha" || falha "$E_CONTRATO" "contagem invalida na rodada $r"; done
-      printf '%s' "$d" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' || falha "$E_CONTRATO" "auditado_em invalido na rodada $r"
+      data_iso "$d" || falha "$E_CONTRATO" "auditado_em invalido na rodada $r"
       if [ "$v" = nao ]; then nao=$((nao + 1)); [ "$a" -gt 0 ] || falha "$E_CONTRATO" "rodada $r nao sem ALTA"
       else [ "$a" -eq 0 ] || falha "$E_CONTRATO" "rodada $r sim com ALTA"; fi
       ultimo="$v"
@@ -182,8 +494,20 @@ EOF
 
   local esgotou=0
   [ "$P_MAX" != null ] && [ "$P_REPROV" -ge "$P_MAX" ] && esgotou=1
+  # Rodada de replanejamento da execucao ativa: so nos estados do laco que ela percorre.
+  if [ -n "$P_BLQ" ]; then
+    case "$P_ESTADO" in
+      replanejar_execucao|aguardando_f4|aguardando_f5|replanejar|orcamento_esgotado|aprovado) ;;
+      *) falha "$E_CONTRATO" "bloqueios_replanejamento_f6 preenchido no estado $P_ESTADO" ;;
+    esac
+  fi
   case "$ultimo:$P_ESTADO" in
     sim:aprovado) ;;
+    sim:replanejar_execucao|sim:aguardando_f4|sim:aguardando_f5)
+      [ -n "$P_BLQ" ] || falha "$E_CONTRATO" "estado $P_ESTADO depois de um veredito sim sem rodada de replanejamento da execucao ativa" ;;
+    sim:replanejamento_execucao_esgotado)
+      [ -z "$P_BLQ" ] && [ "$P_MAX6" != null ] && [ "$P_N6" -ge "$P_MAX6" ] \
+        || falha "$E_CONTRATO" "replanejamento_execucao_esgotado sem o orcamento da F6 consumido" ;;
     sim:*) falha "$E_CONTRATO" "ultima rodada sim exige estado aprovado" ;;
     *:aprovado) falha "$E_CONTRATO" "estado aprovado sem rodada sim no historico" ;;
     :null|:aguardando_f3|:aguardando_f4|:aguardando_f5) ;;
@@ -197,11 +521,18 @@ EOF
 
 # ------------------------------------------------------------------ escrita
 
+# f6_herda — o eixo F6 a gravar (W6_*) comeca igual ao lido (P_*).
+f6_herda() { W6="$P_F6"; W6_MAX="$P_MAX6"; W6_N="$P_N6"; W6_BLQ="$P_BLQ"; W6_CONG="$P_CONG"; W6_ASS="$P_ASS"; }
+f6_novo() { W6=presente; W6_MAX="$1"; W6_N=0; W6_BLQ=""; W6_CONG=""; W6_ASS=null; }
+lista_yaml() { if [ -z "$1" ]; then printf '[]'; else printf '[%s]' "$(printf '%s' "$1" | sed 's/ /, /g')"; fi; }
+
 # escreve <max> <por> <estado> <reprovacoes> <historico_tsv> — o arquivo inteiro,
 # a partir do template, de forma atomica. O historico recebido ja inclui as
-# rodadas anteriores intactas: e assim que ele continua append-only.
+# rodadas anteriores intactas: e assim que ele continua append-only. O eixo F6
+# vem de W6_* (f6_herda/f6_novo); legado continua sem as chaves — nunca ganha
+# orcamento numa regravacao.
 escreve() {
-  local max="$1" por="$2" estado="$3" reprov="$4" hist="$5" data tmp yaml prosa teto
+  local max="$1" por="$2" estado="$3" reprov="$4" hist="$5" data tmp yaml prosa teto t6="" rodada6=""
   [ -f "$TEMPLATE" ] || falha "$E_CONTRATO" "template ausente: assets/TEMPLATE-PLANEJAMENTO.md"
   data="$(hoje)"
 
@@ -229,17 +560,31 @@ $hist
 EOF
   fi
   if [ "$max" = null ]; then teto="$reprov, sem teto"; else teto="$reprov de $max (teto declarado por \`$por\`)"; fi
+  if [ "$W6" = presente ]; then
+    if [ "$W6_MAX" = null ]; then t6=" · replanejamentos da execução (F6): $W6_N, sem orçamento declarado"
+    else t6=" · replanejamentos da execução (F6): $W6_N de $W6_MAX (teto declarado por \`$por\`)"; fi
+    [ -n "$W6_BLQ" ] && rodada6="
+
+Rodada de replanejamento da execução ativa, aberta por: $(printf '%s' "$W6_BLQ" | sed 's/ /, /g'). Tasks concluídas congeladas: $(printf '%s' "$W6_CONG" | sed 's/ /, /g')."
+  fi
 
   mkdir -p "$PASTA" || falha "$E_CONTRATO" "nao foi possivel criar $PREFIXO"
   tmp="$ARQ.tmp.$$"
   {
     printf -- '---\nexpx_schema: 1\nexpx_tool: sprintx\nkind: planejamento\ntrabalho_id: %s\n' "$SLUG"
-    printf 'max_reprovacoes_f5: %s\norcamento_declarado_por: %s\nestado: %s\nreprovacoes: %s\natualizado_em: %s\n' \
-      "$max" "$por" "$estado" "$reprov" "$data"
+    if [ "$W6" = presente ]; then
+      printf 'max_reprovacoes_f5: %s\nmax_replanejamentos_f6: %s\norcamento_declarado_por: %s\nestado: %s\nreprovacoes: %s\n' \
+        "$max" "$W6_MAX" "$por" "$estado" "$reprov"
+      printf 'replanejamentos_f6: %s\nbloqueios_replanejamento_f6: %s\ntasks_congeladas: %s\nassinatura_congeladas: %s\natualizado_em: %s\n' \
+        "$W6_N" "$(lista_yaml "$W6_BLQ")" "$(lista_yaml "$W6_CONG")" "$W6_ASS" "$data"
+    else
+      printf 'max_reprovacoes_f5: %s\norcamento_declarado_por: %s\nestado: %s\nreprovacoes: %s\natualizado_em: %s\n' \
+        "$max" "$por" "$estado" "$reprov" "$data"
+    fi
     printf '%s\n---\n' "$yaml"
     # Texto com quebra de linha vai por ENVIRON, nunca por `awk -v`: o awk do
     # BSD recusa newline numa atribuicao -v.
-    tr -d '\r' < "$TEMPLATE" | SX_SLUG="$SLUG" SX_BLOCO="Estado: \`$estado\` · reprovações da F5: $teto · atualizado em $data.
+    tr -d '\r' < "$TEMPLATE" | SX_SLUG="$SLUG" SX_BLOCO="Estado: \`$estado\` · reprovações da F5: $teto$t6 · atualizado em $data.$rodada6
 
 $prosa" awk '
       NR == 1 { next }
@@ -367,8 +712,10 @@ estado_efetivo() {
 # contrato. Sem teto: orcamento nunca e inventado. Quando o disco ja tem um
 # veredito, ele vira a rodada 1, contada da tabela como esta. O veredito legado
 # e preservado, nunca lavado: SIM com achado ALTA e contrato invalido.
-migra_legado() { # migra_legado [max] [por] — sem argumentos, sem teto
+migra_legado() { # migra_legado [max] [por] [max6] — sem argumentos, sem teto e sem orcamento da F6
   local max="${1:-null}" por="${2:-null}" estado="$E_ESTADO" v altas medias baixas reprov=0 hist=""
+  # O arquivo nasce agora: com o eixo F6, e so com o orcamento que alguem declarou.
+  f6_novo "${3:-null}"
   case "$E_ESTADO" in
     aprovado|replanejar)
       v=sim; [ "$E_ESTADO" = replanejar ] && { v=nao; reprov=1; }
@@ -394,7 +741,8 @@ fase_do_estado() {
     aguardando_f4) printf 'F4' ;;
     aguardando_f5) printf 'F5' ;;
     aprovado) printf 'F6' ;;
-    orcamento_esgotado) printf 'PARAR' ;;
+    replanejar_execucao) printf 'F3' ;;
+    orcamento_esgotado|replanejamento_execucao_esgotado) printf 'PARAR' ;;
   esac
 }
 
@@ -405,6 +753,8 @@ marco() {
     aguardando_f4) M_FASE=f3; M_RODADA=0 ;;
     aguardando_f5) M_FASE=f4; M_RODADA=0 ;;
     replanejar|aprovado|orcamento_esgotado) M_FASE=f5; M_RODADA="$P_RODADAS" ;;
+    # O retorno da F6: a rodada e o numero do replanejamento da execucao.
+    replanejar_execucao|replanejamento_execucao_esgotado) M_FASE=f6; M_RODADA="$P_N6" ;;
     *) M_FASE=""; M_RODADA=0 ;;
   esac
 }
@@ -463,7 +813,11 @@ pendente_msg() {
 # checkpoint — commit LOCAL, na branch feature/<slug>, so da pasta da feature.
 # Nunca push, nunca --no-verify, nunca limpa, descarta ou stasha nada.
 checkpoint() {
-  le_planejamento; marco
+  le_planejamento
+  # Rodada de replanejamento da execucao aprovada e ainda nao fechada: fechar e
+  # parte de persistir a aprovacao (idempotente — retomavel depois de uma queda).
+  if [ "$P_ESTADO" = aprovado ] && [ -n "$P_BLQ" ]; then fecha_rodada; le_planejamento; fi
+  marco
   [ -n "$M_FASE" ] || falha "$E_TRANSICAO" "estado $P_ESTADO ainda nao tem marco de checkpoint (a F2 nao terminou)"
 
   modo_git
@@ -499,6 +853,7 @@ checkpoint() {
 
   local rotulo="$M_FASE" saida
   [ "$M_FASE" = f5 ] && rotulo="f5 rodada $M_RODADA"
+  [ "$M_FASE" = f6 ] && rotulo="f6 replanejamento $M_RODADA"
   if ! saida="$(git -C "$RAIZ" commit -q \
         -m "chore(sprintx): checkpoint de planejamento $SLUG — $rotulo" \
         -m "Planejamento: checkpoint
@@ -536,14 +891,23 @@ EOF
 # ------------------------------------------------------------------ comandos
 
 cmd_criar() {
-  [ $# -ge 1 ] && [ $# -le 3 ] || falha "$E_USO" "uso: criar <slug> [max_reprovacoes_f5|null] [declarado_por|null]"
+  [ $# -ge 1 ] && [ $# -le 4 ] || falha "$E_USO" "uso: criar <slug> [max_reprovacoes_f5|null] [declarado_por|null] [max_replanejamentos_f6|null]"
   contexto "$1"
-  local max="${2:-null}" por="${3:-null}"
-  valida_orcamento "$max" "$por"
+  local max="${2:-null}" por="${3:-null}" max6="${4:-null}"
+  valida_orcamento "$max" "$por" "$max6"
+  valida_orcamento_f6 "$max6" "$por"
   if [ -f "$ARQ" ]; then
     le_planejamento
     if [ "$P_MAX" != "$max" ] || [ "$P_POR" != "$por" ]; then
       falha "$E_CONTRATO" "00-PLANEJAMENTO.md ja registra orcamento $P_MAX/$P_POR; o pedido traz $max/$por — orcamento nao muda em silencio"
+    fi
+    # Planejamento legado nao tem o eixo F6: continua sem ele. Declarar agora um
+    # teto que o arquivo nao tem seria acrescentar orcamento em silencio.
+    if [ "$P_F6" = legado ] && [ "$max6" != null ]; then
+      falha "$E_CONTRATO" "00-PLANEJAMENTO.md e anterior ao orcamento da F6 (legado); o pedido traz max_replanejamentos_f6=$max6 — orcamento nao e acrescentado numa retomada"
+    fi
+    if [ "$P_F6" = presente ] && [ "$P_MAX6" != "$max6" ]; then
+      falha "$E_CONTRATO" "00-PLANEJAMENTO.md ja registra max_replanejamentos_f6=$P_MAX6; o pedido traz $max6 — orcamento nao muda em silencio"
     fi
     printf 'planejamento=ja_existe\nestado=%s\n' "$P_ESTADO"
     return 0
@@ -552,13 +916,14 @@ cmd_criar() {
   if [ "$E_ESTADO" != null ]; then
     # Feature legada ja adiantada: nasce com o estado que o disco mostra, e com
     # o orcamento que o caller declarou agora.
-    migra_legado "$max" "$por"
+    migra_legado "$max" "$por" "$max6"
     le_planejamento
-    printf 'planejamento=migrado_legado\nmax_reprovacoes_f5=%s\norcamento_declarado_por=%s\nestado=%s\n' "$max" "$por" "$P_ESTADO"
+    printf 'planejamento=migrado_legado\nmax_reprovacoes_f5=%s\norcamento_declarado_por=%s\nmax_replanejamentos_f6=%s\nestado=%s\n' "$max" "$por" "$max6" "$P_ESTADO"
     return 0
   fi
+  f6_novo "$max6"
   escreve "$max" "$por" null 0 ""
-  printf 'planejamento=criado\nmax_reprovacoes_f5=%s\norcamento_declarado_por=%s\nestado=null\n' "$max" "$por"
+  printf 'planejamento=criado\nmax_reprovacoes_f5=%s\norcamento_declarado_por=%s\nmax_replanejamentos_f6=%s\nestado=null\n' "$max" "$por" "$max6"
 }
 
 cmd_avanca() {
@@ -575,9 +940,11 @@ cmd_avanca() {
     rastro "$M_FASE" bloqueado "avanca $alvo recusado: $(pendente_msg)"
     falha "$E_PERSISTENCIA" "avanca $alvo recusado — $(pendente_msg)"
   fi
+  fechamento_pendente "avanca $alvo"
   case "$alvo:$E_ESTADO" in
     f2:null|f2:aguardando_f3) novo=aguardando_f3 ;;
-    f3:aguardando_f3|f3:replanejar|f3:aguardando_f4|f3:aguardando_f5) novo=aguardando_f4 ;;
+    # O retorno da F6 entra pela revisao do plano (F3) — nunca pela F1/F2.
+    f3:aguardando_f3|f3:replanejar|f3:aguardando_f4|f3:aguardando_f5|f3:replanejar_execucao) novo=aguardando_f4 ;;
     f4:aguardando_f4|f4:aguardando_f5) novo=aguardando_f5 ;;
     f5:aguardando_f5) novo="" ;;
     f2:*|f3:*|f4:*|f5:*)
@@ -593,11 +960,18 @@ cmd_avanca() {
     printf 'planejamento=migrado_legado\n'
     le_planejamento
   fi
+  f6_herda
+  # Rodada de replanejamento da execucao ativa: cada portao confere que as tasks
+  # concluidas continuam congeladas, antes de gravar qualquer coisa.
+  if [ -n "$P_BLQ" ]; then confere_congeladas "$alvo"; fi
 
   if [ "$alvo" = f5 ]; then
     valida_auditoria
     local rodada=$((P_RODADAS + 1)) reprov="$P_REPROV" hist
-    if [ "$A_VEREDITO" = sim ]; then novo=aprovado
+    if [ "$A_VEREDITO" = sim ]; then
+      novo=aprovado
+      # A aprovacao fecha a rodada: confira antes o que o fechamento vai tocar.
+      if [ -n "$P_BLQ" ]; then valida_rodada; fi
     else
       reprov=$((reprov + 1))
       if [ "$P_MAX" != null ] && [ "$reprov" -ge "$P_MAX" ]; then novo=orcamento_esgotado; else novo=replanejar; fi
@@ -614,6 +988,182 @@ $hist"
   le_planejamento
   printf 'estado=%s\nreprovacoes=%s\nmax_reprovacoes_f5=%s\nproxima=%s\n' \
     "$P_ESTADO" "$P_REPROV" "$P_MAX" "$(fase_do_estado "$P_ESTADO")"
+  saida_f6
+}
+
+# saida_f6 — o eixo F6 no stdout de fase/avanca/replanejar-execucao.
+saida_f6() {
+  if [ "$P_F6" = legado ]; then printf 'orcamento_f6=legado\n'; return 0; fi
+  printf 'replanejamentos_f6=%s\nmax_replanejamentos_f6=%s\n' "$P_N6" "$P_MAX6"
+  if [ -n "$P_BLQ" ]; then
+    printf 'replanejamento_execucao=ativo\nbloqueios_replanejamento_f6=%s\ntasks_congeladas=%s\n' \
+      "$(printf '%s' "$P_BLQ" | tr ' ' ',')" "$(printf '%s' "$P_CONG" | tr ' ' ',')"
+  fi
+  return 0
+}
+
+# fechamento_pendente <acao> — aprovado com a lista da rodada ainda preenchida e
+# uma aprovacao gravada cujo fechamento nao terminou: so `checkpoint` completa.
+fechamento_pendente() {
+  [ "$E_ESTADO" = aprovado ] && [ -n "$P_BLQ" ] || return 0
+  printf 'estado=aprovado\nproxima=CHECKPOINT\nfechamento=pendente\n'
+  falha "$E_PERSISTENCIA" "$1 recusado — o replanejamento da execucao foi aprovado e o fechamento da rodada ($P_BLQ) nao terminou: execute \`planejamento.sh checkpoint $SLUG\`"
+}
+
+# valida_rodada — os B-NN da rodada existem, sao defeito_de_plano, e a task de
+# cada um esta bloqueada, pendente ou saiu do plano replanejado.
+valida_rodada() {
+  local b t c st
+  le_bloqueios
+  for b in $P_BLQ; do
+    c="$(campo_bloqueio "$b" 3)"; t="$(campo_bloqueio "$b" 2)"
+    [ -n "$c" ] || falha "$E_CONTRATO" "$b da rodada de replanejamento nao existe em 00-BLOQUEIOS.md"
+    [ "$c" = defeito_de_plano ] || falha "$E_CONTRATO" "$b da rodada tem classe $c: so defeito_de_plano abre replanejamento da execucao"
+    case "$t" in null|-) continue ;; esac
+    st="$(status_da_task "$t" | cut -f2)"
+    case "$st" in
+      ""|bloqueada|pendente) ;;
+      *) falha "$E_CONTRATO" "task $t de $b esta $st: o replanejamento so devolve a pendente uma task bloqueada" ;;
+    esac
+  done
+}
+
+# fecha_rodada — com o estado ja em `aprovado`: resolve os B-NN que abriram a
+# rodada (e so eles), reabre a task bloqueada de cada um, esvazia a rodada.
+# Task concluida nunca e tocada. Idempotente: B-NN ja resolvido e task ja pendente
+# sao pulados.
+fecha_rodada() {
+  local b t blq="$P_BLQ"
+  confere_congeladas f5
+  valida_rodada
+  for b in $blq; do
+    if [ "$(estado_do_bloqueio "$b")" = aberto ]; then
+      BLOQ_SH resolver "$SLUG" "$b" >/dev/null \
+        || falha "$E_CONTRATO" "bloqueios.sh resolver $b recusou no fechamento da rodada; nada mais foi alterado. Rode \`planejamento.sh checkpoint $SLUG\` depois de corrigir"
+    fi
+  done
+  for b in $blq; do
+    t="$(task_do_bloqueio "$b")"
+    case "$t" in null|-|"") ;; *) reabre_task "$t" ;; esac
+  done
+  f6_herda; W6_BLQ=""; W6_CONG=""; W6_ASS=null
+  escreve "$P_MAX" "$P_POR" "$P_ESTADO" "$P_REPROV" "$P_HIST"
+  evento replanejamento_execucao_aprovado f5 - ok "replanejamento da execucao $P_N6 aprovado na F5 rodada $P_RODADAS: $(printf '%s' "$blq" | tr ' ' ',') resolvido(s); tasks concluidas intactas"
+}
+
+# replanejar-execucao — a F6 registrou defeito_de_plano: volta ao planejamento
+# pela revisao do plano (F3), congelando o que ja foi concluido.
+cmd_replanejar_execucao() {
+  [ $# -eq 1 ] || falha "$E_USO" "uso: replanejar-execucao <slug>"
+  contexto "$1"
+  if [ ! -f "$ARQ" ]; then
+    printf 'replanejamento=recusado\nmotivo=planejamento_legado\n'
+    evento replanejamento_execucao_recusado f6 - bloqueado "feature sem 00-PLANEJAMENTO.md: sem orcamento da F6, nada e inventado"
+    falha "$E_TRANSICAO" "replanejamento da execucao recusado: a feature nao tem 00-PLANEJAMENTO.md (legado) — sem orcamento da F6 declarado. PARE e relate."
+  fi
+  estado_efetivo
+  persistencia
+  if [ "$PERSIST" = pendente ]; then
+    printf 'estado=%s\nproxima=CHECKPOINT\npersistencia=pendente\n' "$E_ESTADO"
+    falha "$E_PERSISTENCIA" "replanejar-execucao recusado — $(pendente_msg)"
+  fi
+  fechamento_pendente replanejar-execucao
+
+  # Mesma rodada: retomar nunca consome orcamento de novo.
+  if [ -n "$P_BLQ" ]; then
+    printf 'replanejamento=retomada\nestado=%s\nreprovacoes=%s\nmax_reprovacoes_f5=%s\nproxima=%s\n' \
+      "$P_ESTADO" "$P_REPROV" "$P_MAX" "$(fase_do_estado "$P_ESTADO")"
+    saida_f6
+    evento replanejamento_execucao_retomado f6 - ok "retomada da rodada $P_N6 ($P_BLQ) no estado $P_ESTADO: orcamento da F6 nao consumido de novo"
+    return 0
+  fi
+  if [ "$P_ESTADO" = replanejamento_execucao_esgotado ]; then
+    printf 'replanejamento=esgotado\nestado=%s\nproxima=PARAR\n' "$P_ESTADO"
+    saida_f6
+    return 0
+  fi
+  if [ "$P_ESTADO" != aprovado ]; then
+    printf 'replanejamento=recusado\nmotivo=estado\nestado=%s\nproxima=%s\n' "$P_ESTADO" "$(fase_do_estado "$P_ESTADO")"
+    falha "$E_TRANSICAO" "replanejar-execucao so parte da F6 (estado aprovado); o estado e $P_ESTADO"
+  fi
+
+  # O gatilho e a CHAVE classe dos B-NN abertos — nunca a descricao.
+  local abertos b t c defeitos="" outros="" motivo
+  abertos="$(abertos_ordenados)"
+  while IFS="$(printf '\t')" read -r b t c; do
+    [ -n "$b" ] || continue
+    if [ "$c" = defeito_de_plano ]; then defeitos="$defeitos $b"; else outros="$outros $b:$c"; fi
+  done <<EOF
+$abertos
+EOF
+  defeitos="${defeitos# }"; outros="${outros# }"
+  motivo=""
+  if [ -z "$defeitos" ] && [ -z "$outros" ]; then motivo=sem_bloqueio_aberto
+  elif [ -z "$defeitos" ]; then motivo=sem_defeito_de_plano
+  elif [ -n "$outros" ]; then motivo=classes_mistas
+  elif [ "$P_F6" = legado ]; then motivo=orcamento_f6_legado
+  elif [ "$P_MAX6" = null ]; then motivo=orcamento_f6_nao_declarado
+  fi
+  if [ -n "$motivo" ]; then
+    printf 'replanejamento=recusado\nmotivo=%s\nestado=%s\nabertos=%s\n' "$motivo" "$P_ESTADO" "$(printf '%s' "$defeitos${outros:+ }$outros" | tr ' ' ',')"
+    saida_f6
+    evento replanejamento_execucao_recusado f6 - bloqueado "$motivo: abertos [$defeitos${outros:+ }$outros]; estado $P_ESTADO mantido"
+    falha "$E_TRANSICAO" "replanejamento da execucao recusado ($motivo): nada foi gravado; o estado continua $P_ESTADO. PARE e relate os bloqueios abertos."
+  fi
+
+  f6_herda
+  if [ "$P_N6" -ge "$P_MAX6" ]; then
+    # Orcamento da F6 consumido: nenhuma rodada nova. Estado terminal proprio,
+    # distinto de orcamento_esgotado (F5).
+    escreve "$P_MAX" "$P_POR" replanejamento_execucao_esgotado "$P_REPROV" "$P_HIST"
+    evento replanejamento_execucao_esgotado f6 - bloqueado "orcamento da F6 consumido ($P_N6 de $P_MAX6): defeito_de_plano [$defeitos] nao abre rodada nova"
+    checkpoint
+    le_planejamento
+    printf 'replanejamento=esgotado\nestado=%s\nreprovacoes=%s\nmax_reprovacoes_f5=%s\nproxima=PARAR\nabertos=%s\n' \
+      "$P_ESTADO" "$P_REPROV" "$P_MAX" "$(printf '%s' "$defeitos" | tr ' ' ',')"
+    saida_f6
+    return 0
+  fi
+
+  # A task de cada bloqueio ja tem de estar gravada como bloqueada.
+  local st
+  for b in $defeitos; do
+    t="$(task_do_bloqueio "$b")"
+    case "$t" in null|-|"") continue ;; esac
+    st="$(status_da_task "$t" | cut -f2)"
+    [ "$st" = bloqueada ] || falha "$E_CONTRATO" "$b aponta $t, que esta '${st:-fora do plano}' em tasks.md: grave a task como bloqueada antes de replanejar"
+  done
+  fronteira_segura
+
+  calcula_congeladas
+  W6_N=$((P_N6 + 1)); W6_BLQ="$defeitos"; W6_CONG="$C_IDS"; W6_ASS="$C_ASS"
+  escreve "$P_MAX" "$P_POR" replanejar_execucao "$P_REPROV" "$P_HIST"
+  evento replanejamento_execucao_iniciado f6 - ok "replanejamento da execucao $W6_N de $P_MAX6 aberto por [$defeitos]; reprovacoes da F5 continuam em $P_REPROV; congeladas [$W6_CONG]"
+  checkpoint
+  le_planejamento
+  printf 'replanejamento=iniciado\nestado=%s\nreprovacoes=%s\nmax_reprovacoes_f5=%s\nproxima=%s\n' \
+    "$P_ESTADO" "$P_REPROV" "$P_MAX" "$(fase_do_estado "$P_ESTADO")"
+  saida_f6
+}
+
+# pode-resolver — um defeito_de_plano so e resolvido quando pertence a rodada de
+# replanejamento da execucao e essa rodada ja voltou a `aprovado` pela F5.
+cmd_pode_resolver() {
+  [ $# -eq 2 ] || falha "$E_USO" "uso: pode-resolver <slug> <B-NN>"
+  contexto "$1"
+  local b="$2" motivo=""
+  if [ ! -f "$ARQ" ]; then motivo=sem_planejamento
+  else
+    le_planejamento
+    if ! em_lista "$b" "$P_BLQ"; then motivo=fora_da_rodada
+    elif [ "$P_ESTADO" != aprovado ]; then motivo=rodada_nao_aprovada
+    fi
+  fi
+  if [ -n "$motivo" ]; then
+    printf 'pode_resolver=nao\nmotivo=%s\n' "$motivo"
+    falha "$E_TRANSICAO" "$b nao pode ser resolvido agora ($motivo): defeito_de_plano so e resolvido quando o plano replanejado volta a aprovado"
+  fi
+  printf 'pode_resolver=sim\n'
 }
 
 cmd_checkpoint() {
@@ -635,7 +1185,12 @@ cmd_fase() {
     printf 'fase=CHECKPOINT\nestado=%s\nfonte=%s\npersistencia=pendente\n' "$E_ESTADO" "$E_FONTE"
     falha "$E_PERSISTENCIA" "$(pendente_msg)"
   fi
+  if [ "$E_ESTADO" = aprovado ] && [ -n "$P_BLQ" ]; then
+    printf 'fase=CHECKPOINT\nestado=aprovado\nfonte=%s\nfechamento=pendente\n' "$E_FONTE"
+    falha "$E_PERSISTENCIA" "o replanejamento da execucao foi aprovado e o fechamento da rodada nao terminou: execute \`planejamento.sh checkpoint $SLUG\`"
+  fi
   printf 'fase=%s\nestado=%s\nfonte=%s\npersistencia=%s\n' "$(fase_do_estado "$E_ESTADO")" "$E_ESTADO" "$E_FONTE" "$PERSIST"
+  saida_f6
 }
 
 cmd_valida_auditoria() {
@@ -715,11 +1270,13 @@ cmd_revisor() {
 
 # ------------------------------------------------------------------ entrada
 
-[ $# -ge 1 ] || { sed -n '14,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "$E_USO"; }
+[ $# -ge 1 ] || { sed -n '17,29p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "$E_USO"; }
 CMD="$1"; shift
 case "$CMD" in
   criar)            cmd_criar "$@" ;;
   avanca)           cmd_avanca "$@" ;;
+  replanejar-execucao) cmd_replanejar_execucao "$@" ;;
+  pode-resolver)    cmd_pode_resolver "$@" ;;
   checkpoint)       cmd_checkpoint "$@" ;;
   fase)             cmd_fase "$@" ;;
   valida-auditoria) cmd_valida_auditoria "$@" ;;
