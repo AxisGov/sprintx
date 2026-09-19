@@ -578,6 +578,7 @@ existe "g0-script-existe" "$PL"
 existe "g0-template-existe" "$TPL"
 bash -n "$PL"; afirma "g0-script-sintaxe" $? "bash -n"
 G="$(mktemp -d)"
+CMD_PL='bash <raiz-da-skill>/scripts/planejamento.sh'
 kv() { printf '%s\n' "$1" | sed -n "s/^$2=//p" | tail -1; }
 pl() { local d="$1"; shift; (cd "$d" && bash "$PL" "$@") 2>&1; }
 fmv() { tr -d '\r' < "$1" | awk -v k="$2" 'NR==1{next} $0=="---"{exit} index($0,k": ")==1{print substr($0,length(k)+3); exit}'; }
@@ -927,6 +928,55 @@ s="$(pl "$D" fase menu)"; [ $? -eq 0 ] && [ "$(kv "$s" fase)" = F6 ] && [ "$(hea
 afirma "gca3-f6-depois-do-checkpoint" $? "fase $(kv "$s" fase)"
 
 # R/S. Feature legada, sem 00-PLANEJAMENTO.md.
+# A F1 seguindo o contrato: cada linha da tabela "pedido -> comando" de 01-ingestao.md e
+# executada de verdade (o comando sai do documento, nao do teste) e o arquivo gravado tem de
+# ter exatamente os tetos que o pedido declarou — `null` no que ele nao declarou, nunca um 1
+# presumido. f1_orcamento <01-ingestao.md> — imprime o motivo da primeira falha.
+f1_orcamento() {
+  local doc="$1" linhas n=0 f6=0 sem6=0 ped cmd args k esp v d a
+  linhas="$(tr -d '\r' < "$doc" | awk '/^\| O pedido declara \| Comando \|$/{t=1; next} t && /^\|---/{next} t && /^\|/{print; next} t{exit}')"
+  [ -n "$linhas" ] || { printf 'tabela pedido -> comando ausente'; return 1; }
+  while IFS= read -r l; do
+    ped="$(printf '%s' "$l" | cut -d'|' -f2)"; cmd="$(printf '%s' "$l" | cut -d'|' -f3 | sed 's/^ *`//; s/` *$//')"
+    case "$cmd" in "criar <slug>"|"criar <slug> "*) ;; *) printf 'comando fora da forma: %s' "$cmd"; return 1 ;; esac
+    n=$((n + 1)); args="${cmd#criar <slug>}"
+    d="$G/f1-$n"; rm -rf "$d"; nova_feature "$d" menu
+    # shellcheck disable=SC2086
+    pl "$d" criar menu $args >/dev/null || { printf 'linha %s: criar menu%s falhou' "$n" "$args"; return 1; }
+    a="$(fdir "$d" menu)/00-PLANEJAMENTO.md"
+    for k in max_reprovacoes_f5 orcamento_declarado_por max_replanejamentos_f6; do
+      esp="$(printf '%s' "$ped" | tr ',' '\n' | sed -n "s/^ *\`$k: \([^\`]*\)\` *\$/\1/p")"; [ -n "$esp" ] || esp=null
+      v="$(fmv "$a" "$k")"
+      [ "$v" = "$esp" ] || { printf 'linha %s (%s): %s=%s, o pedido declara %s' "$n" "$cmd" "$k" "$v" "$esp"; return 1; }
+      if [ "$k" = max_replanejamentos_f6 ]; then if [ "$esp" = null ]; then sem6=$((sem6 + 1)); else f6=$((f6 + 1)); fi; fi
+    done
+    [ "$(fmv "$a" replanejamentos_f6)" = 0 ] || { printf 'linha %s: replanejamentos_f6 nao nasce 0' "$n"; return 1; }
+  done <<EOF
+$linhas
+EOF
+  [ "$f6" -ge 1 ] && [ "$sem6" -ge 1 ] || { printf '%s linha(s) com teto da F6, %s sem' "$f6" "$sem6"; return 1; }
+  printf 'ok'
+}
+m="$(f1_orcamento "$SK/references/01-ingestao.md")"; [ "$m" = ok ]; afirma "ga8-f1-repassa-os-tres-tetos-do-pedido" $? "$m"
+D="$G/f1-buildx"; nova_feature "$D" menu; A_ARQ="$(fdir "$D" menu)/00-PLANEJAMENTO.md"
+tem "$SK/references/01-ingestao.md" '| `max_reprovacoes_f5: 3`, `orcamento_declarado_por: buildx`, `max_replanejamentos_f6: 1` | `criar <slug> 3 buildx 1` |' \
+  && tem "$SK/references/01-ingestao.md" "$CMD_PL criar <slug> [max_reprovacoes_f5] [orcamento_declarado_por] [max_replanejamentos_f6]" \
+  && pl "$D" criar menu 3 buildx 1 >/dev/null && [ "$(fmv "$A_ARQ" max_replanejamentos_f6)" = 1 ] && [ "$(fmv "$A_ARQ" replanejamentos_f6)" = 0 ]
+afirma "ga9-f1-briefing-buildx-grava-1-de-0" $? "max_replanejamentos_f6: 1, replanejamentos_f6: 0"
+D="$G/f1-sem"; nova_feature "$D" menu; A_ARQ="$(fdir "$D" menu)/00-PLANEJAMENTO.md"
+pl "$D" criar menu >/dev/null && [ "$(fmv "$A_ARQ" max_replanejamentos_f6)" = null ] && [ "$(fmv "$A_ARQ" replanejamentos_f6)" = 0 ] \
+  && D="$G/f1-so-f5" && nova_feature "$D" menu && pl "$D" criar menu 3 buildx >/dev/null \
+  && [ "$(fmv "$(fdir "$D" menu)/00-PLANEJAMENTO.md" max_replanejamentos_f6)" = null ]
+afirma "ga10-f1-sem-orcamento-nao-ganha-1" $? "sem pedido e so com a F5: max_replanejamentos_f6 null"
+# Auto-teste: a tabela com o contrato antigo (F6 do BuildX sem o quarto argumento) e com um 1
+# presumido para quem nao declarou tem de reprovar.
+ING="$SK/references/01-ingestao.md"
+muta_ing() { ML_A="$2" ML_B="$3" awk '{ a = ENVIRON["ML_A"]; i = index($0, a); if (i) { $0 = substr($0, 1, i - 1) ENVIRON["ML_B"] substr($0, i + length(a)); n++ } print } END { exit n ? 0 : 1 }' "$ING" > "$1"; }
+muta_ing "$G/ing-a.md" '`max_replanejamentos_f6: 1` | `criar <slug> 3 buildx 1` |' '`max_replanejamentos_f6: 1` | `criar <slug> 3 buildx` |'; rc=$?
+m="$(f1_orcamento "$G/ing-a.md")"; [ "$rc" -eq 0 ] && [ "$m" != ok ]; afirma "ga11-mutante-f1-contrato-antigo" $? "morto: $m"
+muta_ing "$G/ing-b.md" '`orcamento_declarado_por: buildx` | `criar <slug> 3 buildx` |' '`orcamento_declarado_por: buildx` | `criar <slug> 3 buildx 1` |'; rc=$?
+m="$(f1_orcamento "$G/ing-b.md")"; [ "$rc" -eq 0 ] && [ "$m" != ok ]; afirma "ga11-mutante-f1-presume-1" $? "morto: $m"
+
 legado() { # legado <dir> <conteudo-da-auditoria|->
   mkdir -p "$1/docs/sprintx/features/velha/base" "$1/docs/sprintx/features/velha/sprint-01"
   printf 'i\n' > "$1/docs/sprintx/features/velha/base/00-INDICE.md"; printf 'd\n' > "$1/docs/sprintx/features/velha/00-DECISOES.md"
@@ -1539,6 +1589,11 @@ sed -e '/^max_replanejamentos_f6:/d' -e '/^replanejamentos_f6:/d' -e '/^bloqueio
   = "expx_schema expx_tool kind trabalho_id max_reprovacoes_f5 orcamento_declarado_por estado reprovacoes atualizado_em historico " ] \
   && [ "$(kv "$(pl "$FXL" fase menu)" fase)" = F6 ]
 afirma "k0-fixture-planejamento-legado" $? "forma P0.1, sem o eixo F6, valida e em F6"
+# Feature anterior ao 00-PLANEJAMENTO.md: o estado sai do disco (auditoria SIM -> F6).
+FXS="$K/fx-sem-planejamento"; cp -R "$FXP" "$FXS"
+git -C "$FXS" rm -q docs/sprintx/features/menu/00-PLANEJAMENTO.md && git -C "$FXS" commit -q -m "legado sem planejamento" \
+  && [ ! -f "$(kf "$FXS")/00-PLANEJAMENTO.md" ] && s="$(pl "$FXS" fase menu)" && [ "$(kv "$s" fase)" = F6 ] && [ "$(kv "$s" fonte)" = legado ]
+afirma "k0-fixture-sem-planejamento" $? "sem 00-PLANEJAMENTO.md, auditoria SIM, fase F6 pela tabela antiga"
 
 # K1. O piloto: entra em replanejar_execucao, consome 1/1, B-01 aberto, concluidas intactas, F5 intacto.
 k_inicia() {
@@ -1644,6 +1699,36 @@ k_recusa() {
     && [ "$(cksum < "$f/00-PLANEJAMENTO.md")" = "$ck" ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] \
     && [ "$(fmv "$f/00-PLANEJAMENTO.md" estado)" = aprovado ] && [ "$(kv "$(kpl "$s" "$d" fase menu)" fase)" = F6 ]
 }
+# k_recusa_duravel <script> <dir> <motivo> — recusa OPERACIONAL: o terminal
+# replanejamento_execucao_recusado gravado com o motivo e persistido num checkpoint; nenhuma
+# rodada, contador, task ou bloqueio mexido; um evento. Repetir devolve o mesmo terminal e o
+# mesmo motivo sem gravar, commitar nem registrar nada.
+k_recusa_duravel() {
+  local s="$1" d="$2" f a h n6 st0 bl0 out rc ck ev; f="$(kf "$d")"; a="$f/00-PLANEJAMENTO.md"
+  h="$(git -C "$d" rev-parse HEAD)"; n6=0; [ -f "$a" ] && n6="$(fmv "$a" replanejamentos_f6)"
+  st0="$(kst "$d" T-04.03)"; bl0="$(kbl "$s" "$d" listar menu)"
+  out="$(kpl "$s" "$d" replanejar-execucao menu)"; rc=$?
+  [ "$rc" -eq 5 ] && [ "$(kv "$out" replanejamento)" = recusado ] && [ "$(kv "$out" motivo)" = "$3" ] \
+    && [ "$(kv "$out" estado)" = replanejamento_execucao_recusado ] && [ "$(kv "$out" proxima)" = PARAR ] \
+    && [ "$(kv "$out" recusa_replanejamento_f6)" = "$3" ] \
+    && [ "$(fmv "$a" estado)" = replanejamento_execucao_recusado ] && [ "$(fmv "$a" recusa_replanejamento_f6)" = "$3" ] \
+    && [ "$(fmv "$a" replanejamentos_f6)" = "$n6" ] && [ "$(tr -d '\r' < "$a" | grep -c '^bloqueios_replanejamento_f6: \[B')" -eq 0 ] \
+    && [ "$(kst "$d" T-04.03)" = "$st0" ] && [ "$(kbl "$s" "$d" listar menu)" = "$bl0" ] \
+    && [ "$(git -C "$d" rev-list --count "$h..HEAD")" -eq 1 ] && [ "$(trailer "$d" Estado)" = replanejamento_execucao_recusado ] \
+    && [ "$(trailer "$d" Fase)" = f6 ] && git -C "$d" diff --quiet HEAD -- docs/sprintx/features/menu \
+    && [ -z "$(git -C "$d" status --porcelain -- docs/sprintx/features/menu)" ] \
+    && [ "$(grep -c "\"evento\":\"replanejamento_execucao_recusado\".*\"detalhe\":\"$3:" "$d/docs/eventos/menu.jsonl")" -eq 1 ] || return 1
+  out="$(kpl "$s" "$d" fase menu)"
+  [ "$(kv "$out" fase)" = PARAR ] && [ "$(kv "$out" estado)" = replanejamento_execucao_recusado ] \
+    && [ "$(kv "$out" recusa_replanejamento_f6)" = "$3" ] && [ "$(kv "$out" persistencia)" = duravel ] || return 1
+  h="$(git -C "$d" rev-parse HEAD)"; ck="$(cksum < "$a")"; ev="$(cksum < "$d/docs/eventos/menu.jsonl")"
+  out="$(kpl "$s" "$d" replanejar-execucao menu)"; rc=$?
+  [ "$rc" -eq 5 ] && [ "$(kv "$out" replanejamento)" = recusado ] && [ "$(kv "$out" motivo)" = "$3" ] \
+    && [ "$(kv "$out" estado)" = replanejamento_execucao_recusado ] && [ "$(kv "$out" proxima)" = PARAR ] \
+    && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] && [ "$(cksum < "$d/docs/eventos/menu.jsonl")" = "$ev" ] \
+    && [ "$(kst "$d" T-04.03)" = "$st0" ] && [ "$(kbl "$s" "$d" listar menu)" = "$bl0" ] || return 1
+  kpl "$s" "$d" avanca menu f3 >/dev/null; [ $? -eq 5 ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ]
+}
 # K6-K8. Classes que nao iniciam replanejamento — com descricao que "fala" de defeito de plano.
 k_lacuna() {
   kbl "$1" "$2" registrar menu T-04.03 lacuna_de_decisao 'arquivo fora do ownership da task: defeito de plano, replanejar' 'decidir' >/dev/null || return 1
@@ -1675,12 +1760,22 @@ B-01 | T-04.03 | T-04.03 precisa alterar tests/ui/cabecalho-topo.test.tsx, fora 
 EOF
   [ "$(kbloq "$2" B-01)" = "legado|aberto" ] && k_recusa "$1" "$2" sem_defeito_de_plano
 }
-# K9. Mistura de classes abertas: nenhuma precedencia inventada, nada gravado.
+# K9. Mistura de classes abertas: nenhuma precedencia inventada, nenhuma rodada; a recusa e o
+# terminal duravel `classes_mistas`, e o motivo nao e reavaliado depois.
 k_mistura() {
-  kbl "$1" "$2" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
-  kbl "$1" "$2" registrar menu null lacuna_de_decisao 'nenhuma D-NN cobre o icone' 'decidir' >/dev/null || return 1
-  k_recusa "$1" "$2" classes_mistas && [ "$(fmv "$(kf "$2")/00-PLANEJAMENTO.md" replanejamentos_f6)" = 0 ] \
-    && [ "$(kbloq "$2" B-01)" = "defeito_de_plano|aberto" ]
+  local s="$1" d="$2" f h out rc; f="$(kf "$d")"
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  kbl "$s" "$d" registrar menu null prerequisito_ausente 'o plano precisa mudar: servico de icones fora do ar' 'religar' >/dev/null || return 1
+  k_recusa_duravel "$s" "$d" classes_mistas && [ "$(fmv "$f/00-PLANEJAMENTO.md" replanejamentos_f6)" = 0 ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" max_replanejamentos_f6)" = 1 ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" reprovacoes)" = 2 ] \
+    && [ "$(kbloq "$d" B-01)" = "defeito_de_plano|aberto" ] && [ "$(kbloq "$d" B-02)" = "prerequisito_ausente|aberto" ] \
+    && [ "$(kst "$d" T-04.03)" = bloqueada ] || return 1
+  # Resolvido o prerequisito, so defeito_de_plano fica aberto: o terminal nao muda.
+  h="$(git -C "$d" rev-parse HEAD)"; kbl "$s" "$d" resolver menu B-02 >/dev/null || return 1
+  out="$(kpl "$s" "$d" replanejar-execucao menu)"; rc=$?
+  [ "$rc" -eq 5 ] && [ "$(kv "$out" motivo)" = classes_mistas ] && [ "$(kv "$out" estado)" = replanejamento_execucao_recusado ] \
+    && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" recusa_replanejamento_f6)" = classes_mistas ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" replanejamentos_f6)" = 0 ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" bloqueios_replanejamento_f6)" = "[]" ]
 }
 # K10. Varios defeito_de_plano abertos: uma rodada, lista em ordem de id (mesmo com o arquivo
 # fora de ordem), B-NN sem task resolvido sem inventar task, e so os da rodada sao resolvidos.
@@ -1708,11 +1803,12 @@ k_varios() {
     && [ "$(kst "$d" T-04.03)" = pendente ] && [ "$(kst "$d" T-04.05)" = pendente ] && [ "$(kst "$d" T-04.04)" = pendente ] \
     && [ "$(grep -c '"evento":"task_reaberta"' "$d/docs/eventos/menu.jsonl")" -eq 2 ]
 }
-# K11. Planejamento legado (sem o eixo F6): nenhum orcamento inventado, nem na leitura nem numa retomada.
+# K11. Planejamento legado (sem o eixo F6): recusa duravel, e nenhum orcamento inventado, nem na
+# leitura, nem na gravacao do terminal, nem numa retomada.
 k_legado_orcamento() {
   local s="$1" d="$2" f; f="$(kf "$d")"
   kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
-  k_recusa "$s" "$d" orcamento_f6_legado || return 1
+  k_recusa_duravel "$s" "$d" orcamento_f6_legado || return 1
   [ "$(kv "$(kpl "$s" "$d" fase menu)" orcamento_f6)" = legado ] || return 1
   kpl "$s" "$d" criar menu 3 buildx 1 >/dev/null; [ $? -eq 4 ] || return 1
   kpl "$s" "$d" criar menu 3 buildx >/dev/null || return 1
@@ -1720,10 +1816,11 @@ k_legado_orcamento() {
     && [ "$(kbloq "$d" B-01)" = "defeito_de_plano|aberto" ]
 }
 fm_tem_k() { tr -d '\r' < "$1" | awk -v k="$2" 'NR==1{next} $0=="---"{exit} index($0,k":")==1{a=1} END{exit !a}'; }
-# K12. Orcamento da F6 nao declarado (criar sem o quarto argumento): nao abre.
+# K12. Orcamento da F6 nao declarado (criar sem o quarto argumento): nao abre; recusa duravel, sem 1 presumido.
 k_sem_orcamento() {
   kbl "$1" "$2" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
-  [ "$(fmv "$(kf "$2")/00-PLANEJAMENTO.md" max_replanejamentos_f6)" = null ] && k_recusa "$1" "$2" orcamento_f6_nao_declarado
+  [ "$(fmv "$(kf "$2")/00-PLANEJAMENTO.md" max_replanejamentos_f6)" = null ] && k_recusa_duravel "$1" "$2" orcamento_f6_nao_declarado \
+    && [ "$(fmv "$(kf "$2")/00-PLANEJAMENTO.md" max_replanejamentos_f6)" = null ] && [ "$(fmv "$(kf "$2")/00-PLANEJAMENTO.md" replanejamentos_f6)" = 0 ]
 }
 # K13. Produto da task bloqueada sujo na arvore: fronteira insegura, nada gravado, nada limpo.
 k_fronteira() {
@@ -1735,7 +1832,9 @@ k_fronteira() {
   kpl "$s" "$d" replanejar-execucao menu >/dev/null; rc=$?
   [ "$rc" -eq 2 ] && [ "$(cksum < "$f/00-PLANEJAMENTO.md")" = "$ck" ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] \
     && [ "$(cat "$d/src/menu/perfil.ts")" = 'export const perfil = 1' ] && [ "$(cat "$d/src/app.ts")" = 'export const x = 2' ] \
-    && [ "$(fmv "$f/00-PLANEJAMENTO.md" replanejamentos_f6)" = 0 ] && [ "$(git -C "$d" stash list | wc -l | tr -d ' ')" = 0 ]
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" replanejamentos_f6)" = 0 ] && [ "$(git -C "$d" stash list | wc -l | tr -d ' ')" = 0 ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" estado)" = aprovado ] && ! fm_tem_k "$f/00-PLANEJAMENTO.md" recusa_replanejamento_f6 \
+    && [ "$(kv "$(kpl "$s" "$d" fase menu)" fase)" = F6 ] && [ "$(grep -c '"detalhe":"fronteira insegura' "$d/docs/eventos/menu.jsonl")" -eq 1 ]
 }
 # K14. F5 reprova durante a rodada: o contador da F5 continua de onde estava (2 -> 3 de 5)...
 k_f5_nao_continua() {
@@ -1791,9 +1890,71 @@ k_task_nao_bloqueada() {
   kpl "$s" "$d" replanejar-execucao menu >/dev/null; rc=$?
   [ "$rc" -eq 4 ] && [ "$(cksum < "$f/00-PLANEJAMENTO.md")" = "$ck" ]
 }
+# K24. Feature sem 00-PLANEJAMENTO.md: recusa duravel `planejamento_legado`; o arquivo nasce pela
+# migracao ja no terminal, sem orcamento nenhum inventado.
+k_planejamento_legado() {
+  local s="$1" d="$2" f; f="$(kf "$d")"
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  k_recusa_duravel "$s" "$d" planejamento_legado || return 1
+  [ "$(fmv "$f/00-PLANEJAMENTO.md" max_replanejamentos_f6)" = null ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" replanejamentos_f6)" = 0 ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" max_reprovacoes_f5)" = null ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" orcamento_declarado_por)" = null ] \
+    && [ "$(kbloq "$d" B-01)" = "defeito_de_plano|aberto" ]
+}
+# K25. Sem worktree: a recusa e o motivo sobrevivem so no que foi commitado. A arvore da execucao
+# e perdida; um clone da branch (sem rastro, sem sessao) reconhece o mesmo terminal.
+k_sem_worktree() {
+  local s="$1" d="$2" c out rc h
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  kbl "$s" "$d" registrar menu null prerequisito_ausente 'servico de icones fora do ar' 'religar' >/dev/null || return 1
+  kpl "$s" "$d" replanejar-execucao menu >/dev/null; [ $? -eq 5 ] || return 1
+  c="$(mktemp -d "$K/clone.XXXXXX")"; rm -rf "$c"
+  git clone -q -c core.autocrlf=false -b feature/menu "$d" "$c" || return 1
+  rm -rf "$d"; [ ! -e "$d" ] && [ ! -e "$c/docs/eventos" ] || return 1
+  out="$(kpl "$s" "$c" fase menu)"; rc=$?
+  [ "$rc" -eq 0 ] && [ "$(kv "$out" fase)" = PARAR ] && [ "$(kv "$out" estado)" = replanejamento_execucao_recusado ] \
+    && [ "$(kv "$out" recusa_replanejamento_f6)" = classes_mistas ] && [ "$(kv "$out" persistencia)" = duravel ] || return 1
+  h="$(git -C "$c" rev-parse HEAD)"
+  out="$(kpl "$s" "$c" replanejar-execucao menu)"; rc=$?
+  [ "$rc" -eq 5 ] && [ "$(kv "$out" replanejamento)" = recusado ] && [ "$(kv "$out" motivo)" = classes_mistas ] \
+    && [ "$(kv "$out" proxima)" = PARAR ] && [ "$(git -C "$c" rev-parse HEAD)" = "$h" ] \
+    && [ -z "$(git -C "$c" status --porcelain)" ] && [ ! -e "$c/docs/eventos" ] \
+    && [ "$(fmv "$(kf "$c")/00-PLANEJAMENTO.md" replanejamentos_f6)" = 0 ]
+}
+# K26. Erros de contrato nao viram recusa gravada: sem bloqueio aberto, registro invalido.
+k_sem_bloqueio() {
+  k_recusa "$1" "$2" sem_bloqueio_aberto && ! fm_tem_k "$(kf "$2")/00-PLANEJAMENTO.md" recusa_replanejamento_f6
+}
+k_registro_invalido() {
+  local s="$1" d="$2" f ck h rc; f="$(kf "$d")"
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  kbl "$s" "$d" registrar menu null prerequisito_ausente 'servico de icones fora do ar' 'religar' >/dev/null || return 1
+  sed 's/^    classe: prerequisito_ausente$/    classe: prerequisito/' "$f/00-BLOQUEIOS.md" > "$K/r.tmp" && mv "$K/r.tmp" "$f/00-BLOQUEIOS.md"
+  ck="$(cksum < "$f/00-PLANEJAMENTO.md")"; h="$(git -C "$d" rev-parse HEAD)"
+  kpl "$s" "$d" replanejar-execucao menu >/dev/null; rc=$?
+  [ "$rc" -eq 4 ] && [ "$(cksum < "$f/00-PLANEJAMENTO.md")" = "$ck" ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" estado)" = aprovado ]
+}
+# K27. O terminal recusado no schema: chave se e somente se o estado, motivo do enum operacional,
+# coerente com o eixo F6. O controle positivo le o terminal valido.
+k_recusa_schema() {
+  local s="$1" d="$2" a o="$K/sch.$$" rc m; a="$(kf "$d")/00-PLANEJAMENTO.md"; cp "$a" "$o"
+  troca_estado() { E_R="$1" awk '$0 == "estado: aprovado" { print ENVIRON["E_R"]; next } { print }' "$o" > "$a"; }
+  for m in "aprovado|classes_mistas" "replanejamento_execucao_recusado|" "replanejamento_execucao_recusado|orcamento_f6_legado" \
+    "replanejamento_execucao_recusado|sem_defeito_de_plano" "replanejamento_execucao_recusado|fronteira_insegura"; do
+    if [ -n "${m#*|}" ]; then troca_estado "estado: ${m%%|*}
+recusa_replanejamento_f6: ${m#*|}"; else troca_estado "estado: ${m%%|*}"; fi
+    cmp -s "$o" "$a" && return 1
+    kpl "$s" "$d" fase menu >/dev/null; rc=$?; [ "$rc" -eq 4 ] || return 1
+  done
+  troca_estado "estado: replanejamento_execucao_recusado
+recusa_replanejamento_f6: classes_mistas"
+  git -C "$d" commit -q -m recusado -- docs/sprintx/features/menu/00-PLANEJAMENTO.md || return 1
+  [ "$(kv "$(kpl "$s" "$d" fase menu)" fase)" = PARAR ]
+}
 CASOS_K="k_inicia:FXP k_retomada:FX2 k_resolver_antes:FXP k_aprovacao:FXP k_segundo_defeito:FXP k_lacuna:FXP k_prerequisito:FXP
   k_legado_bloqueio:FXP k_mistura:FXP k_varios:FXP k_legado_orcamento:FXL k_sem_orcamento:FXN k_fronteira:FXP
-  k_f5_nao_continua:FX5 k_f5_nao_esgota:FXP k_concluidas_protegidas:FXP k_task_nao_bloqueada:FXP"
+  k_f5_nao_continua:FX5 k_f5_nao_esgota:FXP k_concluidas_protegidas:FXP k_task_nao_bloqueada:FXP
+  k_planejamento_legado:FXS k_sem_worktree:FXP k_sem_bloqueio:FXP k_registro_invalido:FXP k_recusa_schema:FXP"
 fx_de() { local c; for c in $CASOS_K; do [ "${c%%:*}" = "$1" ] && { eval "printf '%s' \"\$${c#*:}\""; return; }; done; }
 roda_k() { local d; d="$(kcopia "$(fx_de "$1")")"; "$1" "$2" "$d"; }
 for par in k_inicia:k1-piloto-entra-em-replanejar-execucao k_retomada:k2-retomada-nao-consome-de-novo \
@@ -1802,6 +1963,9 @@ for par in k_inicia:k1-piloto-entra-em-replanejar-execucao k_retomada:k2-retomad
   k_prerequisito:k7-prerequisito-ausente-nao-replaneja k_legado_bloqueio:k8-bloqueio-legado-nao-replaneja \
   k_mistura:k9-classes-mistas-nao-replaneja k_varios:k10-varios-defeitos-uma-rodada-ordenada \
   k_legado_orcamento:k11-planejamento-legado-sem-orcamento-inventado k_sem_orcamento:k12-orcamento-f6-nao-declarado-nao-abre \
+  k_planejamento_legado:k24-sem-planejamento-recusa-duravel-sem-orcamento k_sem_worktree:k25-recusa-sobrevive-sem-worktree \
+  k_sem_bloqueio:k26-sem-bloqueio-aberto-nao-grava k_registro_invalido:k26-registro-invalido-nao-grava \
+  k_recusa_schema:k27-terminal-recusado-no-schema \
   k_fronteira:k13-produto-sujo-fronteira-insegura k_f5_nao_continua:k14-f5-nao-durante-rodada-continua \
   k_f5_nao_esgota:k15-f5-esgota-no-terminal-existente k_concluidas_protegidas:k16-concluidas-congeladas-nos-portoes \
   k_task_nao_bloqueada:k17-task-do-bloqueio-precisa-estar-bloqueada; do
@@ -1817,6 +1981,12 @@ for e in replanejar_execucao replanejamento_execucao_esgotado; do
 done
 tem "$SKILLMD" '| `replanejamento_execucao_esgotado` | **terminal**' && tem "$SKILLMD" '| `replanejar_execucao` | F3 —'
 afirma "k18-skill-f6-volta-pela-f3" $? "replanejar_execucao -> F3; esgotado terminal"
+tr -d '\r' < "$SCHK" | grep -F '| `estado` (planejamento) |' | grep -qF '`replanejamento_execucao_recusado`' \
+  && tem "$SKILLMD" '| `replanejamento_execucao_recusado` | **terminal**' \
+  && [ "$(tr -d '\r' < "$PL" | grep -cxF '    replanejamento_execucao_recusado) ;;')" -eq 1 ] \
+  && tr -d '\r' < "$SCHK" | grep -F '| `recusa_replanejamento_f6` (planejamento) |' | grep -qF '`classes_mistas` \| `orcamento_f6_legado` \| `orcamento_f6_nao_declarado` \| `planejamento_legado`' \
+  && tem "$SCHK" '**Erro de contrato nunca vira esta recusa**' && tem "$EXEC" 'recusa **operacional**, gravada e persistida'
+afirma "k18-estado-replanejamento_execucao_recusado-no-enum" $? "schema, SKILL.md, 06-execucao e script"
 KCMD="$CMD_PL replanejar-execucao <slug>"
 onde="$(grep -rlF -- "$KCMD" "$SK" "$H/../commands" "$H/../../.opencode" 2>/dev/null)"
 [ "$(printf '%s\n' "$onde" | sed '/^$/d' | wc -l | tr -d ' ')" -eq 1 ] && [ "$(basename "$onde")" = 06-execucao.md ] && [ "$(conta "$EXEC" "$KCMD")" -eq 1 ]
@@ -1841,9 +2011,11 @@ for ev in replanejamento_execucao_iniciado replanejamento_execucao_retomado repl
 done
 DSF="$SK/DECISOES-DA-SKILL.md"; n=0
 for ds in 140 141 142 143 144 145 146; do [ "$(grep -c "^| DS-$ds |" "$DSF")" -eq 1 ] && n=$((n + 1)); done
-[ "$n" -eq 7 ] && tem "$DSF" '**Estado próprio `replanejar_execucao`**' && tem "$DSF" '**Tasks concluídas são congeladas, e o congelamento é mecânico.**' \
+for ds in 147 148; do [ "$(grep -c "^| DS-$ds |" "$DSF")" -eq 1 ] || n=0; done
+[ "$n" -eq 7 ] && tem "$DSF" '**Estado próprio `replanejar_execucao`**' \
+  && tem "$DSF" '**A F1 repassa os três tetos do pedido' && tem "$DSF" '**Recusa operacional é estado terminal durável' && tem "$DSF" '**Tasks concluídas são congeladas, e o congelamento é mecânico.**' \
   && tem "$DSF" '**Legado sem orçamento retroativo.**' && tem "$DSF" '**O gatilho é a chave `classe` dos B-NN abertos**'
-afirma "k23-ds140-a-ds146-registradas" $? "$n de 7"
+afirma "k23-ds140-a-ds148-registradas" $? "$n de 7, mais DS-147 e DS-148"
 
 # Mutantes do mecanismo, em copia temporaria da skill (scripts/ + assets/: os dois scripts
 # se chamam pela propria pasta e acham o template por ela). Cada mutante tem de morrer pelos
@@ -1856,7 +2028,8 @@ mutante_k() { # mutante_k <nome> <rc da geracao> <script> <caso que TEM de matar
   if [ "$rc" -eq 0 ]; then for c in "$@"; do roda_k "$c" "$s" && vivos="$vivos$c "; done; fi
   [ "$rc" -eq 0 ] && [ -z "$vivos" ]; afirma "$nome" $? "morto por: $* ${vivos:+— SOBREVIVEU a: $vivos}(rc geracao=$rc)"
 }
-DESIGNADOS_K="k_inicia k_retomada k_resolver_antes k_aprovacao k_segundo_defeito k_lacuna k_legado_bloqueio k_mistura k_legado_orcamento"
+DESIGNADOS_K="k_inicia k_retomada k_resolver_antes k_aprovacao k_segundo_defeito k_lacuna k_legado_bloqueio k_mistura k_legado_orcamento
+  k_sem_orcamento k_planejamento_legado k_sem_worktree k_fronteira k_registro_invalido"
 CTLK="$(copia_skill_k controle)"; cp "$PL" "$CTLK"; vivosk=""
 for c in $DESIGNADOS_K; do roda_k "$c" "$CTLK" || vivosk="$vivosk$c "; done
 [ -z "$vivosk" ]; afirma "km-controle-copia-intacta-sobrevive" $? "${vivosk:-nenhum caso designado reprova a copia sem mutacao}"
@@ -1876,10 +2049,39 @@ mutante_k "km-mutante-5-resolve-antes-da-aprovacao" $? "$M" k_resolver_antes
 M="$(copia_skill_k f)"; muta_lit "$PL" "$M" '  abertos="$(abertos_ordenados)"' \
   '  abertos="$(abertos_ordenados | while IFS="$TAB" read -r b t c; do d="$(grep -A6 "^  - id: $b\$" "$PASTA/00-BLOQUEIOS.md" | grep "^    descricao:")"; case "$d" in *ownership*|*plano*|*arquivo*) c=defeito_de_plano ;; *) c=lacuna_de_decisao ;; esac; printf "%s\t%s\t%s\n" "$b" "$t" "$c"; done)"'
 mutante_k "km-mutante-6-classe-pela-descricao" $? "$M" k_lacuna k_legado_bloqueio
-M="$(copia_skill_k g)"; muta_lit "$PL" "$M" '  elif [ -n "$outros" ]; then motivo=classes_mistas' '  elif false; then motivo=classes_mistas'
+M="$(copia_skill_k g)"; muta_lit "$PL" "$M" '  if [ -n "$outros" ]; then motivo=classes_mistas' '  if false; then motivo=classes_mistas'
 mutante_k "km-mutante-7-replaneja-com-classes-mistas" $? "$M" k_mistura
 M="$(copia_skill_k h)"; muta_lit "$PL" "$M" '    P_F6=legado; P_MAX6=null; P_N6=0' '    P_F6=presente; P_MAX6=1; P_N6=0'
 mutante_k "km-mutante-8-inventa-orcamento-no-legado" $? "$M" k_legado_orcamento
+# A recusa operacional como era antes: so no stdout, nada gravado.
+M="$(copia_skill_k i)"; muta_lit "$PL" "$M" '  local motivo="$1" abertos="$2"' \
+  '  local motivo="$1" abertos="$2"; printf '"'"'replanejamento=recusado\nmotivo=%s\nestado=%s\n'"'"' "$motivo" "$P_ESTADO"; falha "$E_TRANSICAO" recusado'
+mutante_k "km-mutante-9-recusa-so-no-stdout" $? "$M" k_mistura k_sem_orcamento k_legado_orcamento k_planejamento_legado k_sem_worktree
+# Grava o terminal, mas nao faz o checkpoint: some com o worktree.
+M="$(copia_skill_k j)"; muta_lit "$PL" "$M" '; estado terminal replanejamento_execucao_recusado gravado"' \
+  '; estado terminal replanejamento_execucao_recusado gravado"; checkpoint() { printf '"'"'checkpoint=ignorado\n'"'"'; }'
+mutante_k "km-mutante-10-recusa-sem-checkpoint" $? "$M" k_mistura k_sem_worktree
+# A repeticao reavalia em vez de reconhecer o terminal (motivo trocado por `estado`).
+M="$(copia_skill_k k)"; muta_lit "$PL" "$M" '  if [ "$P_ESTADO" = replanejamento_execucao_recusado ]; then' '  if false; then'
+mutante_k "km-mutante-11-repeticao-reavalia" $? "$M" k_mistura k_sem_worktree
+# A repeticao registra o evento de novo.
+M="$(copia_skill_k l)"; muta_lit "$PL" "$M" '    falha "$E_TRANSICAO" "replanejamento da execucao ja recusado' \
+  '    evento replanejamento_execucao_recusado f6 - bloqueado "$P_RECUSA: repetido"; falha "$E_TRANSICAO" "replanejamento da execucao ja recusado'
+mutante_k "km-mutante-12-repeticao-duplica-evento" $? "$M" k_mistura k_sem_orcamento
+# Erro de contrato gravado como recusa.
+M="$(copia_skill_k m)"; muta_lit "$PL" "$M" '    evento replanejamento_execucao_recusado f6 - bloqueado "$motivo: abertos [$outros]; estado $P_ESTADO mantido"' \
+  '    E_FONTE=planejamento; recusa_duravel classes_mistas "$outros"'
+mutante_k "km-mutante-13-contrato-vira-recusa-gravada" $? "$M" k_lacuna k_legado_bloqueio
+M="$(copia_skill_k n)"; muta_lit "$PL" "$M" '    evento replanejamento_execucao_recusado f6 - bloqueado "fronteira insegura: produto sujo na arvore:$sujos"' \
+  '    recusa_duravel classes_mistas "$sujos"'
+mutante_k "km-mutante-14-fronteira-vira-recusa-gravada" $? "$M" k_fronteira
+# Sem 00-PLANEJAMENTO.md, a recusa inventa o teto da F6 do BuildX.
+M="$(copia_skill_k o)"; muta_lit "$PL" "$M" '    migra_legado null null null replanejamento_execucao_recusado "$motivo"' \
+  '    migra_legado 3 buildx 1 replanejamento_execucao_recusado orcamento_f6_nao_declarado'
+mutante_k "km-mutante-15-legado-inventa-orcamento-na-recusa" $? "$M" k_planejamento_legado
+# Registro invalido lido so dentro do subshell: vira "nenhum bloqueio aberto" em vez de contrato.
+M="$(copia_skill_k p)"; muta_lit "$PL" "$M" '  le_bloqueios || falha "$E_CONTRATO" "00-BLOQUEIOS.md invalido"' '  :'
+mutante_k "km-mutante-16-registro-invalido-vira-sem-bloqueio" $? "$M" k_registro_invalido
 rm -rf "$K"
 
 echo
