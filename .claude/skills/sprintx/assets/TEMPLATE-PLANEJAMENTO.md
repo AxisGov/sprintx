@@ -46,4 +46,9 @@ Durante uma rodada de replanejamento da execução (retorno da F6), o script pre
 `bloqueios_replanejamento_f6` com os B-NN `defeito_de_plano` que a abriram, em ordem de id,
 e congela as tasks concluídas em `tasks_congeladas` + `assinatura_congeladas`. Ao fechar a
 rodada as três voltam a `[]`, `[]` e `null`.
+
+Quando o retorno da F6 é recusado por motivo operacional, o script grava o estado terminal
+`replanejamento_execucao_recusado` e, logo depois de `estado`, a chave
+`recusa_replanejamento_f6: <classes_mistas|orcamento_f6_legado|orcamento_f6_nao_declarado|planejamento_legado>`,
+que só existe nesse estado.
 -->

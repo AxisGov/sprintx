@@ -4,8 +4,9 @@
 # Dono de docs/sprintx/features/<slug>/00-PLANEJAMENTO.md (kind: planejamento):
 # a maquina F3 <-> F5, o orcamento de reprovacoes da F5 declarado pelo caller,
 # o estado terminal `orcamento_esgotado`, o retorno da F6 ao planejamento
-# (`replanejar_execucao`, com orcamento proprio e o estado terminal
-# `replanejamento_execucao_esgotado`), o congelamento das tasks concluidas
+# (`replanejar_execucao`, com orcamento proprio e os estados terminais
+# `replanejamento_execucao_esgotado` e `replanejamento_execucao_recusado`, este
+# com o motivo operacional em `recusa_replanejamento_f6`), o congelamento das tasks concluidas
 # durante esse retorno e os checkpoints Git LOCAIS de metodo que tornam o
 # planejamento duravel.
 #
@@ -40,7 +41,10 @@
 #      concluida alterada durante o replanejamento da execucao)
 #   5  transicao invalida para o estado atual (inclui estado terminal, replanejamento
 #      recusado pela classe dos bloqueios ou pela falta de orcamento da F6, e
-#      resolucao de defeito_de_plano fora de uma rodada aprovada)
+#      resolucao de defeito_de_plano fora de uma rodada aprovada). A recusa
+#      OPERACIONAL (classes_mistas, orcamento_f6_legado, orcamento_f6_nao_declarado,
+#      planejamento_legado) e gravada como o terminal replanejamento_execucao_recusado
+#      e persistida pelo checkpoint; repeti-la devolve o mesmo terminal, sem gravar.
 #   64 uso incorreto
 
 set -uo pipefail
@@ -85,7 +89,7 @@ contexto() { # contexto <slug>
   ARQ="$PASTA/00-PLANEJAMENTO.md"
   AUD="$PASTA/00-AUDITORIA.md"
   # Sem 00-PLANEJAMENTO.md nao ha eixo F6: le_planejamento sobrescreve.
-  P_F6=legado; P_MAX6=null; P_N6=0; P_BLQ=""; P_CONG=""; P_ASS=null
+  P_F6=legado; P_MAX6=null; P_N6=0; P_BLQ=""; P_CONG=""; P_ASS=null; P_RECUSA=""
 }
 
 hoje() { date +%Y-%m-%d; }
@@ -456,14 +460,16 @@ le_planejamento() {
   [ "${FM_trabalho_id-}" = "$SLUG" ] || falha "$E_CONTRATO" "trabalho_id nao e $SLUG"
 
   fm_em P_MAX max_reprovacoes_f5; fm_em P_POR orcamento_declarado_por
-  fm_em P_ESTADO estado; fm_em P_REPROV reprovacoes
+  fm_em P_ESTADO estado; fm_em P_REPROV reprovacoes; fm_em P_RECUSA recusa_replanejamento_f6
   le_f6
   valida_orcamento "$P_MAX" "$P_POR" "$P_MAX6"
   case "$P_ESTADO" in
     null|aguardando_f3|aguardando_f4|aguardando_f5|replanejar|aprovado|orcamento_esgotado) ;;
     replanejar_execucao|replanejamento_execucao_esgotado) ;;
+    replanejamento_execucao_recusado) ;;
     *) falha "$E_CONTRATO" "estado fora do enum: '$P_ESTADO'" ;;
   esac
+  valida_recusa
   inteiro "$P_REPROV" || falha "$E_CONTRATO" "reprovacoes invalido: '$P_REPROV'"
 
   P_HIST="$(hist_tsv "$ARQ")"
@@ -508,6 +514,7 @@ EOF
     sim:replanejamento_execucao_esgotado)
       [ -z "$P_BLQ" ] && [ "$P_MAX6" != null ] && [ "$P_N6" -ge "$P_MAX6" ] \
         || falha "$E_CONTRATO" "replanejamento_execucao_esgotado sem o orcamento da F6 consumido" ;;
+    sim:replanejamento_execucao_recusado) ;;
     sim:*) falha "$E_CONTRATO" "ultima rodada sim exige estado aprovado" ;;
     *:aprovado) falha "$E_CONTRATO" "estado aprovado sem rodada sim no historico" ;;
     :null|:aguardando_f3|:aguardando_f4|:aguardando_f5) ;;
@@ -519,22 +526,50 @@ EOF
   esac
 }
 
+# valida_recusa — `recusa_replanejamento_f6` existe se e somente se o estado e o
+# terminal replanejamento_execucao_recusado, com um motivo OPERACIONAL do enum e
+# coerente com o eixo F6 gravado. Erro de contrato nunca vira recusa gravada.
+valida_recusa() {
+  if [ "$P_ESTADO" != replanejamento_execucao_recusado ]; then
+    if fm_presente recusa_replanejamento_f6; then
+      falha "$E_CONTRATO" "recusa_replanejamento_f6 so existe no estado replanejamento_execucao_recusado (estado: $P_ESTADO)"
+    fi
+    return 0
+  fi
+  case "$P_RECUSA" in
+    classes_mistas) ;;
+    orcamento_f6_legado)
+      [ "$P_F6" = legado ] || falha "$E_CONTRATO" "recusa orcamento_f6_legado com o eixo F6 gravado" ;;
+    orcamento_f6_nao_declarado|planejamento_legado)
+      [ "$P_F6" = presente ] && [ "$P_MAX6" = null ] \
+        || falha "$E_CONTRATO" "recusa $P_RECUSA exige max_replanejamentos_f6: null" ;;
+    "") falha "$E_CONTRATO" "estado replanejamento_execucao_recusado sem recusa_replanejamento_f6" ;;
+    *) falha "$E_CONTRATO" "recusa_replanejamento_f6 fora do enum: '$P_RECUSA'" ;;
+  esac
+}
+
 # ------------------------------------------------------------------ escrita
 
 # f6_herda — o eixo F6 a gravar (W6_*) comeca igual ao lido (P_*).
-f6_herda() { W6="$P_F6"; W6_MAX="$P_MAX6"; W6_N="$P_N6"; W6_BLQ="$P_BLQ"; W6_CONG="$P_CONG"; W6_ASS="$P_ASS"; }
-f6_novo() { W6=presente; W6_MAX="$1"; W6_N=0; W6_BLQ=""; W6_CONG=""; W6_ASS=null; }
+f6_herda() { W6="$P_F6"; W6_MAX="$P_MAX6"; W6_N="$P_N6"; W6_BLQ="$P_BLQ"; W6_CONG="$P_CONG"; W6_ASS="$P_ASS"; W_RECUSA="$P_RECUSA"; }
+f6_novo() { W6=presente; W6_MAX="$1"; W6_N=0; W6_BLQ=""; W6_CONG=""; W6_ASS=null; W_RECUSA=""; }
 lista_yaml() { if [ -z "$1" ]; then printf '[]'; else printf '[%s]' "$(printf '%s' "$1" | sed 's/ /, /g')"; fi; }
 
 # escreve <max> <por> <estado> <reprovacoes> <historico_tsv> — o arquivo inteiro,
 # a partir do template, de forma atomica. O historico recebido ja inclui as
 # rodadas anteriores intactas: e assim que ele continua append-only. O eixo F6
 # vem de W6_* (f6_herda/f6_novo); legado continua sem as chaves — nunca ganha
-# orcamento numa regravacao.
+# orcamento numa regravacao. W_RECUSA e o motivo do terminal recusado, e so dele.
 escreve() {
-  local max="$1" por="$2" estado="$3" reprov="$4" hist="$5" data tmp yaml prosa teto t6="" rodada6=""
+  local max="$1" por="$2" estado="$3" reprov="$4" hist="$5" data tmp yaml prosa teto t6="" rodada6="" rec="" trec=""
   [ -f "$TEMPLATE" ] || falha "$E_CONTRATO" "template ausente: assets/TEMPLATE-PLANEJAMENTO.md"
   data="$(hoje)"
+  if [ "$estado" = replanejamento_execucao_recusado ]; then
+    [ -n "${W_RECUSA:-}" ] || falha "$E_CONTRATO" "replanejamento_execucao_recusado sem motivo a gravar"
+    rec="recusa_replanejamento_f6: $W_RECUSA
+"
+    trec=" · replanejamento da execução recusado: \`$W_RECUSA\`"
+  fi
 
   if [ -z "$hist" ]; then
     yaml="historico: []"
@@ -573,18 +608,18 @@ Rodada de replanejamento da execução ativa, aberta por: $(printf '%s' "$W6_BLQ
   {
     printf -- '---\nexpx_schema: 1\nexpx_tool: sprintx\nkind: planejamento\ntrabalho_id: %s\n' "$SLUG"
     if [ "$W6" = presente ]; then
-      printf 'max_reprovacoes_f5: %s\nmax_replanejamentos_f6: %s\norcamento_declarado_por: %s\nestado: %s\nreprovacoes: %s\n' \
-        "$max" "$W6_MAX" "$por" "$estado" "$reprov"
+      printf 'max_reprovacoes_f5: %s\nmax_replanejamentos_f6: %s\norcamento_declarado_por: %s\nestado: %s\n%sreprovacoes: %s\n' \
+        "$max" "$W6_MAX" "$por" "$estado" "$rec" "$reprov"
       printf 'replanejamentos_f6: %s\nbloqueios_replanejamento_f6: %s\ntasks_congeladas: %s\nassinatura_congeladas: %s\natualizado_em: %s\n' \
         "$W6_N" "$(lista_yaml "$W6_BLQ")" "$(lista_yaml "$W6_CONG")" "$W6_ASS" "$data"
     else
-      printf 'max_reprovacoes_f5: %s\norcamento_declarado_por: %s\nestado: %s\nreprovacoes: %s\natualizado_em: %s\n' \
-        "$max" "$por" "$estado" "$reprov" "$data"
+      printf 'max_reprovacoes_f5: %s\norcamento_declarado_por: %s\nestado: %s\n%sreprovacoes: %s\natualizado_em: %s\n' \
+        "$max" "$por" "$estado" "$rec" "$reprov" "$data"
     fi
     printf '%s\n---\n' "$yaml"
     # Texto com quebra de linha vai por ENVIRON, nunca por `awk -v`: o awk do
     # BSD recusa newline numa atribuicao -v.
-    tr -d '\r' < "$TEMPLATE" | SX_SLUG="$SLUG" SX_BLOCO="Estado: \`$estado\` · reprovações da F5: $teto$t6 · atualizado em $data.$rodada6
+    tr -d '\r' < "$TEMPLATE" | SX_SLUG="$SLUG" SX_BLOCO="Estado: \`$estado\` · reprovações da F5: $teto$t6$trec · atualizado em $data.$rodada6
 
 $prosa" awk '
       NR == 1 { next }
@@ -712,10 +747,13 @@ estado_efetivo() {
 # contrato. Sem teto: orcamento nunca e inventado. Quando o disco ja tem um
 # veredito, ele vira a rodada 1, contada da tabela como esta. O veredito legado
 # e preservado, nunca lavado: SIM com achado ALTA e contrato invalido.
-migra_legado() { # migra_legado [max] [por] [max6] — sem argumentos, sem teto e sem orcamento da F6
+migra_legado() { # migra_legado [max] [por] [max6] [estado recusa] — sem argumentos, sem teto e sem orcamento da F6
   local max="${1:-null}" por="${2:-null}" estado="$E_ESTADO" v altas medias baixas reprov=0 hist=""
   # O arquivo nasce agora: com o eixo F6, e so com o orcamento que alguem declarou.
   f6_novo "${3:-null}"
+  # Recusa operacional de uma feature aprovada sem 00-PLANEJAMENTO.md: o arquivo
+  # nasce ja no terminal, para que a recusa sobreviva a sessao e ao worktree.
+  [ -n "${4:-}" ] && { estado="$4"; W_RECUSA="${5:-}"; }
   case "$E_ESTADO" in
     aprovado|replanejar)
       v=sim; [ "$E_ESTADO" = replanejar ] && { v=nao; reprov=1; }
@@ -742,7 +780,7 @@ fase_do_estado() {
     aguardando_f5) printf 'F5' ;;
     aprovado) printf 'F6' ;;
     replanejar_execucao) printf 'F3' ;;
-    orcamento_esgotado|replanejamento_execucao_esgotado) printf 'PARAR' ;;
+    orcamento_esgotado|replanejamento_execucao_esgotado|replanejamento_execucao_recusado) printf 'PARAR' ;;
   esac
 }
 
@@ -754,7 +792,7 @@ marco() {
     aguardando_f5) M_FASE=f4; M_RODADA=0 ;;
     replanejar|aprovado|orcamento_esgotado) M_FASE=f5; M_RODADA="$P_RODADAS" ;;
     # O retorno da F6: a rodada e o numero do replanejamento da execucao.
-    replanejar_execucao|replanejamento_execucao_esgotado) M_FASE=f6; M_RODADA="$P_N6" ;;
+    replanejar_execucao|replanejamento_execucao_esgotado|replanejamento_execucao_recusado) M_FASE=f6; M_RODADA="$P_N6" ;;
     *) M_FASE=""; M_RODADA=0 ;;
   esac
 }
@@ -993,6 +1031,7 @@ $hist"
 
 # saida_f6 — o eixo F6 no stdout de fase/avanca/replanejar-execucao.
 saida_f6() {
+  [ "${P_ESTADO-}" = replanejamento_execucao_recusado ] && printf 'recusa_replanejamento_f6=%s\n' "$P_RECUSA"
   if [ "$P_F6" = legado ]; then printf 'orcamento_f6=legado\n'; return 0; fi
   printf 'replanejamentos_f6=%s\nmax_replanejamentos_f6=%s\n' "$P_N6" "$P_MAX6"
   if [ -n "$P_BLQ" ]; then
@@ -1056,12 +1095,16 @@ fecha_rodada() {
 cmd_replanejar_execucao() {
   [ $# -eq 1 ] || falha "$E_USO" "uso: replanejar-execucao <slug>"
   contexto "$1"
-  if [ ! -f "$ARQ" ]; then
-    printf 'replanejamento=recusado\nmotivo=planejamento_legado\n'
-    evento replanejamento_execucao_recusado f6 - bloqueado "feature sem 00-PLANEJAMENTO.md: sem orcamento da F6, nada e inventado"
-    falha "$E_TRANSICAO" "replanejamento da execucao recusado: a feature nao tem 00-PLANEJAMENTO.md (legado) — sem orcamento da F6 declarado. PARE e relate."
-  fi
   estado_efetivo
+  if [ "$E_FONTE" = legado ]; then
+    # Feature sem 00-PLANEJAMENTO.md: o estado sai do disco. So a F6 (aprovado)
+    # devolve o plano; fora dela e erro de contrato, e nada e gravado.
+    P_ESTADO="$E_ESTADO"
+    if [ "$E_ESTADO" != aprovado ]; then
+      printf 'replanejamento=recusado\nmotivo=estado\nestado=%s\nproxima=%s\n' "$E_ESTADO" "$(fase_do_estado "$E_ESTADO")"
+      falha "$E_TRANSICAO" "replanejar-execucao so parte da F6 (estado aprovado); o estado derivado do disco e $E_ESTADO"
+    fi
+  fi
   persistencia
   if [ "$PERSIST" = pendente ]; then
     printf 'estado=%s\nproxima=CHECKPOINT\npersistencia=pendente\n' "$E_ESTADO"
@@ -1082,6 +1125,14 @@ cmd_replanejar_execucao() {
     saida_f6
     return 0
   fi
+  # Recusa operacional ja gravada: o mesmo terminal, com o mesmo motivo. Nada e
+  # reavaliado, gravado, commitado nem registrado de novo.
+  if [ "$P_ESTADO" = replanejamento_execucao_recusado ]; then
+    printf 'replanejamento=recusado\nmotivo=%s\nestado=%s\nreprovacoes=%s\nmax_reprovacoes_f5=%s\nproxima=PARAR\npersistencia=%s\n' \
+      "$P_RECUSA" "$P_ESTADO" "$P_REPROV" "$P_MAX" "$PERSIST"
+    saida_f6
+    falha "$E_TRANSICAO" "replanejamento da execucao ja recusado ($P_RECUSA): estado terminal $P_ESTADO. Nada foi gravado de novo. PARE e relate."
+  fi
   if [ "$P_ESTADO" != aprovado ]; then
     printf 'replanejamento=recusado\nmotivo=estado\nestado=%s\nproxima=%s\n' "$P_ESTADO" "$(fase_do_estado "$P_ESTADO")"
     falha "$E_TRANSICAO" "replanejar-execucao so parte da F6 (estado aprovado); o estado e $P_ESTADO"
@@ -1089,6 +1140,9 @@ cmd_replanejar_execucao() {
 
   # O gatilho e a CHAVE classe dos B-NN abertos — nunca a descricao.
   local abertos b t c defeitos="" outros="" motivo
+  # Registro invalido e erro de contrato: validado aqui, fora do subshell abaixo,
+  # para que nunca seja lido como "nenhum bloqueio aberto".
+  le_bloqueios || falha "$E_CONTRATO" "00-BLOQUEIOS.md invalido"
   abertos="$(abertos_ordenados)"
   while IFS="$(printf '\t')" read -r b t c; do
     [ -n "$b" ] || continue
@@ -1097,19 +1151,26 @@ cmd_replanejar_execucao() {
 $abertos
 EOF
   defeitos="${defeitos# }"; outros="${outros# }"
+  # Sem defeito_de_plano aberto nao ha o que replanejar: erro de quem chamou, nunca
+  # estado de negocio — nada e gravado e o estado continua aprovado.
   motivo=""
   if [ -z "$defeitos" ] && [ -z "$outros" ]; then motivo=sem_bloqueio_aberto
   elif [ -z "$defeitos" ]; then motivo=sem_defeito_de_plano
-  elif [ -n "$outros" ]; then motivo=classes_mistas
+  fi
+  if [ -n "$motivo" ]; then
+    printf 'replanejamento=recusado\nmotivo=%s\nestado=%s\nabertos=%s\n' "$motivo" "$P_ESTADO" "$(printf '%s' "$outros" | tr ' ' ',')"
+    saida_f6
+    evento replanejamento_execucao_recusado f6 - bloqueado "$motivo: abertos [$outros]; estado $P_ESTADO mantido"
+    falha "$E_TRANSICAO" "replanejamento da execucao recusado ($motivo): nada foi gravado; o estado continua $P_ESTADO. PARE e relate os bloqueios abertos."
+  fi
+  # Ha defeito_de_plano aberto e a rodada nao pode abrir: recusa OPERACIONAL,
+  # gravada como terminal e persistida.
+  if [ -n "$outros" ]; then motivo=classes_mistas
+  elif [ "$E_FONTE" = legado ]; then motivo=planejamento_legado
   elif [ "$P_F6" = legado ]; then motivo=orcamento_f6_legado
   elif [ "$P_MAX6" = null ]; then motivo=orcamento_f6_nao_declarado
   fi
-  if [ -n "$motivo" ]; then
-    printf 'replanejamento=recusado\nmotivo=%s\nestado=%s\nabertos=%s\n' "$motivo" "$P_ESTADO" "$(printf '%s' "$defeitos${outros:+ }$outros" | tr ' ' ',')"
-    saida_f6
-    evento replanejamento_execucao_recusado f6 - bloqueado "$motivo: abertos [$defeitos${outros:+ }$outros]; estado $P_ESTADO mantido"
-    falha "$E_TRANSICAO" "replanejamento da execucao recusado ($motivo): nada foi gravado; o estado continua $P_ESTADO. PARE e relate os bloqueios abertos."
-  fi
+  if [ -n "$motivo" ]; then recusa_duravel "$motivo" "$defeitos${outros:+ }$outros"; fi
 
   f6_herda
   if [ "$P_N6" -ge "$P_MAX6" ]; then
@@ -1144,6 +1205,27 @@ EOF
   printf 'replanejamento=iniciado\nestado=%s\nreprovacoes=%s\nmax_reprovacoes_f5=%s\nproxima=%s\n' \
     "$P_ESTADO" "$P_REPROV" "$P_MAX" "$(fase_do_estado "$P_ESTADO")"
   saida_f6
+}
+
+# recusa_duravel <motivo> <abertos> — grava o terminal replanejamento_execucao_recusado
+# com o motivo, faz o checkpoint (a mesma disciplina do esgotado) e sai com o codigo
+# da recusa. Sem 00-PLANEJAMENTO.md o arquivo nasce pela migracao, sem orcamento
+# inventado. Nenhuma rodada, nenhum contador, nenhuma task: so o terminal.
+recusa_duravel() {
+  local motivo="$1" abertos="$2"
+  if [ "$E_FONTE" = legado ]; then
+    migra_legado null null null replanejamento_execucao_recusado "$motivo"
+  else
+    f6_herda; W_RECUSA="$motivo"
+    escreve "$P_MAX" "$P_POR" replanejamento_execucao_recusado "$P_REPROV" "$P_HIST"
+  fi
+  evento replanejamento_execucao_recusado f6 - bloqueado "$motivo: abertos [$abertos]; estado terminal replanejamento_execucao_recusado gravado"
+  checkpoint
+  le_planejamento
+  printf 'replanejamento=recusado\nmotivo=%s\nestado=%s\nreprovacoes=%s\nmax_reprovacoes_f5=%s\nproxima=PARAR\nabertos=%s\n' \
+    "$P_RECUSA" "$P_ESTADO" "$P_REPROV" "$P_MAX" "$(printf '%s' "$abertos" | tr ' ' ',')"
+  saida_f6
+  falha "$E_TRANSICAO" "replanejamento da execucao recusado ($motivo): estado terminal $P_ESTADO gravado; nenhuma rodada aberta, nenhum orcamento consumido. PARE e relate os bloqueios abertos."
 }
 
 # pode-resolver — um defeito_de_plano so e resolvido quando pertence a rodada de

@@ -8,7 +8,7 @@ Você está na F6. A partir de agora você implementa até o fim, sob as regras 
 - O estado do planejamento é `aprovado`: `scripts/planejamento.sh fase <slug>` responde `F6`. Com `fase=CHECKPOINT` a aprovação ainda não está no `HEAD` da `feature/<slug>`: a F6 **não começa** até `checkpoint <slug>` persistir o estado (`references/02-descoberta.md`).
 - Se contém `VEREDITO: NÃO`, volte para a F3. Se não existe, falta a F5: diga qual fase falta e execute-a primeiro.
 - Com o estado em `orcamento_esgotado` **não existe F6**: a F6 nunca começa, nem por pedido de retomada, nem com `ORQUESTRADOR.md` pronto.
-- Com `replanejar_execucao` (ou qualquer estado do laço com `replanejamento_execucao=ativo` na saída de `fase`) a F6 **não roda**: o plano voltou ao planejamento e a fase é a que `fase` responde. Com `replanejamento_execucao_esgotado` não existe F6: o estado é terminal.
+- Com `replanejar_execucao` (ou qualquer estado do laço com `replanejamento_execucao=ativo` na saída de `fase`) a F6 **não roda**: o plano voltou ao planejamento e a fase é a que `fase` responde. Com `replanejamento_execucao_esgotado` ou `replanejamento_execucao_recusado` não existe F6: o estado é terminal.
 
 ## Passo 1 — Carregar o mapa
 
@@ -177,7 +177,8 @@ Surgiu algo que impede a task de seguir. **O caminho que te trouxe aqui fixa a c
    - `replanejamento=iniciado` (código `0`): estado `replanejar_execucao`, `replanejamentos_f6` consumido, checkpoint feito. **Pare a F6** e siga para a F3 (`references/03-plano.md`, "Retorno da F6").
    - `replanejamento=retomada` (código `0`): a rodada já existia — sessão retomada. Nada foi consumido de novo; siga para a fase que `proxima=` indica.
    - `replanejamento=esgotado` (código `0`): o orçamento da F6 já foi consumido e o estado é o terminal `replanejamento_execucao_esgotado`. **Pare**, entregue o relatório final e devolva o controle: decidir o que fazer é de quem declarou o orçamento.
-   - `replanejamento=recusado` (código `5`) — `classes_mistas` (há bloqueio aberto de outra classe ou legado; nenhuma precedência é inventada), `orcamento_f6_nao_declarado` ou `orcamento_f6_legado`: nada foi gravado e o estado continua `aprovado`. **Não abra task nova**: encerre com o relatório final, com o motivo e os bloqueios abertos como pauta.
+   - `replanejamento=recusado` com `estado=replanejamento_execucao_recusado` e `proxima=PARAR` (código `5`) — recusa **operacional**, gravada e persistida: `classes_mistas` (há bloqueio aberto de outra classe ou legado; nenhuma precedência é inventada), `orcamento_f6_nao_declarado`, `orcamento_f6_legado` ou `planejamento_legado`. O estado terminal e o motivo (`recusa_replanejamento_f6`) estão no `HEAD` da `feature/<slug>`: uma sessão nova, ou outra árvore, lê o mesmo resultado em `fase` e em `replanejar-execucao`, que o repete sem gravar nada. **Não abra task nova**: encerre com o relatório final, com o motivo e os bloqueios abertos como pauta.
+   - `replanejamento=recusado` com o estado ainda `aprovado` (código `5`) — `sem_bloqueio_aberto`, `sem_defeito_de_plano` ou `estado`: erro de quem chamou, **nada foi gravado**. **PARE** e relate: registre o B-NN com a classe certa (passo 1) antes de chamar.
    - `motivo=fronteira_insegura` (código `2`): há produto sujo na árvore — editado, novo ou staged — fora dos artefatos de método. **PARE** e relate os caminhos. Nunca `stash`, nunca limpe, nunca descarte: o retorno ao planejamento só começa em fronteira segura.
    - Código `3`: checkpoint pendente — rode `planejamento.sh checkpoint <slug>` e repita. Código `4`: a task do B-NN não está gravada como `bloqueada`, ou o arquivo de estado é inválido — corrija o registro e repita.
 4. Qualquer outra classe: pule para a próxima task paralelizável cujas dependências estão satisfeitas.

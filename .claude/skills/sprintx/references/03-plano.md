@@ -7,7 +7,7 @@ Você está na F3. Seu objetivo é gerar a árvore de sprints/fases/tasks. Nesta
 - `docs/sprintx/features/<slug>/00-DECISOES.md` existe.
 - **Nenhum PENDENTE bloqueante** em `00-DECISOES.md`. Se houver, PARE: liste os PENDENTEs, diga o que cada um trava e pergunte só o necessário para resolvê-los (isso é resolução de pendência da F2, não uma nova entrevista). Só gere o plano com todos os bloqueantes resolvidos.
 - Se `00-DECISOES.md` não existe, a F2 não aconteceu: diga "Falta a F2 (descoberta). Vou executá-la primeiro." e execute `references/02-descoberta.md`.
-- O estado do planejamento é `aguardando_f3`, `replanejar` ou `replanejar_execucao` (`scripts/planejamento.sh fase <slug>` responde `F3`). Com `orcamento_esgotado` ou `replanejamento_execucao_esgotado` **não há F3**: o estado é terminal e nada continua automaticamente.
+- O estado do planejamento é `aguardando_f3`, `replanejar` ou `replanejar_execucao` (`scripts/planejamento.sh fase <slug>` responde `F3`). Com `orcamento_esgotado`, `replanejamento_execucao_esgotado` ou `replanejamento_execucao_recusado` **não há F3**: o estado é terminal e nada continua automaticamente.
 
 Se este é um retorno da F5 (estado `replanejar`), leia `00-AUDITORIA.md` antes de regerar: cada achado ALTA e MÉDIA deve ser endereçado na nova versão do plano — pela classe, não pelo exemplo (Passo 1.1).
 

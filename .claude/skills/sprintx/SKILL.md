@@ -37,6 +37,7 @@ Antes de agir, descubra em que fase está rodando `scripts/planejamento.sh fase 
 | `orcamento_esgotado` | **terminal** — pare; não continue automaticamente, nem para a F3, nem para a F5, nem para a F6 |
 | `replanejar_execucao` | F3 — a F6 achou `defeito_de_plano`; o plano volta à revisão, com as tasks concluídas congeladas |
 | `replanejamento_execucao_esgotado` | **terminal** — o orçamento de replanejamento da execução acabou; pare, como em `orcamento_esgotado` |
+| `replanejamento_execucao_recusado` | **terminal** — a F6 achou `defeito_de_plano`, mas o retorno não pôde abrir (motivo em `recusa_replanejamento_f6`); pare, como em `replanejamento_execucao_esgotado` |
 
 Nunca infira F5 só porque `ORQUESTRADOR.md` existe.
 
@@ -56,7 +57,7 @@ A primeira transição gravada numa feature legada cria o `00-PLANEJAMENTO.md` c
 
 **Orçamento de reprovações da F5.** Quem aciona a `sprintx` pode declarar um teto de vereditos NÃO (`max_reprovacoes_f5`, com `orcamento_declarado_por`), e o teto de replanejamentos da execução (`max_replanejamentos_f6`); a F1 grava os três exatamente como vieram, e `null` no que não veio — a `sprintx` não tem teto padrão. Sem declaração, não há teto e o laço F3 ↔ F5 segue até `VEREDITO: SIM`, como sempre. Com teto, a reprovação que o atinge leva ao estado terminal `orcamento_esgotado`: a skill para ali, sem F6 e sem nova F5 automática (`references/05-auditoria.md`).
 
-**Replanejamento da execução (retorno da F6).** Quando a F6 registra um bloqueio `defeito_de_plano`, ela não abre task nova sobre um plano que já sabe estar errado: `scripts/planejamento.sh replanejar-execucao <slug>` leva o plano de volta à revisão (F3) por um estado próprio, `replanejar_execucao`, e dali pelos portões de sempre (F4, F5) até `aprovado`. É um eixo separado do `replanejar` da F5, com orçamento próprio — `max_replanejamentos_f6`, declarado pelo mesmo caller e pelo mesmo caminho do orçamento da F5; sem ele declarado, o retorno não abre. O orçamento da F5 **continua** de onde estava: nenhum dos dois reinicia o outro. **Tasks concluídas são congeladas** durante o replanejamento: nada as apaga, renumera, reabre, reescreve ou reexecuta, e o script recusa em cada portão qualquer diferença nelas; o replanejamento mexe só no que ainda não foi concluído. Com o orçamento da F6 consumido, uma nova necessidade leva ao estado terminal `replanejamento_execucao_esgotado` (`references/06-execucao.md`).
+**Replanejamento da execução (retorno da F6).** Quando a F6 registra um bloqueio `defeito_de_plano`, ela não abre task nova sobre um plano que já sabe estar errado: `scripts/planejamento.sh replanejar-execucao <slug>` leva o plano de volta à revisão (F3) por um estado próprio, `replanejar_execucao`, e dali pelos portões de sempre (F4, F5) até `aprovado`. É um eixo separado do `replanejar` da F5, com orçamento próprio — `max_replanejamentos_f6`, declarado pelo mesmo caller e pelo mesmo caminho do orçamento da F5; sem ele declarado, o retorno não abre. O orçamento da F5 **continua** de onde estava: nenhum dos dois reinicia o outro. **Tasks concluídas são congeladas** durante o replanejamento: nada as apaga, renumera, reabre, reescreve ou reexecuta, e o script recusa em cada portão qualquer diferença nelas; o replanejamento mexe só no que ainda não foi concluído. Com o orçamento da F6 consumido, uma nova necessidade leva ao estado terminal `replanejamento_execucao_esgotado`; quando o retorno não pode abrir por um motivo operacional — classes de bloqueio misturadas, orçamento da F6 legado ou não declarado, feature sem `00-PLANEJAMENTO.md` —, ao terminal `replanejamento_execucao_recusado`, com o motivo gravado e persistido para a retomada (`references/06-execucao.md`).
 
 **Checkpoints do planejamento.** Com Git e na branch `feature/<slug>`, o fim da F2, da F3, da F4 e todo veredito da F5 viram um commit **local** só da pasta da feature — é o que faz o planejamento sobreviver à sessão antes da F6. Sem Git, ou fora dessa branch, nada é commitado e o método segue como sempre (`references/00-schema.md`, e "Checkpoint do planejamento" em `references/02-descoberta.md`). Nessa branch, um estado gravado no disco e ainda não persistido no `HEAD` **não governa**: `fase` responde `CHECKPOINT` (código `3`), `avanca` recusa, e a única ação é `scripts/planejamento.sh checkpoint <slug>` — só depois do commit a tabela acima volta a valer.
 
@@ -245,7 +246,8 @@ entrou, e um plano que só existe na árvore morre com a sessão. Por isso a `sp
 um único tipo de commit: o **checkpoint de planejamento**, local, na branch `feature/<slug>`,
 contendo **somente** `docs/sprintx/features/<slug>/**`, feito pelo `scripts/planejamento.sh` ao
 fim da F2, da F3, da F4, a cada veredito da F5, ao chegar a `orcamento_esgotado` e nas transições do
-replanejamento da execução (`replanejar_execucao`, `replanejamento_execucao_esgotado`). Nunca push,
+replanejamento da execução (`replanejar_execucao`, `replanejamento_execucao_esgotado`,
+`replanejamento_execucao_recusado`). Nunca push,
 nunca `--no-verify`, nunca arquivo de produto. Sem Git o checkpoint vira aviso no rastro, e a
 `sprintx` standalone continua sem exigir Git.
 

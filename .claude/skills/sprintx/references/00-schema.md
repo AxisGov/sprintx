@@ -63,7 +63,8 @@ Valem para todo arquivo que leva frontmatter:
 | `metodo_agregacao` | `pert_quadratura` |
 | `densidade` | `mvp` \| `padrao` \| `completo` \| `profundo` |
 | `modo_construcao` | `entrevista` \| `autonomo` |
-| `estado` (planejamento) | `aguardando_f3` \| `aguardando_f4` \| `aguardando_f5` \| `replanejar` \| `aprovado` \| `orcamento_esgotado` \| `replanejar_execucao` \| `replanejamento_execucao_esgotado` (ou `null` antes do fim da F2) |
+| `estado` (planejamento) | `aguardando_f3` \| `aguardando_f4` \| `aguardando_f5` \| `replanejar` \| `aprovado` \| `orcamento_esgotado` \| `replanejar_execucao` \| `replanejamento_execucao_esgotado` \| `replanejamento_execucao_recusado` (ou `null` antes do fim da F2) |
+| `recusa_replanejamento_f6` (planejamento) | `classes_mistas` \| `orcamento_f6_legado` \| `orcamento_f6_nao_declarado` \| `planejamento_legado` |
 | `veredito` (rodada da F5) | `sim` \| `nao` |
 | `classe` (bloqueio) | `defeito_de_plano` \| `lacuna_de_decisao` \| `prerequisito_ausente` \| `suite_vermelha` \| `task_reivindicada` |
 
@@ -662,7 +663,7 @@ Regras duras deste kind:
   dono, ou dono sem teto, é erro de contrato. A `sprintx` sozinha **nunca inventa orçamento** —
   ela grava `null`/`null`.
 - `estado` segue o enum `estado` (planejamento). É `null` da F1 até o fim da F2; a partir daí,
-  é sempre um dos oito valores. Nenhum outro estado existe.
+  é sempre um dos nove valores. Nenhum outro estado existe.
 - `reprovacoes` é um inteiro `>= 0` e é sempre igual à quantidade de rodadas `nao` do
   `historico`.
 - `historico` é **append-only**: uma entrada por veredito da F5, na ordem, com `rodada`
@@ -698,6 +699,25 @@ não é o `replanejar` da F5 e não mexe no orçamento dela.
   `replanejamentos_f6 >= max_replanejamentos_f6`. `aprovado` com a lista ainda preenchida é um
   fechamento de rodada gravado e não terminado: `fase` responde `CHECKPOINT` e só `checkpoint`
   completa.
+- **Recusa operacional durável.** Quando há `defeito_de_plano` aberto e a rodada não pode abrir por
+  um motivo **operacional**, `replanejar-execucao` grava o estado terminal
+  `replanejamento_execucao_recusado` com a chave `recusa_replanejamento_f6: <motivo>` e faz o
+  checkpoint — a mesma disciplina do `replanejamento_execucao_esgotado`. O motivo é um de
+  `classes_mistas` (há aberto de outra classe ou legado junto do `defeito_de_plano`),
+  `orcamento_f6_legado` (arquivo sem o eixo F6), `orcamento_f6_nao_declarado`
+  (`max_replanejamentos_f6: null`) ou `planejamento_legado` (feature sem `00-PLANEJAMENTO.md`: o
+  arquivo nasce na recusa, pela migração da tabela antiga, com as cinco chaves do eixo e
+  `max_replanejamentos_f6: null` — nenhum orçamento inventado). A recusa não abre rodada, não
+  consome `replanejamentos_f6`, não reabre nem cria task. `recusa_replanejamento_f6` existe **se e
+  somente se** o estado é `replanejamento_execucao_recusado`, fica logo depois de `estado`, e é
+  coerente com o eixo gravado: `orcamento_f6_legado` só sem as cinco chaves;
+  `orcamento_f6_nao_declarado` e `planejamento_legado` só com `max_replanejamentos_f6: null`. O
+  terminal exige a última rodada da F5 `sim` e nenhuma rodada da F6 ativa. É a fonte da retomada: o
+  motivo é lido do arquivo commitado, nunca do rastro nem da árvore de trabalho. Chamar
+  `replanejar-execucao` de novo devolve o mesmo terminal e o mesmo motivo sem gravar, commitar ou
+  registrar nada. **Erro de contrato nunca vira esta recusa**: `estado` (fora da F6),
+  `sem_bloqueio_aberto`, `sem_defeito_de_plano`, `fronteira_insegura`, registro ou schema inválido e
+  task concluída alterada continuam sem gravar nada, com o código de sempre.
 - No `historico`, uma rodada depois de um `sim` só existe quando um replanejamento da execução a
   abriu: no máximo uma sequência assim por unidade de `replanejamentos_f6`.
 - **Legado.** `00-PLANEJAMENTO.md` gravado antes deste eixo não tem as cinco chaves: continua
