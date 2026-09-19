@@ -90,20 +90,37 @@ raiz da skill) como ponto de partida desses dois arquivos.
 `references/00-schema.md`) sempre pelo script, nunca à mão:
 
 ```bash
-bash <raiz-da-skill>/scripts/planejamento.sh criar <slug> [max_reprovacoes_f5] [orcamento_declarado_por]
+bash <raiz-da-skill>/scripts/planejamento.sh criar <slug> [max_reprovacoes_f5] [orcamento_declarado_por] [max_replanejamentos_f6]
 ```
 
+**O orçamento pertence a quem acionou a `sprintx`, nunca a ela.** Leia do pedido (o briefing do
+caller) as três chaves `max_reprovacoes_f5`, `orcamento_declarado_por` e `max_replanejamentos_f6`
+e repasse cada uma, na posição dela, exatamente como veio. Chave que o pedido não declara vai como
+`null` — nunca como um valor que você escolheu; `null` ao fim da linha pode ser omitido. A
+`sprintx` não tem teto padrão: não arredonde, não complete e não invente nenhum dos três.
+
+| O pedido declara | Comando |
+|---|---|
+| nada | `criar <slug>` |
+| `max_reprovacoes_f5: 3`, `orcamento_declarado_por: buildx` | `criar <slug> 3 buildx` |
+| `max_reprovacoes_f5: 3`, `orcamento_declarado_por: buildx`, `max_replanejamentos_f6: 1` | `criar <slug> 3 buildx 1` |
+
 - **A `sprintx` sozinha** — ninguém declarou orçamento: rode só `criar <slug>`. O arquivo nasce
-  com `max_reprovacoes_f5: null` e `orcamento_declarado_por: null`, e o laço F3 ↔ F5 não tem teto.
-- **Um caller declarou orçamento** — o pedido que acionou a `sprintx` traz
-  `max_reprovacoes_f5: <n>` e `orcamento_declarado_por: <quem>` (a `buildx`, por exemplo, declara
-  `3` e `buildx`): repasse os dois exatamente como vieram, `criar <slug> 3 buildx`. Não arredonde,
-  não complete e não invente um dos dois.
+  com `max_reprovacoes_f5: null`, `orcamento_declarado_por: null` e `max_replanejamentos_f6: null`:
+  o laço F3 ↔ F5 não tem teto e o retorno da F6 ao planejamento não abre.
+- **Um caller declarou orçamento** — a `buildx`, por exemplo, declara `max_reprovacoes_f5: 3`,
+  `orcamento_declarado_por: buildx` e `max_replanejamentos_f6: 1`: repasse os três,
+  `criar <slug> 3 buildx 1`. O arquivo nasce com `max_replanejamentos_f6: 1` e
+  `replanejamentos_f6: 0`. Um pedido que declara só o teto da F5 e o dono (um caller anterior ao
+  eixo da F6) vira `criar <slug> 3 buildx`: o teto da F6 fica `null` — o `1` do BuildX não é
+  presumido.
 - **Orçamento inválido** — zero, negativo, texto, teto sem dono ou dono sem teto: o script sai
   com código `4` (erro de contrato) e não grava nada. Isso não é bloqueio a contornar: devolva o
   erro a quem pediu, e não siga com um teto que ninguém declarou.
 - Numa retomada o arquivo já existe: `criar` com o mesmo orçamento é no-op; com orçamento
-  diferente é erro de contrato — o teto não muda em silêncio no meio do trabalho.
+  diferente é erro de contrato — o teto não muda em silêncio no meio do trabalho. Planejamento
+  legado (anterior ao eixo da F6, sem `max_replanejamentos_f6`) não ganha teto numa retomada:
+  repita só o que ele já registra; pedir o teto da F6 a ele é erro de contrato (código `4`).
 
 O arquivo nasce com `estado: null`: o planejamento só ganha estado ao fim da F2. A F1 **não** faz
 checkpoint.
@@ -250,7 +267,7 @@ Use `assets/TEMPLATE-base-recurso.md` (caminho relativo à raiz da skill). Todo 
 - [ ] `00-LACUNAS.md` registra tudo que não foi encontrado (ou declara que não há lacunas).
 - [ ] Nenhum campo inventado; todo número referenciado.
 - [ ] `00-BLOQUEIOS.md` e `base/00-INDICE.md` têm frontmatter válido conforme `references/00-schema.md`.
-- [ ] `00-PLANEJAMENTO.md` existe, criado por `scripts/planejamento.sh criar`, com o orçamento que o caller declarou — ou `null`/`null` sem declaração.
+- [ ] `00-PLANEJAMENTO.md` existe, criado por `scripts/planejamento.sh criar`, com os três tetos que o caller declarou (`max_reprovacoes_f5`, `orcamento_declarado_por`, `max_replanejamentos_f6`) — e `null` em cada um que ele não declarou.
 
 ## Quando o critério não é atendido
 
