@@ -1204,6 +1204,223 @@ printf '%s\n' "$EXREV" | bash "$PL" revisor >/dev/null 2>&1; afirma "gz2-exemplo
 
 rm -rf "$G"
 
+echo "== J. o bloqueio ganha classe (P0.2-A5) =="
+# Testa o MECANISMO: scripts/bloqueios.sh e o unico escritor de B-NN novo, e a classe
+# sai da chave `classe`, nunca da descricao. Cada caso e uma funcao <script> <dir>, para
+# que os mutantes (jm-*) rodem exatamente a mesma bateria. Nenhum caso le a descricao
+# para obter a classe: a classe vem sempre de `bloqueios.sh listar`.
+BL="$SK/scripts/bloqueios.sh"
+TPLB="$SK/assets/TEMPLATE-BLOQUEIOS.md"
+SCH="$SK/references/00-schema.md"
+existe "j0-script-existe" "$BL"
+bash -n "$BL"; afirma "j0-script-sintaxe" $? "bash -n"
+J="$(mktemp -d)"
+ENUM_J="defeito_de_plano lacuna_de_decisao prerequisito_ausente suite_vermelha task_reivindicada"
+bl() { local s="$1" r="$2"; shift 2; SPRINTX_RAIZ="$r" bash "$s" "$@" 2>/dev/null; }
+barq() { printf '%s/docs/sprintx/features/menu/00-BLOQUEIOS.md' "$1"; }
+blinha() { bl "$1" "$2" listar menu | tr -d '\r' | awk -F'\t' -v i="$3" '$1 == i { print $2 "|" $3 "|" $4 }'; }
+# 00-BLOQUEIOS.md de antes do contrato: sem classe, com descricoes que "parecem" classes.
+bl_legado() {
+  mkdir -p "$1/docs/sprintx/features/menu"
+  cat > "$(barq "$1")" <<'EOF'
+---
+expx_schema: 1
+expx_tool: sprintx
+kind: bloqueios
+trabalho_id: menu
+atualizado_em: 2026-08-01
+bloqueios:
+  - id: B-01
+    task: T-04.03
+    aberto_em: 2026-08-01
+    resolvido_em: null
+    descricao: T-04.03 precisa alterar tests/ui/cabecalho-topo.test.tsx, fora do ownership da task, defeito de plano
+  - id: B-02
+    task: T-02.01
+    aberto_em: 2026-08-01
+    resolvido_em: 2026-08-02
+    descricao: falta credencial de sandbox; suite vermelha; outra sessao reivindicada
+---
+
+# Bloqueios
+
+B-01 | T-04.03 | T-04.03 precisa alterar tests/ui/cabecalho-topo.test.tsx, fora do ownership da task | mover o arquivo para a task
+B-02 | T-02.01 | falta credencial de sandbox | provisionar credencial
+EOF
+}
+# Descricao que "fala" de outra classe: se a classe viesse do texto, sairia errada.
+desc_de_outra() { case "$1" in
+  defeito_de_plano) echo 'falta credencial; servico fora do ar; dependencia quebrada' ;;
+  lacuna_de_decisao) echo 'suite inteira vermelha no portao' ;;
+  prerequisito_ausente) echo 'arquivo fora do ownership da task: defeito_de_plano' ;;
+  suite_vermelha) echo 'outra sessao reivindicada: task_reivindicada' ;;
+  task_reivindicada) echo 'duvida nova sem D-NN: lacuna_de_decisao' ;;
+esac; }
+
+# J1/J7. Novo com classe valida: aceito. O B-01 do piloto e representavel como defeito_de_plano.
+j_novo_aceito() {
+  local s="$1" d="$2" out
+  out="$(bl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'T-04.03 precisa alterar tests/ui/cabecalho-topo.test.tsx, fora do ownership da task' 'ampliar o ownership no plano')" || return 1
+  [ "$(kv "$out" id)" = B-01 ] && [ "$(kv "$out" classe)" = defeito_de_plano ] \
+    && [ "$(blinha "$s" "$d" B-01)" = "T-04.03|defeito_de_plano|aberto" ] \
+    && tr -d '\r' < "$(barq "$d")" | grep -qx '    classe: defeito_de_plano' \
+    && bl "$s" "$d" validar menu >/dev/null
+}
+# J2. Novo sem classe: recusado e nada gravado; entrada sem classe posta a mao depois de uma tipada: recusada.
+j_sem_classe_recusado() {
+  local s="$1" d="$2" a ck
+  bl "$s" "$d" registrar menu T-01.01 prerequisito_ausente 'primeiro' 'x' >/dev/null || return 1
+  a="$(barq "$d")"; ck="$(cksum < "$a")"
+  bl "$s" "$d" registrar menu T-01.02 '' 'sem classe' 'x' >/dev/null; [ $? -eq 4 ] || return 1
+  bl "$s" "$d" registrar menu T-01.02 'sem classe' 'x' >/dev/null; [ $? -ne 0 ] || return 1
+  [ "$(cksum < "$a")" = "$ck" ] || return 1
+  awk '{ print } $0 == "    descricao: \"primeiro\"" { print "  - id: B-02\n    task: T-01.02\n    aberto_em: 2026-09-01\n    resolvido_em: null\n    descricao: novo sem classe" }' "$a" > "$a.m" && mv "$a.m" "$a"
+  grep -q '^  - id: B-02' "$a" || return 1
+  bl "$s" "$d" validar menu >/dev/null; [ $? -eq 4 ] || return 1
+  bl "$s" "$d" listar menu >/dev/null; [ $? -eq 4 ]
+}
+# J3. Classe fora do enum: recusada na escrita e na leitura — inclusive o vocabulario do
+# BuildX, `null` e o `legado` que a leitura devolve.
+j_fora_do_enum() {
+  local s="$1" d="$2" a ck c i=0
+  bl "$s" "$d" registrar menu T-01.01 suite_vermelha 'base' 'x' >/dev/null || return 1
+  a="$(barq "$d")"; ck="$(cksum < "$a")"
+  for c in legado null trabalho_novo decisao_humana recurso_externo falha_tecnica Defeito_de_plano 'defeito de plano'; do
+    bl "$s" "$d" registrar menu T-01.02 "$c" 'ruim' 'x' >/dev/null; [ $? -eq 4 ] || return 1
+  done
+  [ "$(cksum < "$a")" = "$ck" ] || return 1
+  for c in trabalho_novo null legado '"suite_vermelha"' ''; do
+    i=$((i+1)); mkdir -p "$d/v$i/docs/sprintx/features/menu"
+    sed "s/^    classe: suite_vermelha\$/    classe: $c/" "$a" > "$(barq "$d/v$i")"
+    cmp -s "$a" "$(barq "$d/v$i")" && return 1
+    bl "$s" "$d/v$i" validar menu >/dev/null; [ $? -eq 4 ] || return 1
+  done
+}
+# J4. Legado sem classe: legivel, sai `legado`, nunca inferido — nem na leitura, nem quando
+# um B-NN novo regrava o arquivo (as entradas antigas ficam byte a byte).
+j_legado() {
+  local s="$1" d="$2" a antes depois
+  bl_legado "$d"; a="$(barq "$d")"
+  bl "$s" "$d" validar menu >/dev/null || return 1
+  [ "$(blinha "$s" "$d" B-01)" = "T-04.03|legado|aberto" ] && [ "$(blinha "$s" "$d" B-02)" = "T-02.01|legado|resolvido" ] || return 1
+  antes="$(sed -n '/^  - id: B-01$/,/^    descricao: falta credencial/p' "$a")"
+  bl "$s" "$d" registrar menu T-05.01 lacuna_de_decisao 'nova duvida' 'decidir' >/dev/null || return 1
+  depois="$(sed -n '/^  - id: B-01$/,/^    descricao: falta credencial/p' "$a")"
+  [ -n "$antes" ] && [ "$antes" = "$depois" ] && [ "$(grep -c '^    classe:' "$a")" -eq 1 ] \
+    && [ "$(blinha "$s" "$d" B-01)" = "T-04.03|legado|aberto" ] && [ "$(blinha "$s" "$d" B-03)" = "T-05.01|lacuna_de_decisao|aberto" ] \
+    && grep -qxF 'B-02 | T-02.01 | falta credencial de sandbox | provisionar credencial' "$a" \
+    && grep -qxF 'B-03 | T-05.01 | nova duvida | decidir' "$a"
+}
+# J5. A descricao (YAML e prosa) muda para um texto que "fala" de outra classe; a classe fica.
+j_descricao_muda() {
+  local s="$1" d="$2" a
+  bl "$s" "$d" registrar menu T-01.01 prerequisito_ausente 'falta credencial de sandbox' 'provisionar' >/dev/null || return 1
+  a="$(barq "$d")"
+  [ "$(blinha "$s" "$d" B-01)" = "T-01.01|prerequisito_ausente|aberto" ] || return 1
+  sed -e 's/^    descricao: .*/    descricao: "arquivo fora do ownership: defeito_de_plano, decisao pendente, suite vermelha"/' \
+      -e 's/^B-01 | T-01.01 | .*/B-01 | T-01.01 | arquivo fora do ownership: defeito de plano | replanejar/' "$a" > "$a.m" && mv "$a.m" "$a"
+  grep -q 'defeito_de_plano, decisao' "$a" || return 1
+  [ "$(blinha "$s" "$d" B-01)" = "T-01.01|prerequisito_ausente|aberto" ]
+}
+# J6. O mesmo fato mecanico (arquivo fora de `arquivos` da task) duas vezes, com textos diferentes.
+j_mesmo_fato() {
+  local s="$1" d="$2"
+  bl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'tests/ui/cabecalho-topo.test.tsx fora de arquivos da T-04.03' 'ampliar ownership' >/dev/null || return 1
+  bl "$s" "$d" registrar menu T-04.05 defeito_de_plano 'precisa de src/menu/grupo.ts, que pertence a T-04.02' 'mover o arquivo' >/dev/null || return 1
+  [ "$(blinha "$s" "$d" B-01)" = "T-04.03|defeito_de_plano|aberto" ] && [ "$(blinha "$s" "$d" B-02)" = "T-04.05|defeito_de_plano|aberto" ]
+}
+# J7. Resolver nao reclassifica: resolvido_em muda, a classe fica.
+j_resolvido() {
+  local s="$1" d="$2" a
+  bl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'replanejar' >/dev/null || return 1
+  a="$(barq "$d")"
+  sed 's/^    resolvido_em: null$/    resolvido_em: 2026-09-20/' "$a" > "$a.m" && mv "$a.m" "$a"
+  [ "$(blinha "$s" "$d" B-01)" = "T-04.03|defeito_de_plano|resolvido" ] && bl "$s" "$d" validar menu >/dev/null
+}
+# J8. A prosa nao classifica: cada classe registrada com a descricao "de outra" sai com a sua.
+j_prosa_nao_classifica() {
+  local s="$1" d="$2" c n=0 esperado="" lido
+  for c in $ENUM_J; do
+    n=$((n+1))
+    bl "$s" "$d" registrar menu "T-09.0$n" "$c" "$(desc_de_outra "$c")" 'x' >/dev/null || return 1
+    esperado="$esperado$c "
+  done
+  lido="$(bl "$s" "$d" listar menu | tr -d '\r' | cut -f3 | tr '\n' ' ')"
+  [ "$lido" = "$esperado" ]
+}
+CASOS_J="j_novo_aceito j_sem_classe_recusado j_fora_do_enum j_legado j_descricao_muda j_mesmo_fato j_resolvido j_prosa_nao_classifica"
+roda_caso() { local d; d="$(mktemp -d "$J/c.XXXXXX")"; "$1" "$2" "$d"; }
+for par in j_novo_aceito:j1-novo-com-classe-aceito j_sem_classe_recusado:j2-novo-sem-classe-recusado \
+  j_fora_do_enum:j3-classe-fora-do-enum-recusada j_legado:j4-legado-legivel-sem-inferencia \
+  j_descricao_muda:j5-descricao-muda-classe-fica j_mesmo_fato:j6-mesmo-fato-mesma-classe \
+  j_resolvido:j7-defeito-de-plano-resolvido-mantem j_prosa_nao_classifica:j8-prosa-nao-classifica; do
+  roda_caso "${par%%:*}" "$BL"; afirma "${par#*:}" $? "${par%%:*}"
+done
+D="$J/tpl"; bl "$BL" "$D" registrar menu T-01.01 lacuna_de_decisao 'x' 'y' >/dev/null
+tr -d '\r' < "$(barq "$D")" | awk 'NR==1{next} $0=="---"{exit} {print}' | grep -q '{{'; [ $? -ne 0 ]
+afirma "j9-arquivo-novo-sem-placeholder-no-yaml" $? "criado do template, frontmatter preenchido"
+
+# Enum unico: script, schema (enum e tabela), tabela da F6 e template, na mesma ordem.
+E_SCRIPT="$(bash "$BL" classes | tr -d '\r' | tr '\n' ' ')"
+E_ENUM="$(tr -d '\r' < "$SCH" | grep -F '| `classe` (bloqueio) |' | grep -o '`[a-z_]*`' | tr -d '`' | sed 1d | tr '\n' ' ')"
+E_TABSCH="$(tr -d '\r' < "$SCH" | awk '/^\*\*O bloqueio é dado tipado/{f=1} /^Regras duras de `classe`/{f=0} f' | grep -E '^\| `[a-z_]+` \|' | sed -E 's/^\| `([a-z_]+)`.*/\1/' | tr '\n' ' ')"
+E_F6="$(tr -d '\r' < "$EXEC" | awk '/^## Regra de bloqueio/{f=1} /^## Portões/{f=0} f' | grep -E '\| `[a-z_]+` \|$' | grep -vF '| `classe` |' | sed -E 's/.*\| `([a-z_]+)` \|$/\1/' | tr '\n' ' ')"
+E_TPL="$(tr -d '\r' < "$TPLB" | sed -n 's/^    classe: {{\(.*\)}}$/\1/p' | tr -d ' ' | tr '|' ' ') "
+for par in "script:$E_SCRIPT" "schema-enum:$E_ENUM" "schema-tabela:$E_TABSCH" "f6-tabela:$E_F6" "template:$E_TPL"; do
+  [ "${par#*:}" = "$ENUM_J " ]; afirma "j10-enum-${par%%:*}" $? "${par#*:}"
+done
+printf '%s' "$E_SCRIPT" | grep -Eq 'trabalho_novo|decisao_humana|recurso_externo|falha_tecnica|legado'; [ $? -ne 0 ]
+afirma "j10-vocabulario-e-da-sprintx" $? "nenhuma classe do BuildX nem legado"
+
+# A F6 so registra pelo script, e cada caminho de criacao nomeia a sua classe.
+tem "$EXEC" 'scripts/bloqueios.sh registrar <slug> <T-NN.MM|null> <classe>' \
+  && ! tem "$EXEC" 'Registre em `docs/sprintx/features/<slug>/00-BLOQUEIOS.md`: `B-NN'
+afirma "j11-f6-registra-pelo-script" $? "sem gravacao a mao do B-NN"
+tem "$EXEC" 'nunca pelo texto que você vai escrever na descrição'; afirma "j11-f6-classe-pelo-caminho" $? "caminho, nao texto"
+tem "$EXEC" 'registre um bloqueio `task_reivindicada`' && tem "$EXEC" 'registre bloqueio `suite_vermelha`' \
+  && tem "$EXEC" 'trate como bloqueio `defeito_de_plano` se não houver task que o resolva' \
+  && tr -d '\r' < "$EXEC" | grep -A1 -F '**Se não conseguir tornar o teste discriminante, registre bloqueio da task** (classe' | grep -qF '`defeito_de_plano`, Regra de bloqueio'
+afirma "j11-f6-cada-caminho-tem-classe" $? "reivindicada, suite, criterio, fraco:teste"
+tem "$SCH" '**A prosa explica, não classifica:**' && tem "$SCH" '**Ela nunca recebe classe inferida**' \
+  && tem "$SCH" '5. **Exceção: `classe` de bloqueio nunca é inferida da prosa.**' && tem "$SCH" '**Imutável.** Gravada, a classe não muda'
+afirma "j12-schema-contrato-da-classe" $? "prosa nao classifica, legado, migracao, imutavel"
+DSF="$SK/DECISOES-DA-SKILL.md"
+[ "$(grep -c '^| DS-139 |' "$DSF")" -eq 1 ] && tem "$DSF" '**A prosa explica, não classifica:**' \
+  && tem "$DSF" 'nenhum consumidor deriva classe de `descricao`' && tem "$DSF" '**nunca ganha classe inferida retroativamente**'
+afirma "j12-ds139-registrada" $? "DS-139"
+
+# Mutantes do script, em copia temporaria da skill (scripts/ + assets/, porque o script acha
+# o template pela propria pasta): a bateria acima tem de matar cada um. O controle e uma
+# copia SEM mutacao na mesma estrutura: se ele morrer, a bancada e que esta quebrada.
+MJ="$J/mut"
+muta_lit() { # muta_lit <origem> <destino> <trecho> <troca> — troca literal; falha se o trecho nao existe
+  ML_A="$3" ML_B="$4" awk '{ a = ENVIRON["ML_A"]; i = index($0, a); if (i) { $0 = substr($0, 1, i - 1) ENVIRON["ML_B"] substr($0, i + length(a)); n++ } print } END { exit n ? 0 : 1 }' "$1" > "$2"
+}
+copia_skill() { mkdir -p "$MJ/$1/scripts" "$MJ/$1/assets"; cp "$TPLB" "$MJ/$1/assets/"; printf '%s/%s/scripts/bloqueios.sh' "$MJ" "$1"; }
+mata() { local c; for c in $CASOS_J; do roda_caso "$c" "$1" || { printf '%s' "$c"; return; }; done; }
+mutante() { # mutante <nome> <rc da geracao> <script> <caso que TEM de matar>... — nao vale morrer de carona
+  local nome="$1" rc="$2" s="$3" c vivos=""; shift 3
+  if [ "$rc" -eq 0 ]; then for c in "$@"; do roda_caso "$c" "$s" && vivos="$vivos$c "; done; fi
+  [ "$rc" -eq 0 ] && [ -z "$vivos" ]; afirma "$nome" $? "morto por: $* ${vivos:+— SOBREVIVEU a: $vivos}(rc geracao=$rc)"
+}
+CTL="$(copia_skill controle)"; cp "$BL" "$CTL"
+K="$(mata "$CTL")"; [ -z "$K" ]; afirma "jm-controle-copia-intacta-sobrevive" $? "${K:-nenhum caso reprova a copia sem mutacao}"
+DERIVA='c = ($0 ~ /arquivo|ownership|plano/) ? "defeito_de_plano" : ($0 ~ /credencial|servico|dependencia/) ? "prerequisito_ausente" : ($0 ~ /suite/) ? "suite_vermelha" : ($0 ~ /sessao|reivindicad/) ? "task_reivindicada" : "lacuna_de_decisao"; nc = 1'
+LINHA_CHAVES='    /^    [a-z_]+:/      { next }'
+M="$(copia_skill a)"; muta_lit "$BL" "$M.1" '    classe: %s\n' '' && muta_lit "$M.1" "$M" '"$task" "$classe" "$(hoje)"' '"$task" "$(hoje)"'
+mutante "jm-mutante-a-escrita-remove-classe" $? "$M" j_novo_aceito j_mesmo_fato
+M="$(copia_skill b)"; muta_lit "$BL" "$M" "$LINHA_CHAVES" "    /^    descricao:/ { $DERIVA; next }
+$LINHA_CHAVES"
+mutante "jm-mutante-b-classe-da-descricao" $? "$M" j_descricao_muda j_prosa_nao_classifica
+M="$(copia_skill c)"; muta_lit "$BL" "$M" "$LINHA_CHAVES" "    /^    descricao:/ { if (!nc) { $DERIVA }; next }
+$LINHA_CHAVES"
+mutante "jm-mutante-c-legado-inferido-da-descricao" $? "$M" j_legado
+M="$(copia_skill d)"; muta_lit "$BL" "$M" '[ -n "$tipada" ] && falha' 'false && falha'
+mutante "jm-mutante-d-leitura-aceita-novo-sem-classe" $? "$M" j_sem_classe_recusado
+M="$(copia_skill e)"; muta_lit "$BL" "$M" 'classe_valida "$classe" || falha "$E_CONTRATO" "$id com classe' 'true || falha "$E_CONTRATO" "$id com classe'
+mutante "jm-mutante-e-leitura-aceita-fora-do-enum" $? "$M" j_fora_do_enum
+rm -rf "$J"
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado pulados"
 [ "$falhou" -eq 0 ]

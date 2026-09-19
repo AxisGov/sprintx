@@ -119,7 +119,7 @@ A integração é condicional: sem a `mergex` instalada, a F6 roda exatamente co
 14. Na F5 a IA é auditora: só aponta, nunca corrige; achado de severidade ALTA manda voltar para a F3 — ou para o estado terminal `orcamento_esgotado`, quando a reprovação atinge o teto declarado pelo caller — nunca corrigir à mão o arquivo gerado.
 15. Proibido escrever código de implementação em qualquer fase antes da F6.
 16. Use sempre caminhos relativos; nunca escreva caminhos absolutos em nenhum artefato.
-17. Todo arquivo de estado é gravado com o frontmatter do contrato expx-schema v1, descrito em `references/00-schema.md`. Arquivo de estado sem frontmatter válido é considerado não entregue. Ao abrir uma pasta de trabalho que já existe e cujos arquivos não têm frontmatter, acrescente o frontmatter na próxima vez que gravar aquele arquivo, inferindo os valores da prosa existente; nunca reescreva em massa nem migre pastas que não vai tocar.
+17. Todo arquivo de estado é gravado com o frontmatter do contrato expx-schema v1, descrito em `references/00-schema.md`. Arquivo de estado sem frontmatter válido é considerado não entregue. Ao abrir uma pasta de trabalho que já existe e cujos arquivos não têm frontmatter, acrescente o frontmatter na próxima vez que gravar aquele arquivo, inferindo os valores da prosa existente — exceto a `classe` de bloqueio, que nunca é inferida da prosa; nunca reescreva em massa nem migre pastas que não vai tocar.
 18. Estimativa sai sempre como faixa, com premissas, invalidadores e nível de confiança. Número único é proibido.
 19. Estimativa é esforço, nunca prazo de calendário. A conversão em data é decisão humana.
 20. Todo trabalho fecha com `FECHAMENTO.md`, declarando módulo afetado, arquivos alterados e palavras-chave.
@@ -165,6 +165,7 @@ MimoCode não é suportado por esta skill.
 | Todas as que gravam transição | `references/09-estado.md` — contrato `expx-estado` v1: o `.expx/estado.json` que a barra de status lê | — |
 | F3 e F6 (ao gravar `fases.md` e ao fechar task) | `references/09-diagrama.md` — o bloco Mermaid do grafo de tasks dentro de `fases.md`. Derivado: sua ausência é inofensiva e nunca bloqueia | `assets/TEMPLATE-fases.md` |
 | F1 a F5 (estado do planejamento) | `scripts/planejamento.sh` — cria, avança, detecta a fase e faz o checkpoint; único escritor de `00-PLANEJAMENTO.md` | `assets/TEMPLATE-PLANEJAMENTO.md` |
+| F6 (ao registrar bloqueio) | `scripts/bloqueios.sh` — único escritor de B-NN novo em `00-BLOQUEIOS.md`, sempre com `classe`; lê o legado sem classe como `legado` | `assets/TEMPLATE-BLOQUEIOS.md` |
 | F1 INGESTÃO | `references/01-ingestao.md` | `assets/TEMPLATE-base-recurso.md`, `assets/TEMPLATE-base-indice.md`, `assets/TEMPLATE-BLOQUEIOS.md` |
 | F2 DESCOBERTA | `references/02-descoberta.md` | `assets/TEMPLATE-DECISOES.md` |
 | F3 PLANO | `references/03-plano.md` | `assets/TEMPLATE-sprint.md`, `assets/TEMPLATE-fases.md`, `assets/TEMPLATE-tasks.md` |

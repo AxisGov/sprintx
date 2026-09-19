@@ -62,7 +62,7 @@ Para CADA task, nesta ordem:
 `docs/eventos/<trabalho_id>.jsonl` e procure, para a task em questão, o `task_iniciada` mais
 recente. Se ele foi gravado por outra sessão e não há `task_concluida`/`task_bloqueada` dela
 depois, a task está reivindicada — não a abra. Pule para a próxima paralelizável cujas
-dependências estão satisfeitas; sem nenhuma, registre um bloqueio.
+dependências estão satisfeitas; sem nenhuma, registre um bloqueio `task_reivindicada`.
 
 1. Marque `status: em_andamento` em `tasks.md` e grave `task_iniciada` no rastro (`references/08-rastro.md`). Grave `task: T-NN.MM` em `.expx/estado.json` (`references/09-estado.md`).
 
@@ -85,8 +85,8 @@ dependências estão satisfeitas; sem nenhuma, registre um bloqueio.
       compilação, import ou fixture;
    5. **somente então** implemente (passo 3).
 
-   **Se não conseguir tornar o teste discriminante, registre bloqueio da task** (Regra de
-   bloqueio, abaixo) e **não implemente**. É TDD sem atalho: teste discriminante primeiro, produto
+   **Se não conseguir tornar o teste discriminante, registre bloqueio da task** (classe
+   `defeito_de_plano`, Regra de bloqueio, abaixo) e **não implemente**. É TDD sem atalho: teste discriminante primeiro, produto
    depois — um `fraco:teste` que chega à implementação sem ter sido endurecido deixa de ser MÉDIA
    e vira exatamente o teste verde e falso que a F5 existia para impedir.
 2. **Escreva o teste de integração e o teste funcional ANTES de qualquer código de implementação**, exatamente como a task os descreve. Rode-os e confirme que falham (vermelho).
@@ -145,11 +145,24 @@ painel de operação lê o YAML, não a prosa.
 
 ## Regra de bloqueio — nunca parar
 
-Surgiu dúvida nova, decisão não coberta pelo plano, pré-requisito faltando (segredo inexistente, serviço fora do ar, dependência quebrada):
+Surgiu algo que impede a task de seguir. **O caminho que te trouxe aqui fixa a classe** — escolha pela linha da tabela, nunca pelo texto que você vai escrever na descrição:
 
-1. Registre em `docs/sprintx/features/<slug>/00-BLOQUEIOS.md`: `B-NN | task | descrição do bloqueio | o que destravaria`.
-2. Marque a task como `status: bloqueada` em `tasks.md` e grave `task_bloqueada` no rastro, e grave `bloqueios` em `.expx/estado.json` com a nova contagem de bloqueios **abertos** (`references/09-estado.md`). Um bloqueio resolvido depois diminui essa contagem, na mesma gravação em que `resolvido_em` deixa de ser `null`.
-   Ao registrar o bloqueio, grave também o frontmatter `kind: bloqueios` de `00-BLOQUEIOS.md` (novo item em `bloqueios:` com `id`, `task`, `aberto_em` com a data do sistema, `resolvido_em: null` e `descricao` em uma linha) e reescreva `atualizado_em`. Formato em `references/00-schema.md`. A task muda para `bloqueada` no frontmatter e na prosa de `tasks.md`.
+| O que aconteceu | `classe` |
+|---|---|
+| Cumprir a task exige mudar o plano aprovado: arquivo necessário fora de `arquivos` da task (de outra task ou de nenhuma), `depende_de` que o plano não declara, `fraco:teste` que não fica discriminante (Passo 2.0), `criterio_saida` sem task que o cumpra | `defeito_de_plano` |
+| Dúvida nova que nenhuma `D-NN` responde; operação barrada pelo `git-perigoso` | `lacuna_de_decisao` |
+| Pré-requisito fora do repositório faltando: segredo inexistente, serviço fora do ar, dependência externa quebrada | `prerequisito_ausente` |
+| Suíte inteira vermelha no portão da sprint, sem correção | `suite_vermelha` |
+| Nenhuma task executável porque as restantes estão reivindicadas por outra sessão | `task_reivindicada` |
+
+1. Registre o bloqueio com a classe da tabela — é o único jeito de criar um B-NN:
+
+   ```bash
+   bash <raiz-da-skill>/scripts/bloqueios.sh registrar <slug> <T-NN.MM|null> <classe> "<descrição em uma linha>" "<o que destravaria>"
+   ```
+
+   Ele grava o item no frontmatter `kind: bloqueios` de `00-BLOQUEIOS.md` (`id`, `task`, `classe`, `aberto_em` com a data do sistema, `resolvido_em: null`, `descricao`), a linha `B-NN | task | descrição do bloqueio | o que destravaria` da prosa e `atualizado_em`. Classe vazia ou fora do enum: código `4`, nada gravado — escolha a linha da tabela e registre de novo. Arquivo antigo sem frontmatter: migre o frontmatter antes (`references/00-schema.md`, regra de migração — sem inventar classe para os B-NN antigos). `task` é `null` só quando o bloqueio não é de uma task (portão da sprint).
+2. Marque a task como `status: bloqueada` em `tasks.md` e grave `task_bloqueada` no rastro, e grave `bloqueios` em `.expx/estado.json` com a nova contagem de bloqueios **abertos** (`references/09-estado.md`). Um bloqueio resolvido depois diminui essa contagem, na mesma gravação em que `resolvido_em` deixa de ser `null`; a `classe` dele não muda. A task muda para `bloqueada` no frontmatter e na prosa de `tasks.md`.
 3. Pule para a próxima task paralelizável cujas dependências estão satisfeitas.
 4. NUNCA pare para esperar resposta humana. Se não resta nenhuma task executável, encerre com o relatório final — os bloqueios são a pauta do usuário, não uma conversa sua.
 
@@ -158,7 +171,7 @@ Surgiu dúvida nova, decisão não coberta pelo plano, pré-requisito faltando (
 - Fase só é dada como concluída quando seu `criterio_saida` é verdade.
 - Sprint só é dada como concluída quando seu `criterio_saida` é verdade.
 - **Onde esses critérios moram depende do formato da sprint** (regra única em `references/00-schema.md`, "Como resolver o formato de uma sprint"): nos três arquivos, em `fases.md` e `sprint.md`; no condensado (`tasks.md` com `kind: plano`), em `fases[].criterio_saida` e `sprint.criterio_saida` do frontmatter do próprio `tasks.md`. **Nenhuma condição afrouxa por causa do formato** — só muda onde você lê e onde você grava.
-- Critério não atendido = não avança para a próxima fase/sprint; trate como bloqueio se não houver task que o resolva.
+- Critério não atendido = não avança para a próxima fase/sprint; trate como bloqueio `defeito_de_plano` se não houver task que o resolva.
 
 ### A suíte inteira é cobrada aqui
 
@@ -175,7 +188,7 @@ portão que a garantia de que nada mais quebrou é efetivamente cobrada — a sp
 estágio de QA depois da execução, então o fim da sprint é o último ponto em que uma quebra
 colateral ainda é barata de achar.
 
-- Suíte inteira vermelha: a sprint **não fecha**. Corrija, ou registre bloqueio em
+- Suíte inteira vermelha: a sprint **não fecha**. Corrija, ou registre bloqueio `suite_vermelha` em
   `00-BLOQUEIOS.md` e trate como qualquer outro critério de saída não atendido.
 - Suíte inteira verde: cole a saída no relatório da sprint e siga. As tasks daquela sprint
   **permanecem com `suite: parcial`** — o valor descreve o que rodou para aquela task, e

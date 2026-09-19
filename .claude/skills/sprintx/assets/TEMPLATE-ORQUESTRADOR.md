@@ -66,7 +66,7 @@ palavras_chave: [{{ate 8 termos, minusculo, sem acento}}]
 1. Não pergunte nada; não peça autorização para nada.
 2. O teste vem antes do código, sempre.
 3. Task só é `concluida` com teste de integração E funcional passando e `criterio_aceite` verificado. Não existe "concluído com ressalva".
-4. Dúvida nova ou pré-requisito faltando: registrar em `00-BLOQUEIOS.md` (`B-NN | task | bloqueio | o que destravaria`), marcar a task `bloqueada`, pular para a próxima paralelizável. Nunca parar e esperar.
+4. Dúvida nova ou pré-requisito faltando: registrar em `00-BLOQUEIOS.md` (`B-NN | task | bloqueio | o que destravaria`) pelo `scripts/bloqueios.sh registrar` da skill, com a `classe` do caminho que bloqueou (tabela em `references/06-execucao.md`), marcar a task `bloqueada`, pular para a próxima paralelizável. Nunca parar e esperar.
 5. Só rode em paralelo o que o plano declarou paralelizável; a execução nunca decide paralelismo.
 6. Atualize `status` em `tasks.md` a cada transição; ao concluir, acrescente data e resultado da suíte.
 7. Critério de saída de fase/sprint não atendido = não avança.

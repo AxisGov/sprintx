@@ -27,7 +27,9 @@ Run com a mesma consulta.
 
 **Ao mudar qualquer kind compartilhado, a mudança vale para as duas skills** — um painel que lê as
 duas não pode encontrar o mesmo `kind` com formatos diferentes. Kind exclusivo de uma delas pode
-evoluir sozinho.
+evoluir sozinho. **Pendência registrada:** a chave `classe` de `bloqueios` (DS-139) nasceu na
+sprintx e ainda não foi adotada pela runx. Ela é aditiva — quem não a conhece a ignora — e todo
+B-NN sem ela é lido como legado, nunca com classe inferida.
 
 ## Regras universais
 
@@ -63,6 +65,7 @@ Valem para todo arquivo que leva frontmatter:
 | `modo_construcao` | `entrevista` \| `autonomo` |
 | `estado` (planejamento) | `aguardando_f3` \| `aguardando_f4` \| `aguardando_f5` \| `replanejar` \| `aprovado` \| `orcamento_esgotado` (ou `null` antes do fim da F2) |
 | `veredito` (rodada da F5) | `sim` \| `nao` |
+| `classe` (bloqueio) | `defeito_de_plano` \| `lacuna_de_decisao` \| `prerequisito_ausente` \| `suite_vermelha` \| `task_reivindicada` |
 
 Atenção a duas distinções que o painel trata como coisas diferentes:
 
@@ -348,13 +351,47 @@ atualizado_em: 2026-08-29
 bloqueios:
   - id: B-01
     task: T-01.03
+    classe: prerequisito_ausente
     aberto_em: 2026-08-29
     resolvido_em: null
-    descricao: Falta credencial de sandbox para validar o webhook
+    descricao: "Falta credencial de sandbox para validar o webhook"
 ---
 ```
 
 Sem bloqueios registrados, `bloqueios: []`.
+
+**O bloqueio é dado tipado (DS-139).** Todo B-NN novo tem `classe`, do enum `classe` (bloqueio).
+A classe diz **o que** bloqueou a execução; o que fazer com isso é decisão de quem consome — o
+vocabulário do consumidor não entra aqui. **A prosa explica, não classifica:** `descricao` e a
+linha `B-NN | …` são para humano; nenhum consumidor deriva classe delas, nem por palavra-chave,
+nem por "leitura atenta".
+
+| Classe | Caminho de criação na F6 (`references/06-execucao.md`) | Fato mecânico que a fixa |
+|---|---|---|
+| `defeito_de_plano` | cumprir a task exige mudar o plano aprovado: arquivo necessário fora de `arquivos` da task (de outra task ou de nenhuma); `depende_de` que o plano não declara; obrigação `fraco:teste` impossível de discriminar dentro da task; `criterio_saida` de fase/sprint sem task que o cumpra | dá para nomear o campo do plano aprovado que teria de mudar (`arquivos`, `depende_de`, teste declarado, tasks da fase) |
+| `lacuna_de_decisao` | dúvida nova que nenhuma `D-NN` responde; operação barrada pelo `git-perigoso` | nenhuma `D-NN` cobre a escolha, ou o hook barrou a ação por exigir decisão humana |
+| `prerequisito_ausente` | segredo inexistente, serviço fora do ar, dependência externa quebrada | um recurso fora do repositório não está disponível (variável ausente, serviço sem resposta, pacote que não instala) |
+| `suite_vermelha` | portão da sprint: a suíte inteira terminou com falha que a execução não corrigiu | o comando da suíte inteira saiu com falha |
+| `task_reivindicada` | não resta task executável porque as restantes estão reivindicadas por outra sessão | o rastro tem `task_iniciada` de outra sessão sem `task_concluida`/`task_bloqueada` depois |
+
+Regras duras de `classe`:
+
+- **Escritor.** Entrada nova só nasce por `scripts/bloqueios.sh registrar` (caminho relativo à
+  raiz da skill), na F6, no mesmo instante em que a task vira `bloqueada`. Ele recusa com código
+  `4` — e não grava nada — classe vazia, ausente ou fora do enum.
+- **Imutável.** Gravada, a classe não muda: nem quando a descrição é reescrita, nem quando o
+  bloqueio é resolvido (`resolvido_em` deixa de ser `null` e a classe fica). Classe errada não se
+  edita; o bloqueio é resolvido e um B-NN novo é registrado com a classe certa.
+- **Legado.** Entrada sem a chave `classe` é anterior a este contrato: continua legível, e
+  `scripts/bloqueios.sh listar` a devolve como `legado`. **Ela nunca recebe classe inferida** —
+  nem na leitura, nem na migração, nem quando o arquivo é regravado com um B-NN novo (a entrada
+  antiga fica como está). `legado` não é valor do enum e nunca é gravado.
+- **Legado só antes do primeiro tipado.** Entrada sem `classe` depois de uma entrada com
+  `classe` é bloqueio novo sem classe: `scripts/bloqueios.sh validar` recusa o arquivo (código `4`).
+  `classe: null` também é recusado — ausência de classe só existe como chave ausente, no legado.
+- **Kind compartilhado.** `bloqueios` é compartilhado com a runx: a chave é aditiva, e um leitor
+  que não a conhece a ignora. Arquivo `expx_tool: runx` sem `classe` é lido como legado até a runx
+  adotar o mesmo enum.
 
 ### `00-DECISOES.md` → `kind: decisoes`
 
@@ -672,6 +709,8 @@ Ao abrir uma pasta de trabalho que já existe e cujos arquivos NÃO têm frontma
    lista) e siga — nunca invente, nunca pergunte, nunca pare. A chave sempre existe.
 4. Migrar o frontmatter NÃO autoriza reescrever a prosa: a prosa existente é preservada
    como está.
+5. **Exceção: `classe` de bloqueio nunca é inferida da prosa.** Na migração, B-NN antigo fica
+   sem a chave `classe` — legado, não `null` e não um valor adivinhado (DS-139).
 
 ## Verificação antes de gravar
 
@@ -687,4 +726,5 @@ Antes de dar por gravado qualquer arquivo de estado:
 - [ ] Em `kind: estimativa`, `min` e `max` sao diferentes (numero unico e proibido) e nenhum valor e data de calendario.
 - [ ] Em `kind: orquestrador`, as tres chaves de indexacao (`modulo_afetado`, `arquivos_alterados`, `palavras_chave`) existem — vazias sao `[]`, nunca ausentes — e nao tem acento nem maiuscula.
 - [ ] Em `kind: fechamento`, `arquivos_alterados` nao tem repeticao e bate com o `ORQUESTRADOR.md`.
+- [ ] Em `kind: bloqueios`, todo B-NN novo tem `classe` do enum e `scripts/bloqueios.sh validar <slug>` responde `valido=sim`.
 - [ ] Nenhum caminho absoluto em nenhum valor.

@@ -385,7 +385,7 @@ tasks:
 
 O painel apenas **lê**; a skill continua sendo a única a escrever. A máquina lê o YAML, a pessoa lê a prosa abaixo dele.
 
-Os kinds `orquestrador`, `sprint`, `fases`, `tasks`, `bloqueios` e `base_indice` são **idênticos campo por campo** aos da [`runx`](https://github.com/bittencourtthulio/runx) — o campo `expx_tool` (`sprintx` | `runx`) diz qual das duas escreveu. A única diferença é na task: a `runx` acrescenta `teste_regressao`, que só faz sentido quando existe um comportamento errado a provar. A `sprintx` tem ainda dois kinds próprios da camada de estimativa: `estimativa` e `estimativa_historico`. Contrato completo em [`references/00-schema.md`](.claude/skills/sprintx/references/00-schema.md).
+Os kinds `orquestrador`, `sprint`, `fases`, `tasks`, `bloqueios` e `base_indice` são **idênticos campo por campo** aos da [`runx`](https://github.com/bittencourtthulio/runx) — o campo `expx_tool` (`sprintx` | `runx`) diz qual das duas escreveu. A única diferença é na task: a `runx` acrescenta `teste_regressao`, que só faz sentido quando existe um comportamento errado a provar. Pendente: o bloqueio da `sprintx` ganhou a chave `classe` (tipada, nunca inferida da descrição), ainda não adotada pela `runx`; sem ela, o B-NN é lido como legado. A `sprintx` tem ainda dois kinds próprios da camada de estimativa: `estimativa` e `estimativa_historico`. Contrato completo em [`references/00-schema.md`](.claude/skills/sprintx/references/00-schema.md).
 
 ---
 
@@ -404,6 +404,7 @@ Os kinds `orquestrador`, `sprint`, `fases`, `tasks`, `bloqueios` e `base_indice`
       TEMPLATE-*.md             templates preenchíveis usados pelas fases
     scripts/
       planejamento.sh           estado, orçamento, fase e checkpoints do planejamento
+      bloqueios.sh              registra e lê o B-NN tipado (classe obrigatória)
   commands/
     sprintx*.md                 atalhos de comando para cada fase
   hooks/
