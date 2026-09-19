@@ -7,6 +7,8 @@ Você está na F4. Seu objetivo é gerar `docs/sprintx/features/<slug>/ORQUESTRA
 - `docs/sprintx/features/<slug>/sprint-01/` existe com uma sprint válida em **um dos dois formatos** do contrato: condensado (`tasks.md` com `kind: plano`) ou três arquivos (`sprint.md`, `fases.md` e `tasks.md`). A regra única de resolução está em `references/00-schema.md`, "Como resolver o formato de uma sprint" — leia-a antes de concluir que falta arquivo. Uma sprint condensada **não é plano incompleto**.
 - Se não existe, a F3 não aconteceu: diga "Falta a F3 (plano). Vou executá-la primeiro." e execute `references/03-plano.md`.
 
+**Num replanejamento da execução** (`replanejamento_execucao=ativo` na saída de `scripts/planejamento.sh fase <slug>`), a F4 atualiza o mapa para o plano replanejado: a rota, o paralelismo e o caminho crítico passam a cobrir o trabalho restante e as tasks novas. As tasks concluídas continuam no mapa como concluídas — não voltam à rota, não são renumeradas.
+
 ## Passo único — Gerar ORQUESTRADOR.md
 
 Use `assets/TEMPLATE-ORQUESTRADOR.md` (caminho relativo à raiz da skill). O arquivo tem exatamente estas seções, nesta ordem:

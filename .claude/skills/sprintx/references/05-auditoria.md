@@ -6,7 +6,7 @@ Você está na F5. Você agora é AUDITORA do plano, não autora. Você NÃO cor
 
 - `docs/sprintx/features/<slug>/ORQUESTRADOR.md` existe.
 - Se não existe, a F4 não aconteceu: diga "Falta a F4 (orquestrador). Vou executá-la primeiro." e execute `references/04-orquestrador.md`.
-- O estado do planejamento é `aguardando_f5` (`scripts/planejamento.sh fase <slug>` responde `F5`). Com `replanejar` a F5 **não roda**: o plano reprovado ainda não mudou, e a fase é a F3. Com `orcamento_esgotado` nada roda: o estado é terminal. `ORQUESTRADOR.md` existir nunca basta para entrar aqui.
+- O estado do planejamento é `aguardando_f5` (`scripts/planejamento.sh fase <slug>` responde `F5`), inclusive dentro de um replanejamento da execução. Com `replanejar` a F5 **não roda**: o plano reprovado ainda não mudou, e a fase é a F3. Com `orcamento_esgotado` nada roda: o estado é terminal. `ORQUESTRADOR.md` existir nunca basta para entrar aqui.
 
 ## Passo 1 — Delegar ao agente `auditor-plano`
 
@@ -160,6 +160,18 @@ sobrescrito a cada rodada: cada versão sobrevive no histórico Git, recuperáve
 `max_reprovacoes_f5` é a quantidade máxima de vereditos NÃO. Com teto `3`: rodada 1 NÃO →
 `reprovacoes: 1`, `replanejar`; rodada 2 NÃO → `2`, `replanejar`; rodada 3 NÃO → `3`,
 `orcamento_esgotado`. Duas voltas de replanejamento; a terceira reprovação termina.
+
+**Auditoria de um replanejamento da execução** (`replanejamento_execucao=ativo` na saída de `fase`).
+A F5 audita o plano inteiro, coerência global incluída — a T-04.03 que agora altera um arquivo da
+T-03.01 concluída é exatamente o tipo de relação que ela confere. O que não muda: **o orçamento da
+F5 continua de onde estava** — a rodada entra no mesmo `historico` e um NÃO soma em `reprovacoes`,
+nunca a partir de zero; no teto, o estado é o `orcamento_esgotado` de sempre, sem segundo reset.
+As tasks concluídas estão congeladas: um achado sobre elas vira achado da tabela como qualquer
+outro, mas a correção só pode tocar o escopo não concluído — se não houver como, a F3 para e
+relata, e o script recusa (código `4`) um plano que reescreva o concluído. Com `VEREDITO: SIM`,
+o mesmo `avanca <slug> f5` fecha a rodada: resolve os B-NN que a abriram (só eles), devolve a task
+bloqueada de cada um a `pendente`, esvazia `bloqueios_replanejamento_f6` e faz o checkpoint — a F6
+retoma pelo trabalho restante.
 
 Código diferente de `0` no checkpoint (`2` recusado, `3` `persistencia_falhou`): **pare** e
 relate. Não volte à F3 nem siga para a F6 com a rodada fora do histórico.

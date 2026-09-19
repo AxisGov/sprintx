@@ -35,6 +35,8 @@ Antes de agir, descubra em que fase está rodando `scripts/planejamento.sh fase 
 | `replanejar` | F3 — **nunca** F5 direto: o plano reprovado ainda não mudou |
 | `aprovado` | F6 |
 | `orcamento_esgotado` | **terminal** — pare; não continue automaticamente, nem para a F3, nem para a F5, nem para a F6 |
+| `replanejar_execucao` | F3 — a F6 achou `defeito_de_plano`; o plano volta à revisão, com as tasks concluídas congeladas |
+| `replanejamento_execucao_esgotado` | **terminal** — o orçamento de replanejamento da execução acabou; pare, como em `orcamento_esgotado` |
 
 Nunca infira F5 só porque `ORQUESTRADOR.md` existe.
 
@@ -53,6 +55,8 @@ Nunca infira F5 só porque `ORQUESTRADOR.md` existe.
 A primeira transição gravada numa feature legada cria o `00-PLANEJAMENTO.md` com o estado que o disco mostra, sem teto (`references/00-schema.md`, `kind: planejamento`); dali em diante, vale a primeira tabela.
 
 **Orçamento de reprovações da F5.** Quem aciona a `sprintx` pode declarar um teto de vereditos NÃO (`max_reprovacoes_f5`, com `orcamento_declarado_por`); a F1 o grava. Sem declaração, não há teto e o laço F3 ↔ F5 segue até `VEREDITO: SIM`, como sempre. Com teto, a reprovação que o atinge leva ao estado terminal `orcamento_esgotado`: a skill para ali, sem F6 e sem nova F5 automática (`references/05-auditoria.md`).
+
+**Replanejamento da execução (retorno da F6).** Quando a F6 registra um bloqueio `defeito_de_plano`, ela não abre task nova sobre um plano que já sabe estar errado: `scripts/planejamento.sh replanejar-execucao <slug>` leva o plano de volta à revisão (F3) por um estado próprio, `replanejar_execucao`, e dali pelos portões de sempre (F4, F5) até `aprovado`. É um eixo separado do `replanejar` da F5, com orçamento próprio — `max_replanejamentos_f6`, declarado pelo mesmo caller e pelo mesmo caminho do orçamento da F5; sem ele declarado, o retorno não abre. O orçamento da F5 **continua** de onde estava: nenhum dos dois reinicia o outro. **Tasks concluídas são congeladas** durante o replanejamento: nada as apaga, renumera, reabre, reescreve ou reexecuta, e o script recusa em cada portão qualquer diferença nelas; o replanejamento mexe só no que ainda não foi concluído. Com o orçamento da F6 consumido, uma nova necessidade leva ao estado terminal `replanejamento_execucao_esgotado` (`references/06-execucao.md`).
 
 **Checkpoints do planejamento.** Com Git e na branch `feature/<slug>`, o fim da F2, da F3, da F4 e todo veredito da F5 viram um commit **local** só da pasta da feature — é o que faz o planejamento sobreviver à sessão antes da F6. Sem Git, ou fora dessa branch, nada é commitado e o método segue como sempre (`references/00-schema.md`, e "Checkpoint do planejamento" em `references/02-descoberta.md`). Nessa branch, um estado gravado no disco e ainda não persistido no `HEAD` **não governa**: `fase` responde `CHECKPOINT` (código `3`), `avanca` recusa, e a única ação é `scripts/planejamento.sh checkpoint <slug>` — só depois do commit a tabela acima volta a valer.
 
@@ -110,7 +114,7 @@ A integração é condicional: sem a `mergex` instalada, a F6 roda exatamente co
 5. Toda transição (task → task, task → fase, fase → sprint) tem critério de aceite verificável, binário e sem adjetivo; critério não atendido = não avança.
 6. O paralelismo é declarado no plano para cada task e cada fase; a IA em execução nunca decide isso sozinha.
 7. Nenhuma task pode depender de decisão humana em tempo de execução.
-8. Dúvida nova durante a execução: registrar em `00-BLOQUEIOS.md`, pular a task e seguir para a próxima paralelizável; nunca parar e esperar.
+8. Dúvida nova durante a execução: registrar em `00-BLOQUEIOS.md`, pular a task e seguir para a próxima paralelizável; nunca parar e esperar. A exceção é o bloqueio `defeito_de_plano`: o plano aprovado é que está errado, e a F6 não segue executando sobre ele — devolve o plano ao planejamento (`replanejar_execucao`) ou, recusado o retorno, encerra com o relatório final.
 9. Na F1 nada de invenção: se a fonte não afirma, escreva "NÃO DOCUMENTADO"; todo número vem com a referência que o afirma.
 10. A F2 é a fase de entrevista: nela a IA é obrigada a perguntar, em blocos de no máximo 5 perguntas, esperando resposta entre os blocos, cobrindo os eixos mínimos. A F2 abre confirmando densidade (`mvp`/`padrao`/`completo`/`profundo`) e forma de construção (`entrevista`/`autonomo`, `references/02-descoberta.md`); o modo `autonomo` muda como os outros eixos são preenchidos — pesquisa e hipótese registrada em vez de bloco de perguntas —, nunca se a F2 pode perguntar: ela continua sendo a única fase do método que pergunta. Fora da F2, a única pergunta permitida no método inteiro é a exceção prevista na regra 11 (decisão nova detectada na F3); em qualquer outro momento, dúvida não é pergunta — é bloqueio (regra 8).
 11. A F3 bloqueia se houver PENDENTE bloqueante em `00-DECISOES.md`. Se, ao planejar, a F3 encontrar algo que exigiria decisão humana em execução, essa é a única pergunta permitida fora da F2: pergunta na hora e registra a resposta como nova decisão D-NN.
@@ -240,7 +244,8 @@ push — a `sprintx` escreve, a `mergex` versiona.
 entrou, e um plano que só existe na árvore morre com a sessão. Por isso a `sprintx` é a dona de
 um único tipo de commit: o **checkpoint de planejamento**, local, na branch `feature/<slug>`,
 contendo **somente** `docs/sprintx/features/<slug>/**`, feito pelo `scripts/planejamento.sh` ao
-fim da F2, da F3, da F4, a cada veredito da F5 e ao chegar a `orcamento_esgotado`. Nunca push,
+fim da F2, da F3, da F4, a cada veredito da F5, ao chegar a `orcamento_esgotado` e nas transições do
+replanejamento da execução (`replanejar_execucao`, `replanejamento_execucao_esgotado`). Nunca push,
 nunca `--no-verify`, nunca arquivo de produto. Sem Git o checkpoint vira aviso no rastro, e a
 `sprintx` standalone continua sem exigir Git.
 

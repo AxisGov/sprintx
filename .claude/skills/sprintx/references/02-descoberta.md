@@ -146,7 +146,10 @@ um que falhou —, nunca por comando de versionamento digitado na sessão.
 
 **Quando.** Ao fim da F2 (`aguardando_f3`), da F3 (`aguardando_f4`), da F4 (`aguardando_f5`), a
 cada veredito da F5, SIM ou NÃO (`aprovado`, `replanejar`), e ao chegar ao estado terminal
-`orcamento_esgotado`. A F5 é checkpointada **antes** de qualquer volta à F3: é isso que preserva
+`orcamento_esgotado`. E no retorno da F6: ao entrar em `replanejar_execucao` (`Fase: f6`, `Rodada:`
+o número do replanejamento da execução) e ao chegar ao terminal `replanejamento_execucao_esgotado`;
+a aprovação que fecha a rodada é o checkpoint do veredito da F5, com os B-NN resolvidos e a task
+reaberta no mesmo commit. A F5 é checkpointada **antes** de qualquer volta à F3: é isso que preserva
 cada versão de `00-AUDITORIA.md` no histórico, embora o arquivo continue sendo sobrescrito.
 
 **Só existe quando** o diretório é um repositório Git, a branch atual é **exatamente**
@@ -164,12 +167,12 @@ limpar, descartar, stashar nem tentar corrigir. **PARE** e relate o path.
 **O commit.** Local, nunca push, nunca `--no-verify`, e não é um commit de task (E1):
 
 ```
-chore(sprintx): checkpoint de planejamento <slug> — <f2|f3|f4|f5 rodada N>
+chore(sprintx): checkpoint de planejamento <slug> — <f2|f3|f4|f5 rodada N|f6 replanejamento N>
 
 Planejamento: checkpoint
 Trabalho: <slug>
-Fase: <f2|f3|f4|f5>
-Rodada: <n, ou 0 fora da F5>
+Fase: <f2|f3|f4|f5|f6>
+Rodada: <n da F5; n do replanejamento na f6; 0 fora delas>
 Estado: <estado>
 ```
 

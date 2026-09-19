@@ -8,12 +8,15 @@ Você está na F6. A partir de agora você implementa até o fim, sob as regras 
 - O estado do planejamento é `aprovado`: `scripts/planejamento.sh fase <slug>` responde `F6`. Com `fase=CHECKPOINT` a aprovação ainda não está no `HEAD` da `feature/<slug>`: a F6 **não começa** até `checkpoint <slug>` persistir o estado (`references/02-descoberta.md`).
 - Se contém `VEREDITO: NÃO`, volte para a F3. Se não existe, falta a F5: diga qual fase falta e execute-a primeiro.
 - Com o estado em `orcamento_esgotado` **não existe F6**: a F6 nunca começa, nem por pedido de retomada, nem com `ORQUESTRADOR.md` pronto.
+- Com `replanejar_execucao` (ou qualquer estado do laço com `replanejamento_execucao=ativo` na saída de `fase`) a F6 **não roda**: o plano voltou ao planejamento e a fase é a que `fase` responde. Com `replanejamento_execucao_esgotado` não existe F6: o estado é terminal.
 
 ## Passo 1 — Carregar o mapa
 
 Leia `docs/sprintx/features/<slug>/ORQUESTRADOR.md` inteiro e siga a ordem de leitura que ele define. Ele é a fonte da rota, do paralelismo, do caminho crítico, das ferramentas e da definição de pronto. Em caso de conflito entre a sua memória da conversa e o ORQUESTRADOR, vale o ORQUESTRADOR.
 
 Se está retomando uma sessão interrompida, siga a seção "Como retomar" do ORQUESTRADOR: status em cada `tasks.md` + `00-BLOQUEIOS.md` dizem onde você parou.
+
+**De volta de um replanejamento da execução.** Quando a F5 aprova um plano replanejado a partir da F6, o fechamento da rodada já resolveu os B-NN que a abriram e devolveu a task bloqueada de cada um a `pendente`. A F6 retoma **só pelo que resta**: task `concluida` não reabre, não roda de novo e não tem teste nem commit refeito — os commits dela continuam valendo. Executáveis são as `pendente` do plano replanejado, inclusive as tasks novas, pela rota do `ORQUESTRADOR.md` atualizado.
 
 **O estado da barra.** Ao carregar o mapa, grave `fase: f6` em `.expx/estado.json`
 (`references/09-estado.md`). Numa retomada, aproveite e reconcilie os contadores com o que o
@@ -163,8 +166,30 @@ Surgiu algo que impede a task de seguir. **O caminho que te trouxe aqui fixa a c
 
    Ele grava o item no frontmatter `kind: bloqueios` de `00-BLOQUEIOS.md` (`id`, `task`, `classe`, `aberto_em` com a data do sistema, `resolvido_em: null`, `descricao`), a linha `B-NN | task | descrição do bloqueio | o que destravaria` da prosa e `atualizado_em`. Classe vazia ou fora do enum: código `4`, nada gravado — escolha a linha da tabela e registre de novo. Arquivo antigo sem frontmatter: migre o frontmatter antes (`references/00-schema.md`, regra de migração — sem inventar classe para os B-NN antigos). `task` é `null` só quando o bloqueio não é de uma task (portão da sprint).
 2. Marque a task como `status: bloqueada` em `tasks.md` e grave `task_bloqueada` no rastro, e grave `bloqueios` em `.expx/estado.json` com a nova contagem de bloqueios **abertos** (`references/09-estado.md`). Um bloqueio resolvido depois diminui essa contagem, na mesma gravação em que `resolvido_em` deixa de ser `null`; a `classe` dele não muda. A task muda para `bloqueada` no frontmatter e na prosa de `tasks.md`.
-3. Pule para a próxima task paralelizável cujas dependências estão satisfeitas.
-4. NUNCA pare para esperar resposta humana. Se não resta nenhuma task executável, encerre com o relatório final — os bloqueios são a pauta do usuário, não uma conversa sua.
+3. **Classe `defeito_de_plano`: devolva o plano ao planejamento agora**, sem abrir task nova e sem esperar o fim das outras — continuar executando sobre um plano que já se sabe errado só produz mais trabalho para desfazer. Com o B-NN registrado (passo 1) e a task gravada como `bloqueada` (passo 2):
+
+   ```bash
+   bash <raiz-da-skill>/scripts/planejamento.sh replanejar-execucao <slug>
+   ```
+
+   O gatilho é a **chave** `classe` dos B-NN abertos, lida por `scripts/bloqueios.sh listar` — nunca a descrição. Todos os abertos precisam ser `defeito_de_plano`: vários entram numa rodada só, em ordem de id. O que fazer com a resposta:
+
+   - `replanejamento=iniciado` (código `0`): estado `replanejar_execucao`, `replanejamentos_f6` consumido, checkpoint feito. **Pare a F6** e siga para a F3 (`references/03-plano.md`, "Retorno da F6").
+   - `replanejamento=retomada` (código `0`): a rodada já existia — sessão retomada. Nada foi consumido de novo; siga para a fase que `proxima=` indica.
+   - `replanejamento=esgotado` (código `0`): o orçamento da F6 já foi consumido e o estado é o terminal `replanejamento_execucao_esgotado`. **Pare**, entregue o relatório final e devolva o controle: decidir o que fazer é de quem declarou o orçamento.
+   - `replanejamento=recusado` (código `5`) — `classes_mistas` (há bloqueio aberto de outra classe ou legado; nenhuma precedência é inventada), `orcamento_f6_nao_declarado` ou `orcamento_f6_legado`: nada foi gravado e o estado continua `aprovado`. **Não abra task nova**: encerre com o relatório final, com o motivo e os bloqueios abertos como pauta.
+   - `motivo=fronteira_insegura` (código `2`): há produto sujo na árvore — editado, novo ou staged — fora dos artefatos de método. **PARE** e relate os caminhos. Nunca `stash`, nunca limpe, nunca descarte: o retorno ao planejamento só começa em fronteira segura.
+   - Código `3`: checkpoint pendente — rode `planejamento.sh checkpoint <slug>` e repita. Código `4`: a task do B-NN não está gravada como `bloqueada`, ou o arquivo de estado é inválido — corrija o registro e repita.
+4. Qualquer outra classe: pule para a próxima task paralelizável cujas dependências estão satisfeitas.
+5. NUNCA pare para esperar resposta humana. Se não resta nenhuma task executável, encerre com o relatório final — os bloqueios são a pauta do usuário, não uma conversa sua.
+
+**Resolver um bloqueio** é sempre pelo script, nunca editando `resolvido_em` à mão:
+
+```bash
+bash <raiz-da-skill>/scripts/bloqueios.sh resolver <slug> <B-NN>
+```
+
+Ele grava só `resolvido_em`, `atualizado_em` e a marca de resolvido na linha da prosa; a classe não muda. `lacuna_de_decisao`, `prerequisito_ausente`, `suite_vermelha`, `task_reivindicada` e o legado são resolvidos por ele quando a causa deixa de existir. **`defeito_de_plano` não**: editar o plano não resolve um defeito de plano, e o script recusa (código `5`) até o plano replanejado voltar a `aprovado` pela F5 — quem o resolve é o fechamento da rodada que ele abriu, junto com a reabertura da task.
 
 ## Portões de fase e de sprint
 

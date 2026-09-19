@@ -10,7 +10,7 @@ bloqueios: []
 # Bloqueios
 
 > Criado vazio na F1 e preenchido na execução (F6). Um bloqueio nunca vira pergunta ao usuário: registre aqui, marque a task `bloqueada` e siga para a próxima paralelizável.
-> Registre só por `scripts/bloqueios.sh registrar <slug> <task> <classe> <descrição> <o que destravaria>`: ele grava o item na lista `bloqueios:` do frontmatter, com a `classe` do caminho de criação, e a linha abaixo. A classe vem do caminho, nunca da descrição. Formato em `references/00-schema.md`.
+> Registre só por `scripts/bloqueios.sh registrar <slug> <task> <classe> <descrição> <o que destravaria>`: ele grava o item na lista `bloqueios:` do frontmatter, com a `classe` do caminho de criação, e a linha abaixo. A classe vem do caminho, nunca da descrição. Resolva só por `scripts/bloqueios.sh resolver <slug> <B-NN>` — nunca editando `resolvido_em` à mão; `defeito_de_plano` só se resolve quando o plano replanejado volta a `aprovado`. Formato em `references/00-schema.md`.
 
 Nenhum bloqueio registrado.
 

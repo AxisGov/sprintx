@@ -262,7 +262,7 @@ A elas se soma uma única fase **opcional**, a F3.5 (estimativa), que roda entre
 | **F3.5** | Estimativa *(opcional)* | Converte o plano pronto em **faixa de esforço** — nunca número único, nunca prazo de calendário. Só roda a pedido, e nunca bloqueia a F4. |
 | **F4** | Orquestrador | Gera o `ORQUESTRADOR.md` — o mapa de execução, escrito para quem abre o repositório sem saber nada: rota de execução, paralelismo, caminho crítico, ferramentas, agentes, regras de autonomia e como retomar uma sessão interrompida. |
 | **F5** | Auditoria | A IA vira auditora do próprio plano e não corrige nada — só aponta. Verifica tasks sem teste, testes fracos, critérios subjetivos, dependências circulares, paralelismo falso e mais. Veredito único: pronto para execução autônoma, SIM ou NÃO. Teste fraco é tipado (`ausente`, `criterio`, `teste`) e a severidade sai do tipo, não do julgamento da sessão. Quem aciona a skill pode declarar um teto de reprovações; ao atingi-lo, o planejamento para em `orcamento_esgotado`, sem F6. |
-| **F6** | Execução | Lê o orquestrador e implementa até o fim, sob as regras de autonomia. Escreve o teste antes do código, atualiza o status de cada task, e entrega um relatório final com o que foi concluído, os bloqueios e a saída da suíte. |
+| **F6** | Execução | Lê o orquestrador e implementa até o fim, sob as regras de autonomia. Escreve o teste antes do código, atualiza o status de cada task, e entrega um relatório final com o que foi concluído, os bloqueios e a saída da suíte. Um bloqueio `defeito_de_plano` devolve o plano à F3 (`replanejar_execucao`, com orçamento próprio declarado pelo caller) sem descartar nem reabrir as tasks já concluídas. |
 
 ---
 
@@ -403,8 +403,8 @@ Os kinds `orquestrador`, `sprint`, `fases`, `tasks`, `bloqueios` e `base_indice`
     assets/
       TEMPLATE-*.md             templates preenchíveis usados pelas fases
     scripts/
-      planejamento.sh           estado, orçamento, fase e checkpoints do planejamento
-      bloqueios.sh              registra e lê o B-NN tipado (classe obrigatória)
+      planejamento.sh           estado, orçamentos (F5 e F6), fase, replanejamento da execução e checkpoints
+      bloqueios.sh              registra, resolve e lê o B-NN tipado (classe obrigatória e imutável)
   commands/
     sprintx*.md                 atalhos de comando para cada fase
   hooks/

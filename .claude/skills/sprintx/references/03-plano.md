@@ -7,9 +7,21 @@ Você está na F3. Seu objetivo é gerar a árvore de sprints/fases/tasks. Nesta
 - `docs/sprintx/features/<slug>/00-DECISOES.md` existe.
 - **Nenhum PENDENTE bloqueante** em `00-DECISOES.md`. Se houver, PARE: liste os PENDENTEs, diga o que cada um trava e pergunte só o necessário para resolvê-los (isso é resolução de pendência da F2, não uma nova entrevista). Só gere o plano com todos os bloqueantes resolvidos.
 - Se `00-DECISOES.md` não existe, a F2 não aconteceu: diga "Falta a F2 (descoberta). Vou executá-la primeiro." e execute `references/02-descoberta.md`.
-- O estado do planejamento é `aguardando_f3` ou `replanejar` (`scripts/planejamento.sh fase <slug>` responde `F3`). Com `orcamento_esgotado` **não há F3**: o estado é terminal e nada continua automaticamente.
+- O estado do planejamento é `aguardando_f3`, `replanejar` ou `replanejar_execucao` (`scripts/planejamento.sh fase <slug>` responde `F3`). Com `orcamento_esgotado` ou `replanejamento_execucao_esgotado` **não há F3**: o estado é terminal e nada continua automaticamente.
 
 Se este é um retorno da F5 (estado `replanejar`), leia `00-AUDITORIA.md` antes de regerar: cada achado ALTA e MÉDIA deve ser endereçado na nova versão do plano — pela classe, não pelo exemplo (Passo 1.1).
+
+### Retorno da F6 — replanejamento da execução
+
+Estado `replanejar_execucao` — ou, numa volta da F5 dentro da mesma rodada, `replanejar` com `replanejamento_execucao=ativo` na saída de `fase`. A F6 achou um defeito no plano aprovado e parou. **Não é um plano novo**: é o plano aprovado, corrigido no mínimo necessário. Não volte à F1 nem à F2, não refaça descoberta, não reescreva o que já foi validado.
+
+1. Leia os B-NN da rodada — `bloqueios_replanejamento_f6` no `00-PLANEJAMENTO.md` — em `00-BLOQUEIOS.md`: cada um nomeia o campo do plano que tem de mudar (`arquivos`, `depende_de`, teste declarado, tasks de uma fase). Numa volta da F5, leia também `00-AUDITORIA.md`, como em qualquer `replanejar`.
+2. **Tasks `concluida` estão congeladas** (`tasks_congeladas`). Não apague, não renumere, não mova, não reabra, não mude o status, os `arquivos`, os testes, o `criterio_aceite` nem a prosa de nenhuma delas — e não marque como concluída uma task que não foi executada. Os commits delas continuam valendo. `avanca` recusa (código `4`) qualquer diferença nelas, em todo portão da rodada.
+3. Corrija **só o escopo não concluído**: a task bloqueada, tasks pendentes, tasks novas, dependências do trabalho restante, `arquivos` de uma task não concluída, critérios futuros. Um arquivo que uma task concluída criou ou alterou pode entrar em `arquivos` de uma task futura — no piloto, `tests/ui/cabecalho-topo.test.tsx`, em `cria` da T-03.01 concluída, entra em `altera` da T-04.03. Isso **não** descongela a T-03.01.
+4. A task bloqueada continua `bloqueada` no plano replanejado: quem a devolve a `pendente` é o fechamento da rodada, depois da aprovação. Não resolva o B-NN: `scripts/bloqueios.sh resolver` recusa `defeito_de_plano` até a F5 aprovar.
+5. Se a correção só for possível reescrevendo trabalho concluído, **não reescreva a história**: pare e relate — a decisão é de quem declarou o orçamento.
+
+Termine a fase como sempre: `avanca <slug> f3`, F4 e F5. O orçamento da F5 continua de onde estava.
 
 ## Passo 0 — Consultar o histórico dos arquivos (quando houver `memox`)
 
