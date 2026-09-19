@@ -1421,6 +1421,467 @@ M="$(copia_skill e)"; muta_lit "$BL" "$M" 'classe_valida "$classe" || falha "$E_
 mutante "jm-mutante-e-leitura-aceita-fora-do-enum" $? "$M" j_fora_do_enum
 rm -rf "$J"
 
+echo "== K. replanejamento da execucao e preservacao das tasks concluidas (P0.2-B) =="
+# Testa o MECANISMO contra repositorios git reais. A essencia do piloto: 14 de 18 tasks
+# concluidas, T-04.03 bloqueada com defeito_de_plano (precisa alterar um arquivo que a
+# T-03.01 concluida criou), orcamento da F5 ja parcialmente usado. Cada caso e uma funcao
+# <planejamento.sh> <dir>, para que os mutantes (km-*) rodem exatamente a mesma bateria;
+# as fixtures de base sao montadas uma vez, com o script real, e copiadas para cada caso.
+# A classe vem sempre da chave, via bloqueios.sh: nenhum caso le a descricao.
+K="$(mktemp -d)"
+kpl() { local s="$1" d="$2"; shift 2; (cd "$d" && bash "$s" "$@") 2>&1; }
+kbl() { local s="$1" d="$2"; shift 2; SPRINTX_RAIZ="$d" bash "$(dirname "$s")/bloqueios.sh" "$@" 2>&1; }
+kf() { printf '%s/docs/sprintx/features/menu' "$1"; }
+kst() { # kst <dir> <T-NN.MM> — status da task no frontmatter do tasks.md que a declara
+  local f
+  for f in "$(kf "$1")"/sprint-*/tasks.md; do
+    tr -d '\r' < "$f" | awk -v t="$2" 'NR==1{next} $0=="---"{exit} /^tasks:/{b=1;next} b&&/^[^ ]/{b=0} b&&/^  - id:/{id=$3} b&&id==t&&/^    status:/{print $2; exit}'
+  done
+}
+kbloq() { kbl "$PL" "$1" listar menu | tr -d '\r' | awk -F'\t' -v i="$2" '$1 == i { print $3 "|" $4 }'; }
+# O congelado visto de fora do script: sprint-01..03 inteiros e, na sprint-04, o item do
+# frontmatter e o bloco da prosa de T-04.01 e T-04.02.
+kcong() {
+  local f; f="$(kf "$1")"
+  cat "$f/sprint-01/tasks.md" "$f/sprint-02/tasks.md" "$f/sprint-03/tasks.md"
+  for t in T-04.01 T-04.02; do
+    tr -d '\r' < "$f/sprint-04/tasks.md" | sed -n "/^  - id: $t\$/,/^    suite:/p; /^id: $t\$/,/^\`\`\`\$/p"
+  done
+}
+k_item() { # k_item <id> <status> <cria> <altera> <depende>
+  local conc=null suite=nao_executada
+  if [ "$2" = concluida ]; then conc=2026-09-10; suite=parcial; fi
+  printf '  - id: %s\n    titulo: Task %s\n    fase: F-%s.1\n    status: %s\n    objetivo: Entregar a parte %s\n    arquivos:\n      cria: [%s]\n      altera: [%s]\n    teste_integracao: Integra a parte %s contra o modulo real\n    teste_funcional: Dada a entrada de %s, devolve a saida declarada\n    criterio_aceite: O teste da parte %s passa\n    depende_de: [%s]\n    paralelizavel: false\n    concluida_em: %s\n    suite: %s\n' \
+    "$1" "$1" "$(printf '%s' "$1" | cut -c3-4)" "$2" "$1" "$3" "$4" "$1" "$1" "$1" "$5" "$conc" "$suite"
+}
+k_prosa() {
+  printf -- '---\n\n```yaml\nid: %s\ntitulo: Task %s\narquivos:\n  cria: [%s]\n  altera: [%s]\ndepende_de: [%s]\nstatus: %s\n```\n\n' "$1" "$1" "$3" "$4" "$5" "$2"
+  if [ "$2" = concluida ]; then printf '2026-09-10 · suíte: 3 passed, 0 failed · real: 1 h\n\n'; fi
+}
+k_sprint() { # k_sprint <arquivo> <nn> <kind> <id|status|cria|altera|depende>...
+  local arq="$1" nn="$2" kind="$3" sp id st cr al dp ids=""; shift 3
+  for sp; do ids="$ids${ids:+, }${sp%%|*}"; done
+  {
+    printf -- '---\nexpx_schema: 1\nexpx_tool: sprintx\nkind: %s\ntrabalho_id: menu\nsprint_id: sprint-%s\natualizado_em: 2026-09-10\n' "$kind" "$nn"
+    if [ "$kind" = plano ]; then
+      printf 'sprint:\n  titulo: Menu por perfil\n  status: em_andamento\n  criterio_saida: A suite inteira roda com npm test e termina com 0 failed\n  riscos: []\n  fora_de_escopo: []\nfases:\n  - id: F-%s.1\n    titulo: Menu\n    status: em_andamento\n    criterio_saida: O menu mostra so os itens do perfil\n    paralelizavel: false\n    paralela_com: []\n    tasks: [%s]\n' "$nn" "$ids"
+    fi
+    printf 'tasks:\n'
+    for sp; do IFS='|' read -r id st cr al dp <<EOF
+$sp
+EOF
+      k_item "$id" "$st" "$cr" "$al" "$dp"; done
+    printf -- '---\n\n# Tasks — Sprint %s\n\n' "$nn"
+    for sp; do IFS='|' read -r id st cr al dp <<EOF
+$sp
+EOF
+      k_prosa "$id" "$st" "$cr" "$al" "$dp"; done
+  } > "$arq"
+}
+# k_plano <dir> <c|p> <T-04.03> [T-04.03 altera] [T-04.07?] — c: tasks 01..04.02 concluidas; p: tudo pendente.
+k_plano() {
+  local f s n st; f="$(kf "$1")"; st=pendente; [ "$2" = c ] && st=concluida
+  for s in 01 02 03; do
+    mkdir -p "$f/sprint-$s"
+    if [ "$s" = 03 ]; then
+      k_sprint "$f/sprint-03/tasks.md" 03 tasks "T-03.01|$st|src/ui/cabecalho-topo.tsx, tests/ui/cabecalho-topo.test.tsx||" \
+        "T-03.02|$st|src/ui/rodape.tsx||T-03.01" "T-03.03|$st|src/ui/lateral.tsx||" "T-03.04|$st|src/ui/busca.tsx||"
+    else
+      k_sprint "$f/sprint-$s/tasks.md" "$s" tasks "T-$s.01|$st|src/m$s/a.ts||" "T-$s.02|$st|src/m$s/b.ts||T-$s.01" \
+        "T-$s.03|$st|src/m$s/c.ts||" "T-$s.04|$st|src/m$s/d.ts||"
+    fi
+  done
+  mkdir -p "$f/sprint-04"
+  set -- "$1" "$2" "$3" "${4:-src/ui/cabecalho-topo.tsx}" "${5:-}"
+  n=""; [ -n "$5" ] && n="T-04.07|pendente|src/menu/atalhos.ts||T-04.03"
+  k_sprint "$f/sprint-04/tasks.md" 04 plano "T-04.01|$st|src/menu/organizacao.ts, tests/menu/organizacao.test.ts||" \
+    "T-04.02|$st|src/menu/visibilidade.ts, tests/menu/visibilidade.test.ts||T-04.01" \
+    "T-04.03|$3|src/menu/perfil.ts, tests/menu/perfil.test.ts|$4|T-04.02" \
+    "T-04.04|pendente|src/menu/rotas.ts||T-04.03" "T-04.05|pendente|src/menu/icones.ts||" "T-04.06|pendente|src/menu/ajuda.ts||" ${n:+"$n"}
+}
+k_aud() { auditoria "$1" menu "$2" "$3"; }
+# k_fx <dir> <reprovacoes antes do SIM> <criar args...> — F1..F5 aprovada e F6 executada
+# ate T-04.03 bloqueada (gravada, sem commit: task bloqueada nao gera E1). Sem B-NN.
+k_fx() {
+  local d="$1" n="$2" i f; shift 2; f="$(kf "$d")"
+  nova_feature "$d" menu
+  pl "$d" criar menu "$@" >/dev/null || return 1
+  printf 'decisoes\n' > "$f/00-DECISOES.md"; pl "$d" avanca menu f2 >/dev/null || return 1
+  k_plano "$d" p pendente; pl "$d" avanca menu f3 >/dev/null || return 1
+  printf 'orquestrador\n' > "$f/ORQUESTRADOR.md"; pl "$d" avanca menu f4 >/dev/null || return 1
+  i=0
+  while [ "$i" -lt "$n" ]; do
+    i=$((i + 1)); k_aud "$d" "$i" NAO; pl "$d" avanca menu f5 >/dev/null || return 1
+    printf 'orquestrador v%s\n' "$i" > "$f/ORQUESTRADOR.md"; pl "$d" avanca menu f3 >/dev/null || return 1; pl "$d" avanca menu f4 >/dev/null || return 1
+  done
+  k_aud "$d" $((n + 1)) SIM; pl "$d" avanca menu f5 >/dev/null || return 1
+  [ "$(fmv "$f/00-PLANEJAMENTO.md" estado)" = aprovado ] || return 1
+  # F6 (E1 simulado): 14 tasks concluidas e commitadas; depois T-04.03 bloqueia.
+  k_plano "$d" c pendente; git -C "$d" add -A; git -C "$d" commit -q -m "feat(menu): 14 tasks concluidas (E1)"
+  k_plano "$d" c bloqueada
+}
+kcopia() { local d; d="$(mktemp -d "$K/c.XXXXXX")"; rm -rf "$d"; cp -R "$1" "$d"; printf '%s' "$d"; }
+FXP="$K/fx-piloto"; k_fx "$FXP" 2 3 buildx 1; afirma "k0-fixture-piloto" $? "2 de 3 reprovacoes, max_replanejamentos_f6 1, 14/18 concluidas, T-04.03 bloqueada"
+# Variantes do piloto que so mudam um teto: o frontmatter do checkpoint e trocado e recommitado.
+k_variante() { # k_variante <dir> <sed> — e o planejamento continua valido e em F6
+  cp -R "$FXP" "$1"
+  sed "$2" "$(kf "$1")/00-PLANEJAMENTO.md" > "$K/pl.tmp" && mv "$K/pl.tmp" "$(kf "$1")/00-PLANEJAMENTO.md"     && git -C "$1" commit -q -m variante -- docs/sprintx/features/menu/00-PLANEJAMENTO.md && [ "$(kv "$(pl "$1" fase menu)" fase)" = F6 ]
+}
+FX2="$K/fx-f6-2"; k_variante "$FX2" 's/^max_replanejamentos_f6: 1$/max_replanejamentos_f6: 2/'; afirma "k0-fixture-teto-f6-2" $? "max_replanejamentos_f6 2"
+FX5="$K/fx-f5-5"; k_variante "$FX5" 's/^max_reprovacoes_f5: 3$/max_reprovacoes_f5: 5/'; afirma "k0-fixture-teto-f5-5" $? "2 de 5 reprovacoes"
+FXN="$K/fx-f6-null"; k_variante "$FXN" 's/^max_replanejamentos_f6: 1$/max_replanejamentos_f6: null/'; afirma "k0-fixture-f6-nao-declarado" $? "max_replanejamentos_f6 null"
+FXL="$K/fx-f6-legado"; cp -R "$FXP" "$FXL"
+# Planejamento anterior a este contrato: exatamente as chaves que o P0.1 gravava.
+sed -e '/^max_replanejamentos_f6:/d' -e '/^replanejamentos_f6:/d' -e '/^bloqueios_replanejamento_f6:/d' -e '/^tasks_congeladas:/d' \
+  -e '/^assinatura_congeladas:/d' -e 's/ · replanejamentos da execução (F6): [^·]*//' "$(kf "$FXL")/00-PLANEJAMENTO.md" > "$K/pl.tmp" \
+  && mv "$K/pl.tmp" "$(kf "$FXL")/00-PLANEJAMENTO.md" && git -C "$FXL" commit -q -m legado -- docs/sprintx/features/menu/00-PLANEJAMENTO.md
+[ "$(tr -d '\r' < "$(kf "$FXL")/00-PLANEJAMENTO.md" | awk 'NR==1{next} $0=="---"{exit} /^[a-z0-9_]+:/{sub(/:.*/,""); printf "%s ", $0}')" \
+  = "expx_schema expx_tool kind trabalho_id max_reprovacoes_f5 orcamento_declarado_por estado reprovacoes atualizado_em historico " ] \
+  && [ "$(kv "$(pl "$FXL" fase menu)" fase)" = F6 ]
+afirma "k0-fixture-planejamento-legado" $? "forma P0.1, sem o eixo F6, valida e em F6"
+
+# K1. O piloto: entra em replanejar_execucao, consome 1/1, B-01 aberto, concluidas intactas, F5 intacto.
+k_inicia() {
+  local s="$1" d="$2" f out c0; f="$(kf "$d")"; c0="$(kcong "$d")"
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'T-04.03 precisa alterar tests/ui/cabecalho-topo.test.tsx, criado pela T-03.01' 'acrescentar o arquivo a T-04.03' >/dev/null || return 1
+  out="$(kpl "$s" "$d" replanejar-execucao menu)" || return 1
+  [ "$(kv "$out" replanejamento)" = iniciado ] && [ "$(kv "$out" estado)" = replanejar_execucao ] && [ "$(kv "$out" proxima)" = F3 ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" estado)" = replanejar_execucao ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" replanejamentos_f6)" = 1 ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" max_replanejamentos_f6)" = 1 ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" reprovacoes)" = 2 ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" max_reprovacoes_f5)" = 3 ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" bloqueios_replanejamento_f6)" = "[B-01]" ] \
+    && [ "$(kbloq "$d" B-01)" = "defeito_de_plano|aberto" ] && [ "$(kst "$d" T-04.03)" = bloqueada ] \
+    && [ "$(kcong "$d")" = "$c0" ] && [ "$(kv "$(kpl "$s" "$d" fase menu)" fase)" = F3 ] \
+    && [ "$(trailer "$d" Estado)" = replanejar_execucao ] && [ "$(trailer "$d" Fase)" = f6 ] && [ "$(trailer "$d" Rodada)" = 1 ] \
+    && git -C "$d" diff --quiet HEAD -- docs/sprintx/features/menu \
+    && [ "$(tr -d '\r' < "$f/00-PLANEJAMENTO.md" | grep -c '^  - rodada:')" -eq 3 ] || return 1
+  c="$(fmv "$f/00-PLANEJAMENTO.md" tasks_congeladas)"
+  [ "$c" = "[T-01.01, T-01.02, T-01.03, T-01.04, T-02.01, T-02.02, T-02.03, T-02.04, T-03.01, T-03.02, T-03.03, T-03.04, T-04.01, T-04.02]" ]
+}
+# K2. Retomada da mesma rodada: nao consome orcamento de novo, em nenhum estado da rodada.
+k_retomada() {
+  local s="$1" d="$2" f out; f="$(kf "$d")"
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  kpl "$s" "$d" replanejar-execucao menu >/dev/null || return 1
+  out="$(kpl "$s" "$d" replanejar-execucao menu)" || return 1
+  [ "$(kv "$out" replanejamento)" = retomada ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" replanejamentos_f6)" = 1 ] || return 1
+  kpl "$s" "$d" avanca menu f3 >/dev/null || return 1
+  out="$(kpl "$s" "$d" replanejar-execucao menu)" || return 1
+  [ "$(kv "$out" replanejamento)" = retomada ] && [ "$(kv "$out" estado)" = aguardando_f4 ] && [ "$(kv "$out" proxima)" = F4 ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" replanejamentos_f6)" = 1 ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" max_replanejamentos_f6)" = 2 ] \
+    && grep -q '"evento":"replanejamento_execucao_retomado"' "$d/docs/eventos/menu.jsonl"
+}
+# K3. Antes da nova aprovacao o defeito_de_plano nao se resolve — nem com o plano ja editado.
+k_resolver_antes() {
+  local s="$1" d="$2" f a; f="$(kf "$d")"
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  kbl "$s" "$d" resolver menu B-01 >/dev/null; [ $? -eq 5 ] || return 1
+  kpl "$s" "$d" replanejar-execucao menu >/dev/null || return 1
+  k_plano "$d" c bloqueada 'src/ui/cabecalho-topo.tsx, tests/ui/cabecalho-topo.test.tsx'
+  a="$(cksum < "$f/00-BLOQUEIOS.md")"
+  kbl "$s" "$d" resolver menu B-01 >/dev/null; [ $? -eq 5 ] || return 1
+  kpl "$s" "$d" avanca menu f3 >/dev/null && kpl "$s" "$d" avanca menu f4 >/dev/null || return 1
+  kbl "$s" "$d" resolver menu B-01 >/dev/null; [ $? -eq 5 ] || return 1
+  [ "$(cksum < "$f/00-BLOQUEIOS.md")" = "$a" ] && [ "$(kbloq "$d" B-01)" = "defeito_de_plano|aberto" ] \
+    && tr -d '\r' < "$f/00-BLOQUEIOS.md" | grep -qx '    resolvido_em: null'
+}
+# K4. O ciclo inteiro: plano parcial muda T-04.03 e o futuro; F5 aprova; B-01 resolvido pela
+# chave; T-04.03 volta a pendente; concluidas intactas; F6 so com o que resta.
+k_aprovacao() {
+  local s="$1" d="$2" f c0 out rest; f="$(kf "$d")"; c0="$(kcong "$d")"
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'T-04.03 precisa alterar tests/ui/cabecalho-topo.test.tsx' 'ampliar ownership' >/dev/null || return 1
+  kpl "$s" "$d" replanejar-execucao menu >/dev/null || return 1
+  # F3: o mesmo arquivo que a T-03.01 concluida criou entra em `altera` da T-04.03; nasce a T-04.07.
+  k_plano "$d" c bloqueada 'src/ui/cabecalho-topo.tsx, tests/ui/cabecalho-topo.test.tsx' nova
+  kpl "$s" "$d" avanca menu f3 >/dev/null && kpl "$s" "$d" avanca menu f4 >/dev/null || return 1
+  k_aud "$d" 4 SIM
+  out="$(kpl "$s" "$d" avanca menu f5)" || return 1
+  [ "$(kv "$out" estado)" = aprovado ] && [ "$(kv "$out" proxima)" = F6 ] && [ "$(kv "$out" reprovacoes)" = 2 ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" replanejamentos_f6)" = 1 ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" bloqueios_replanejamento_f6)" = "[]" ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" tasks_congeladas)" = "[]" ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" assinatura_congeladas)" = null ] \
+    && [ "$(kbloq "$d" B-01)" = "defeito_de_plano|resolvido" ] && tr -d '\r' < "$f/00-BLOQUEIOS.md" | grep -q '^B-01 | T-04.03 | .* · resolvido em ' \
+    && [ "$(kst "$d" T-04.03)" = pendente ] && tr -d '\r' < "$f/sprint-04/tasks.md" | grep -qx 'status: pendente' \
+    && [ "$(kcong "$d")" = "$c0" ] && [ "$(kv "$(kpl "$s" "$d" fase menu)" fase)" = F6 ] \
+    && git -C "$d" diff --quiet HEAD -- docs/sprintx/features/menu && [ "$(trailer "$d" Estado)" = aprovado ] || return 1
+  tr -d '\r' < "$f/sprint-04/tasks.md" | sed -n '/^  - id: T-04.03$/,/^    suite:/p' | grep -qx '      altera: \[src/ui/cabecalho-topo.tsx, tests/ui/cabecalho-topo.test.tsx\]' \
+    && tr -d '\r' < "$f/sprint-03/tasks.md" | sed -n '/^  - id: T-03.01$/,/^    suite:/p' | grep -qx '      cria: \[src/ui/cabecalho-topo.tsx, tests/ui/cabecalho-topo.test.tsx\]' || return 1
+  rest=""; for t in T-01.01 T-01.02 T-01.03 T-01.04 T-02.01 T-02.02 T-02.03 T-02.04 T-03.01 T-03.02 T-03.03 T-03.04 T-04.01 T-04.02 T-04.03 T-04.04 T-04.05 T-04.06 T-04.07; do
+    [ "$(kst "$d" "$t")" = concluida ] || rest="$rest$t "
+  done
+  [ "$rest" = "T-04.03 T-04.04 T-04.05 T-04.06 T-04.07 " ] \
+    && grep -q '"evento":"replanejamento_execucao_aprovado"' "$d/docs/eventos/menu.jsonl" \
+    && grep -q '"evento":"bloqueio_resolvido".*"task":"T-04.03"' "$d/docs/eventos/menu.jsonl" \
+    && grep -q '"evento":"task_reaberta".*"task":"T-04.03"' "$d/docs/eventos/menu.jsonl" \
+    && grep -q '"evento":"replanejamento_execucao_iniciado"' "$d/docs/eventos/menu.jsonl"
+}
+# K5. Segundo defeito_de_plano com 1/1 consumido: nenhuma rodada nova; estado terminal proprio.
+k_segundo_defeito() {
+  local s="$1" d="$2" f out; f="$(kf "$d")"
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  kpl "$s" "$d" replanejar-execucao menu >/dev/null || return 1
+  k_plano "$d" c bloqueada 'src/ui/cabecalho-topo.tsx, tests/ui/cabecalho-topo.test.tsx'
+  kpl "$s" "$d" avanca menu f3 >/dev/null && kpl "$s" "$d" avanca menu f4 >/dev/null || return 1
+  k_aud "$d" 4 SIM; kpl "$s" "$d" avanca menu f5 >/dev/null || return 1
+  # De volta a F6: T-04.04 descobre outro arquivo fora do ownership.
+  awk '/^  - id: T-04.04$/{t=1} t && /^    status: pendente$/{print "    status: bloqueada"; t=0; next} {print}' "$f/sprint-04/tasks.md" > "$K/t.tmp" && mv "$K/t.tmp" "$f/sprint-04/tasks.md"
+  kbl "$s" "$d" registrar menu T-04.04 defeito_de_plano 'T-04.04 precisa de src/menu/perfil.ts' 'mover o arquivo' >/dev/null || return 1
+  out="$(kpl "$s" "$d" replanejar-execucao menu)" || return 1
+  [ "$(kv "$out" replanejamento)" = esgotado ] && [ "$(kv "$out" estado)" = replanejamento_execucao_esgotado ] && [ "$(kv "$out" proxima)" = PARAR ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" estado)" = replanejamento_execucao_esgotado ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" replanejamentos_f6)" = 1 ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" reprovacoes)" = 2 ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" bloqueios_replanejamento_f6)" = "[]" ] \
+    && [ "$(kbloq "$d" B-02)" = "defeito_de_plano|aberto" ] && [ "$(kv "$(kpl "$s" "$d" fase menu)" fase)" = PARAR ] \
+    && [ "$(trailer "$d" Estado)" = replanejamento_execucao_esgotado ] \
+    && grep -q '"evento":"replanejamento_execucao_esgotado"' "$d/docs/eventos/menu.jsonl" || return 1
+  kpl "$s" "$d" avanca menu f3 >/dev/null; [ $? -eq 5 ] || return 1
+  out="$(kpl "$s" "$d" replanejar-execucao menu)" || return 1
+  [ "$(kv "$out" replanejamento)" = esgotado ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" replanejamentos_f6)" = 1 ]
+}
+# k_recusa <script> <dir> <motivo> — nada gravado, estado aprovado, contador intacto.
+k_recusa() {
+  local s="$1" d="$2" f ck h out rc; f="$(kf "$d")"; ck="$(cksum < "$f/00-PLANEJAMENTO.md")"; h="$(git -C "$d" rev-parse HEAD)"
+  out="$(kpl "$s" "$d" replanejar-execucao menu)"; rc=$?
+  [ "$rc" -eq 5 ] && [ "$(kv "$out" replanejamento)" = recusado ] && [ "$(kv "$out" motivo)" = "$3" ] \
+    && [ "$(cksum < "$f/00-PLANEJAMENTO.md")" = "$ck" ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" estado)" = aprovado ] && [ "$(kv "$(kpl "$s" "$d" fase menu)" fase)" = F6 ]
+}
+# K6-K8. Classes que nao iniciam replanejamento — com descricao que "fala" de defeito de plano.
+k_lacuna() {
+  kbl "$1" "$2" registrar menu T-04.03 lacuna_de_decisao 'arquivo fora do ownership da task: defeito de plano, replanejar' 'decidir' >/dev/null || return 1
+  k_recusa "$1" "$2" sem_defeito_de_plano
+}
+k_prerequisito() {
+  kbl "$1" "$2" registrar menu T-04.03 prerequisito_ausente 'o plano precisa mudar: arquivo fora do ownership' 'provisionar' >/dev/null || return 1
+  k_recusa "$1" "$2" sem_defeito_de_plano
+}
+k_legado_bloqueio() {
+  cat > "$(kf "$2")/00-BLOQUEIOS.md" <<'EOF'
+---
+expx_schema: 1
+expx_tool: sprintx
+kind: bloqueios
+trabalho_id: menu
+atualizado_em: 2026-09-12
+bloqueios:
+  - id: B-01
+    task: T-04.03
+    aberto_em: 2026-09-12
+    resolvido_em: null
+    descricao: T-04.03 precisa alterar tests/ui/cabecalho-topo.test.tsx, fora do ownership da task, defeito_de_plano
+---
+
+# Bloqueios
+
+B-01 | T-04.03 | T-04.03 precisa alterar tests/ui/cabecalho-topo.test.tsx, fora do ownership da task | replanejar
+EOF
+  [ "$(kbloq "$2" B-01)" = "legado|aberto" ] && k_recusa "$1" "$2" sem_defeito_de_plano
+}
+# K9. Mistura de classes abertas: nenhuma precedencia inventada, nada gravado.
+k_mistura() {
+  kbl "$1" "$2" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  kbl "$1" "$2" registrar menu null lacuna_de_decisao 'nenhuma D-NN cobre o icone' 'decidir' >/dev/null || return 1
+  k_recusa "$1" "$2" classes_mistas && [ "$(fmv "$(kf "$2")/00-PLANEJAMENTO.md" replanejamentos_f6)" = 0 ] \
+    && [ "$(kbloq "$2" B-01)" = "defeito_de_plano|aberto" ]
+}
+# K10. Varios defeito_de_plano abertos: uma rodada, lista em ordem de id (mesmo com o arquivo
+# fora de ordem), B-NN sem task resolvido sem inventar task, e so os da rodada sao resolvidos.
+k_varios() {
+  local s="$1" d="$2" f out; f="$(kf "$d")"
+  awk '/^  - id: T-04.05$/{t=1} t && /^    status: pendente$/{print "    status: bloqueada"; t=0; next} {print}' "$f/sprint-04/tasks.md" > "$K/v.tmp" && mv "$K/v.tmp" "$f/sprint-04/tasks.md"
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  kbl "$s" "$d" registrar menu null lacuna_de_decisao 'nenhuma D-NN cobre o icone' 'decidir' >/dev/null || return 1
+  kbl "$s" "$d" resolver menu B-02 >/dev/null || return 1
+  kbl "$s" "$d" registrar menu null defeito_de_plano 'criterio_saida da F-04.1 sem task que o cumpra' 'nova task' >/dev/null || return 1
+  kbl "$s" "$d" registrar menu T-04.05 defeito_de_plano 'depende_de ausente' 'declarar dependencia' >/dev/null || return 1
+  # Arquivo fora de ordem: B-04 antes de B-01 no frontmatter.
+  awk '/^bloqueios:$/{print; b=1; next} b && /^  - id: B-01$/{g=1} b && /^  - id: B-02$/{g=0} g{h=h $0 "\n"; next} b && /^---$/{printf "%s", h; b=0} {print}' "$f/00-BLOQUEIOS.md" > "$K/b.tmp" && mv "$K/b.tmp" "$f/00-BLOQUEIOS.md"
+  [ "$(kbl "$s" "$d" listar menu | tr -d '\r' | cut -f1 | tr '\n' ' ')" = "B-02 B-03 B-04 B-01 " ] || return 1
+  out="$(kpl "$s" "$d" replanejar-execucao menu)" || return 1
+  [ "$(kv "$out" bloqueios_replanejamento_f6)" = "B-01,B-03,B-04" ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" bloqueios_replanejamento_f6)" = "[B-01, B-03, B-04]" ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" replanejamentos_f6)" = 1 ] || return 1
+  # Durante a rodada alguem registra B-05: nao pertence a rodada.
+  kbl "$s" "$d" registrar menu null prerequisito_ausente 'servico de icones fora do ar' 'religar' >/dev/null || return 1
+  kpl "$s" "$d" avanca menu f3 >/dev/null && kpl "$s" "$d" avanca menu f4 >/dev/null || return 1
+  k_aud "$d" 4 SIM; kpl "$s" "$d" avanca menu f5 >/dev/null || return 1
+  [ "$(kbloq "$d" B-01)" = "defeito_de_plano|resolvido" ] && [ "$(kbloq "$d" B-03)" = "defeito_de_plano|resolvido" ] \
+    && [ "$(kbloq "$d" B-04)" = "defeito_de_plano|resolvido" ] && [ "$(kbloq "$d" B-05)" = "prerequisito_ausente|aberto" ] \
+    && [ "$(kbloq "$d" B-02)" = "lacuna_de_decisao|resolvido" ] \
+    && [ "$(kst "$d" T-04.03)" = pendente ] && [ "$(kst "$d" T-04.05)" = pendente ] && [ "$(kst "$d" T-04.04)" = pendente ] \
+    && [ "$(grep -c '"evento":"task_reaberta"' "$d/docs/eventos/menu.jsonl")" -eq 2 ]
+}
+# K11. Planejamento legado (sem o eixo F6): nenhum orcamento inventado, nem na leitura nem numa retomada.
+k_legado_orcamento() {
+  local s="$1" d="$2" f; f="$(kf "$d")"
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  k_recusa "$s" "$d" orcamento_f6_legado || return 1
+  [ "$(kv "$(kpl "$s" "$d" fase menu)" orcamento_f6)" = legado ] || return 1
+  kpl "$s" "$d" criar menu 3 buildx 1 >/dev/null; [ $? -eq 4 ] || return 1
+  kpl "$s" "$d" criar menu 3 buildx >/dev/null || return 1
+  ! fm_tem_k "$f/00-PLANEJAMENTO.md" max_replanejamentos_f6 && ! fm_tem_k "$f/00-PLANEJAMENTO.md" replanejamentos_f6 \
+    && [ "$(kbloq "$d" B-01)" = "defeito_de_plano|aberto" ]
+}
+fm_tem_k() { tr -d '\r' < "$1" | awk -v k="$2" 'NR==1{next} $0=="---"{exit} index($0,k":")==1{a=1} END{exit !a}'; }
+# K12. Orcamento da F6 nao declarado (criar sem o quarto argumento): nao abre.
+k_sem_orcamento() {
+  kbl "$1" "$2" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  [ "$(fmv "$(kf "$2")/00-PLANEJAMENTO.md" max_replanejamentos_f6)" = null ] && k_recusa "$1" "$2" orcamento_f6_nao_declarado
+}
+# K13. Produto da task bloqueada sujo na arvore: fronteira insegura, nada gravado, nada limpo.
+k_fronteira() {
+  local s="$1" d="$2" f ck h rc; f="$(kf "$d")"
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  mkdir -p "$d/src/menu"; printf 'export const perfil = 1\n' > "$d/src/menu/perfil.ts"
+  printf 'export const x = 2\n' > "$d/src/app.ts"
+  ck="$(cksum < "$f/00-PLANEJAMENTO.md")"; h="$(git -C "$d" rev-parse HEAD)"
+  kpl "$s" "$d" replanejar-execucao menu >/dev/null; rc=$?
+  [ "$rc" -eq 2 ] && [ "$(cksum < "$f/00-PLANEJAMENTO.md")" = "$ck" ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] \
+    && [ "$(cat "$d/src/menu/perfil.ts")" = 'export const perfil = 1' ] && [ "$(cat "$d/src/app.ts")" = 'export const x = 2' ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" replanejamentos_f6)" = 0 ] && [ "$(git -C "$d" stash list | wc -l | tr -d ' ')" = 0 ]
+}
+# K14. F5 reprova durante a rodada: o contador da F5 continua de onde estava (2 -> 3 de 5)...
+k_f5_nao_continua() {
+  local s="$1" d="$2" f out c0; f="$(kf "$d")"; c0="$(kcong "$d")"
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  kpl "$s" "$d" replanejar-execucao menu >/dev/null || return 1
+  kpl "$s" "$d" avanca menu f3 >/dev/null && kpl "$s" "$d" avanca menu f4 >/dev/null || return 1
+  k_aud "$d" 4 NAO; out="$(kpl "$s" "$d" avanca menu f5)" || return 1
+  [ "$(kv "$out" estado)" = replanejar ] && [ "$(kv "$out" reprovacoes)" = 3 ] && [ "$(kv "$out" max_reprovacoes_f5)" = 5 ] \
+    && [ "$(kv "$out" replanejamento_execucao)" = ativo ] && [ "$(kbloq "$d" B-01)" = "defeito_de_plano|aberto" ] || return 1
+  k_plano "$d" c bloqueada 'src/ui/cabecalho-topo.tsx, tests/ui/cabecalho-topo.test.tsx'
+  kpl "$s" "$d" avanca menu f3 >/dev/null && kpl "$s" "$d" avanca menu f4 >/dev/null || return 1
+  k_aud "$d" 5 SIM; out="$(kpl "$s" "$d" avanca menu f5)" || return 1
+  [ "$(kv "$out" estado)" = aprovado ] && [ "$(kv "$out" reprovacoes)" = 3 ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" replanejamentos_f6)" = 1 ] \
+    && [ "$(kbloq "$d" B-01)" = "defeito_de_plano|resolvido" ] && [ "$(kst "$d" T-04.03)" = pendente ] && [ "$(kcong "$d")" = "$c0" ] \
+    && [ "$(tr -d '\r' < "$f/00-PLANEJAMENTO.md" | grep -c '^  - rodada:')" -eq 5 ]
+}
+# ...e, esgotado, cai no terminal que a F5 ja tinha (2 -> 3 de 3): sem segundo reset.
+k_f5_nao_esgota() {
+  local s="$1" d="$2" f out; f="$(kf "$d")"
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  kpl "$s" "$d" replanejar-execucao menu >/dev/null || return 1
+  kpl "$s" "$d" avanca menu f3 >/dev/null && kpl "$s" "$d" avanca menu f4 >/dev/null || return 1
+  k_aud "$d" 4 NAO; out="$(kpl "$s" "$d" avanca menu f5)" || return 1
+  [ "$(kv "$out" estado)" = orcamento_esgotado ] && [ "$(kv "$out" reprovacoes)" = 3 ] && [ "$(kv "$out" proxima)" = PARAR ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" replanejamentos_f6)" = 1 ] && [ "$(kbloq "$d" B-01)" = "defeito_de_plano|aberto" ] \
+    && [ "$(kst "$d" T-04.03)" = bloqueada ] || return 1
+  kpl "$s" "$d" avanca menu f3 >/dev/null; [ $? -eq 5 ] || return 1
+  kbl "$s" "$d" resolver menu B-01 >/dev/null; [ $? -eq 5 ]
+}
+# K15. Reescrever historia concluida durante a rodada: cada portao recusa (codigo 4) e nada registra.
+k_concluidas_protegidas() {
+  local s="$1" d="$2" f ck m rc o="$K/orig.$$"; f="$(kf "$d")"
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  kpl "$s" "$d" replanejar-execucao menu >/dev/null || return 1
+  mkdir -p "$o"; cp "$f/sprint-03/tasks.md" "$o/s3"; cp "$f/sprint-04/tasks.md" "$o/s4"; ck="$(cksum < "$f/00-PLANEJAMENTO.md")"
+  # ampliar `arquivos`; reabrir; renumerar; concluir sem executar; reescrever a prosa; apagar.
+  for m in     "sprint-03|/^  - id: T-03.01\$/,/^    suite:/s/^      altera: \[\]\$/      altera: [src\/x.ts]/"     "sprint-04|/^  - id: T-04.02\$/,/^    suite:/s/^    status: concluida\$/    status: pendente/"     "sprint-04|s/^  - id: T-04.01\$/  - id: T-04.11/"     "sprint-04|/^  - id: T-04.06\$/,/^    suite:/s/^    status: pendente\$/    status: concluida/"     "sprint-03|s/^2026-09-10 · suíte: 3 passed, 0 failed · real: 1 h\$/2026-09-10 · suíte: 9 passed, 0 failed · real: 1 h/"     "sprint-04|/^  - id: T-04.02\$/,/^    suite:/d"; do
+    cp "$o/s3" "$f/sprint-03/tasks.md"; cp "$o/s4" "$f/sprint-04/tasks.md"
+    sed "${m#*|}" "$f/${m%%|*}/tasks.md" > "$K/m.tmp" && mv "$K/m.tmp" "$f/${m%%|*}/tasks.md"
+    if cmp -s "$o/s3" "$f/sprint-03/tasks.md" && cmp -s "$o/s4" "$f/sprint-04/tasks.md"; then return 1; fi
+    kpl "$s" "$d" avanca menu f3 >/dev/null; rc=$?
+    [ "$rc" -eq 4 ] && [ "$(cksum < "$f/00-PLANEJAMENTO.md")" = "$ck" ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" estado)" = replanejar_execucao ] || return 1
+  done
+  cp "$o/s3" "$f/sprint-03/tasks.md"; cp "$o/s4" "$f/sprint-04/tasks.md"
+  kpl "$s" "$d" avanca menu f3 >/dev/null
+}
+# K16. A task do B-NN tem de estar gravada como bloqueada antes da transicao.
+k_task_nao_bloqueada() {
+  local s="$1" d="$2" f ck rc; f="$(kf "$d")"
+  kbl "$s" "$d" registrar menu T-04.04 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  ck="$(cksum < "$f/00-PLANEJAMENTO.md")"
+  kpl "$s" "$d" replanejar-execucao menu >/dev/null; rc=$?
+  [ "$rc" -eq 4 ] && [ "$(cksum < "$f/00-PLANEJAMENTO.md")" = "$ck" ]
+}
+CASOS_K="k_inicia:FXP k_retomada:FX2 k_resolver_antes:FXP k_aprovacao:FXP k_segundo_defeito:FXP k_lacuna:FXP k_prerequisito:FXP
+  k_legado_bloqueio:FXP k_mistura:FXP k_varios:FXP k_legado_orcamento:FXL k_sem_orcamento:FXN k_fronteira:FXP
+  k_f5_nao_continua:FX5 k_f5_nao_esgota:FXP k_concluidas_protegidas:FXP k_task_nao_bloqueada:FXP"
+fx_de() { local c; for c in $CASOS_K; do [ "${c%%:*}" = "$1" ] && { eval "printf '%s' \"\$${c#*:}\""; return; }; done; }
+roda_k() { local d; d="$(kcopia "$(fx_de "$1")")"; "$1" "$2" "$d"; }
+for par in k_inicia:k1-piloto-entra-em-replanejar-execucao k_retomada:k2-retomada-nao-consome-de-novo \
+  k_resolver_antes:k3-resolver-antes-da-aprovacao-recusado k_aprovacao:k4-aprovacao-resolve-reabre-preserva \
+  k_segundo_defeito:k5-segundo-defeito-apos-1-de-1-esgota k_lacuna:k6-lacuna-de-decisao-nao-replaneja \
+  k_prerequisito:k7-prerequisito-ausente-nao-replaneja k_legado_bloqueio:k8-bloqueio-legado-nao-replaneja \
+  k_mistura:k9-classes-mistas-nao-replaneja k_varios:k10-varios-defeitos-uma-rodada-ordenada \
+  k_legado_orcamento:k11-planejamento-legado-sem-orcamento-inventado k_sem_orcamento:k12-orcamento-f6-nao-declarado-nao-abre \
+  k_fronteira:k13-produto-sujo-fronteira-insegura k_f5_nao_continua:k14-f5-nao-durante-rodada-continua \
+  k_f5_nao_esgota:k15-f5-esgota-no-terminal-existente k_concluidas_protegidas:k16-concluidas-congeladas-nos-portoes \
+  k_task_nao_bloqueada:k17-task-do-bloqueio-precisa-estar-bloqueada; do
+  roda_k "${par%%:*}" "$PL"; afirma "${par#*:}" $? "${par%%:*}"
+done
+
+# Contrato nos documentos: estados, comando da F6, resolucao, congelamento e decisoes.
+SCHK="$SK/references/00-schema.md"
+for e in replanejar_execucao replanejamento_execucao_esgotado; do
+  tr -d '\r' < "$SCHK" | grep -F '| `estado` (planejamento) |' | grep -qF "\`$e\`" && tem "$SKILLMD" "| \`$e\` |" \
+    && [ "$(tr -d '\r' < "$PL" | grep -cxF '    replanejar_execucao|replanejamento_execucao_esgotado) ;;')" -eq 1 ]
+  afirma "k18-estado-$e-no-enum" $? "schema, tabela do SKILL.md e script"
+done
+tem "$SKILLMD" '| `replanejamento_execucao_esgotado` | **terminal**' && tem "$SKILLMD" '| `replanejar_execucao` | F3 —'
+afirma "k18-skill-f6-volta-pela-f3" $? "replanejar_execucao -> F3; esgotado terminal"
+KCMD="$CMD_PL replanejar-execucao <slug>"
+onde="$(grep -rlF -- "$KCMD" "$SK" "$H/../commands" "$H/../../.opencode" 2>/dev/null)"
+[ "$(printf '%s\n' "$onde" | sed '/^$/d' | wc -l | tr -d ' ')" -eq 1 ] && [ "$(basename "$onde")" = 06-execucao.md ] && [ "$(conta "$EXEC" "$KCMD")" -eq 1 ]
+afirma "k19-instrucao-unica-replanejar-execucao" $? "${onde:-nenhum arquivo}"
+L_REG=$(linha_de "$EXEC" 'bash <raiz-da-skill>/scripts/bloqueios.sh registrar <slug>'); L_RPL=$(linha_de "$EXEC" "$KCMD")
+L_PORT=$(linha_de "$EXEC" '## Portões de fase e de sprint')
+[ -n "$L_REG" ] && [ -n "$L_RPL" ] && [ "$L_REG" -lt "$L_RPL" ] && [ "$L_RPL" -lt "$L_PORT" ] \
+  && tem "$EXEC" '3. **Classe `defeito_de_plano`: devolva o plano ao planejamento agora**' \
+  && tem "$EXEC" 'Nunca `stash`, nunca limpe, nunca descarte' && tem "$EXEC" '**Não abra task nova**'
+afirma "k19-f6-devolve-o-plano-depois-de-registrar" $? "registrar=$L_REG < replanejar=$L_RPL < portoes=$L_PORT"
+tem "$EXEC" 'bash <raiz-da-skill>/scripts/bloqueios.sh resolver <slug> <B-NN>' && tem "$EXEC" '**`defeito_de_plano` não**: editar o plano não resolve um defeito de plano' \
+  && tem "$SCHK" '**Resolução.** Só por `scripts/bloqueios.sh resolver <slug> <B-NN>`, nunca editando'
+afirma "k20-resolucao-so-pelo-script" $? "06-execucao e schema"
+tem "$SK/references/03-plano.md" '### Retorno da F6 — replanejamento da execução' && tem "$SK/references/03-plano.md" '**Tasks `concluida` estão congeladas**' \
+  && tem "$SK/references/03-plano.md" 'Não volte à F1 nem à F2' \
+  && tr -d '\r' < "$SK/references/05-auditoria.md" | tr '\n' ' ' | grep -qF '**o orçamento da F5 continua de onde estava**'
+afirma "k21-f3-e-f5-no-retorno-da-f6" $? "congeladas, sem F1/F2, orcamento da F5 continua"
+for ev in replanejamento_execucao_iniciado replanejamento_execucao_retomado replanejamento_execucao_aprovado replanejamento_execucao_esgotado \
+  replanejamento_execucao_recusado task_reaberta bloqueio_resolvido; do
+  tem "$SK/references/08-rastro.md" "\`$ev\`" && [ "$(cat "$PL" "$BL" | grep -cF "$ev")" -gt 0 ]
+  afirma "k22-rastro-$ev" $? "08-rastro e script"
+done
+DSF="$SK/DECISOES-DA-SKILL.md"; n=0
+for ds in 140 141 142 143 144 145 146; do [ "$(grep -c "^| DS-$ds |" "$DSF")" -eq 1 ] && n=$((n + 1)); done
+[ "$n" -eq 7 ] && tem "$DSF" '**Estado próprio `replanejar_execucao`**' && tem "$DSF" '**Tasks concluídas são congeladas, e o congelamento é mecânico.**' \
+  && tem "$DSF" '**Legado sem orçamento retroativo.**' && tem "$DSF" '**O gatilho é a chave `classe` dos B-NN abertos**'
+afirma "k23-ds140-a-ds146-registradas" $? "$n de 7"
+
+# Mutantes do mecanismo, em copia temporaria da skill (scripts/ + assets/: os dois scripts
+# se chamam pela propria pasta e acham o template por ela). Cada mutante tem de morrer pelos
+# casos designados; o controle, copia SEM mutacao na mesma estrutura, tem de sobreviver a
+# todos eles — se morrer, e a bancada que esta quebrada.
+MK="$K/mut"
+copia_skill_k() { mkdir -p "$MK/$1/scripts" "$MK/$1/assets"; cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$MK/$1/assets/"; cp "$BL" "$MK/$1/scripts/"; printf '%s/%s/scripts/planejamento.sh' "$MK" "$1"; }
+mutante_k() { # mutante_k <nome> <rc da geracao> <script> <caso que TEM de matar>...
+  local nome="$1" rc="$2" s="$3" c vivos=""; shift 3
+  if [ "$rc" -eq 0 ]; then for c in "$@"; do roda_k "$c" "$s" && vivos="$vivos$c "; done; fi
+  [ "$rc" -eq 0 ] && [ -z "$vivos" ]; afirma "$nome" $? "morto por: $* ${vivos:+— SOBREVIVEU a: $vivos}(rc geracao=$rc)"
+}
+DESIGNADOS_K="k_inicia k_retomada k_resolver_antes k_aprovacao k_segundo_defeito k_lacuna k_legado_bloqueio k_mistura k_legado_orcamento"
+CTLK="$(copia_skill_k controle)"; cp "$PL" "$CTLK"; vivosk=""
+for c in $DESIGNADOS_K; do roda_k "$c" "$CTLK" || vivosk="$vivosk$c "; done
+[ -z "$vivosk" ]; afirma "km-controle-copia-intacta-sobrevive" $? "${vivosk:-nenhum caso designado reprova a copia sem mutacao}"
+M="$(copia_skill_k a)"; muta_lit "$PL" "$M" '  escreve "$P_MAX" "$P_POR" replanejar_execucao "$P_REPROV" "$P_HIST"' \
+  '  escreve "$P_MAX" "$P_POR" replanejar_execucao 0 "$(printf '"'"'%s\n'"'"' "$P_HIST" | awk -F"$TAB" '"'"'$2 == "sim"'"'"' | tail -1 | sed '"'"'s/^[0-9]*/1/'"'"')"'
+mutante_k "km-mutante-1-reinicia-reprovacoes-f5" $? "$M" k_inicia
+M="$(copia_skill_k b)"; muta_lit "$PL" "$M" '    fm && t && id == alvo && $0 == "    status: bloqueada" { print "    status: pendente"; next }' \
+  '    fm && t && $0 ~ /^    status: (bloqueada|concluida)$/ { print "    status: pendente"; next }'
+mutante_k "km-mutante-2-reabre-task-concluida" $? "$M" k_aprovacao
+M="$(copia_skill_k c)"; muta_lit "$PL" "$M" '  if [ "$P_N6" -ge "$P_MAX6" ]; then' '  if [ "$P_N6" -gt "$P_MAX6" ]; then'
+mutante_k "km-mutante-3-segunda-rodada-apos-1-de-1" $? "$M" k_segundo_defeito
+M="$(copia_skill_k d)"; muta_lit "$PL" "$M" '    evento replanejamento_execucao_retomado f6 - ok' \
+  '    f6_herda; W6_N=$((P_N6 + 1)); escreve "$P_MAX" "$P_POR" "$P_ESTADO" "$P_REPROV" "$P_HIST"; evento replanejamento_execucao_retomado f6 - ok'
+mutante_k "km-mutante-4-retomada-consome-de-novo" $? "$M" k_retomada
+M="$(copia_skill_k e)"; muta_lit "$PL" "$M" '    elif [ "$P_ESTADO" != aprovado ]; then motivo=rodada_nao_aprovada' '    elif false; then motivo=rodada_nao_aprovada'
+mutante_k "km-mutante-5-resolve-antes-da-aprovacao" $? "$M" k_resolver_antes
+M="$(copia_skill_k f)"; muta_lit "$PL" "$M" '  abertos="$(abertos_ordenados)"' \
+  '  abertos="$(abertos_ordenados | while IFS="$TAB" read -r b t c; do d="$(grep -A6 "^  - id: $b\$" "$PASTA/00-BLOQUEIOS.md" | grep "^    descricao:")"; case "$d" in *ownership*|*plano*|*arquivo*) c=defeito_de_plano ;; *) c=lacuna_de_decisao ;; esac; printf "%s\t%s\t%s\n" "$b" "$t" "$c"; done)"'
+mutante_k "km-mutante-6-classe-pela-descricao" $? "$M" k_lacuna k_legado_bloqueio
+M="$(copia_skill_k g)"; muta_lit "$PL" "$M" '  elif [ -n "$outros" ]; then motivo=classes_mistas' '  elif false; then motivo=classes_mistas'
+mutante_k "km-mutante-7-replaneja-com-classes-mistas" $? "$M" k_mistura
+M="$(copia_skill_k h)"; muta_lit "$PL" "$M" '    P_F6=legado; P_MAX6=null; P_N6=0' '    P_F6=presente; P_MAX6=1; P_N6=0'
+mutante_k "km-mutante-8-inventa-orcamento-no-legado" $? "$M" k_legado_orcamento
+rm -rf "$K"
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado pulados"
 [ "$falhou" -eq 0 ]
