@@ -2082,6 +2082,260 @@ mutante_k "km-mutante-15-legado-inventa-orcamento-na-recusa" $? "$M" k_planejame
 # Registro invalido lido so dentro do subshell: vira "nenhum bloqueio aberto" em vez de contrato.
 M="$(copia_skill_k p)"; muta_lit "$PL" "$M" '  le_bloqueios || falha "$E_CONTRATO" "00-BLOQUEIOS.md invalido"' '  :'
 mutante_k "km-mutante-16-registro-invalido-vira-sem-bloqueio" $? "$M" k_registro_invalido
+
+echo "== L. escopo unitario bloqueia arquivo de task irma (P0.2-C2) =="
+existe "l0-hook-existe" "$H/sprintx/escopo-da-task.sh"
+bash -n "$H/sprintx/escopo-da-task.sh"; afirma "l0-hook-sintaxe" $? "bash -n"
+bash -n "$H/comum/rastro.sh"; afirma "l0-rastro-sintaxe" $? "bash -n"
+
+C2="$(mktemp -d)"
+git -C "$C2" init -q -b main; git -C "$C2" config user.email t@t.local; git -C "$C2" config user.name teste
+git -C "$C2" -c commit.gpgsign=false commit -q -m init --allow-empty
+C2OC="$C2/docs/sprintx/features/c2-escopo-irma"
+mkdir -p "$C2OC/sprint-03" "$C2OC/sprint-04" "$C2/tests/ui" "$C2/src/ui" "$C2/src/menu" "$C2/src/shared" "$C2/src/random"
+C2RASTRO="$C2/docs/eventos/c2-escopo-irma.jsonl"; mkdir -p "$(dirname "$C2RASTRO")"
+
+c2_evento() { # c2_evento <evento> <task> <sessao>
+  python3 -c "
+import sys, datetime
+evento, task, sessao = sys.argv[1:4]
+extras = ',\"sessao\":\"%s\",\"harness\":\"%s\"' % (sessao, sessao.split('@')[0])
+linha = ('{\"ts\":\"%s\",\"expx_eventos\":1,\"trabalho_id\":\"c2-escopo-irma\",'
+         '\"ferramenta\":\"sprintx\",\"origem\":\"skill\",\"evento\":\"%s\",\"fase\":\"f6\",'
+         '\"task\":\"%s\",\"agente\":\"principal\",\"resultado\":\"ok\",\"detalhe\":null,'
+         '\"arquivos\":[]%s}') % (datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'), evento, task, extras)
+open(sys.argv[4], 'a').write(linha + '\n')
+" "$1" "$2" "$3" "$C2RASTRO"
+}
+c2_tarefa() { # c2_tarefa <arquivo> <id> <status> <cria> <altera> [depende]
+  printf '  - id: %s\n    titulo: Task %s original\n    status: %s\n    objetivo: obj\n    arquivos:\n      cria: [%s]\n      altera: [%s]\n    teste_integracao: t\n    teste_funcional: t\n    criterio_aceite: c\n    depende_de: [%s]\n    paralelizavel: false\n    concluida_em: null\n    suite: nao_executada\n' \
+    "$2" "$2" "$3" "$4" "$5" "${6:-}" >> "$1"
+}
+c2_abre() { printf -- '---\nexpx_schema: 1\nexpx_tool: sprintx\nkind: tasks\ntrabalho_id: c2-escopo-irma\nsprint_id: sprint-%s\ntasks:\n' "$1" > "$2"; }
+c2_fecha() { printf -- '---\n' >> "$1"; }
+c2_w() { printf '{"cwd":"%s","tool_input":{"file_path":"%s"}}' "$C2" "$C2/$1"; }
+C2_SAIDA=""
+c2_hook() { # c2_hook <hook> <arquivo-relativo> <sessao> — exit code proprio; saida fica em C2_SAIDA
+  C2_SAIDA=$(printf '%s' "$(c2_w "$2")" | (cd "$C2" && EXPX_SESSAO="$3" bash "$1") 2>&1)
+}
+
+# Reset completo e deterministico: T-03.01 concluida cria o par tsx+test;
+# T-04.03 em_andamento (minha sessao) altera so o tsx. Cada caso parte daqui
+# e aplica so o desvio que precisa — nenhum caso depende do anterior.
+l_fixture() {
+  c2_abre 03 "$C2OC/sprint-03/tasks.md"
+  c2_tarefa "$C2OC/sprint-03/tasks.md" T-03.01 concluida "src/ui/cabecalho-topo.tsx, tests/ui/cabecalho-topo.test.tsx" ""
+  c2_fecha "$C2OC/sprint-03/tasks.md"
+  c2_abre 04 "$C2OC/sprint-04/tasks.md"
+  c2_tarefa "$C2OC/sprint-04/tasks.md" T-04.03 em_andamento "" "src/ui/cabecalho-topo.tsx"
+  c2_fecha "$C2OC/sprint-04/tasks.md"
+  rm -rf "$C2OC/sprint-02"; rm -f "$C2/.expx/hooks.json"
+  : > "$C2RASTRO"
+  c2_evento task_iniciada T-04.03 "teste@eu"
+}
+l_a() { l_fixture; c2_hook "$1" "src/ui/cabecalho-topo.tsx" teste@eu; [ $? -eq 0 ]; }
+l_b() {
+  l_fixture
+  c2_abre 04 "$C2OC/sprint-04/tasks.md"
+  c2_tarefa "$C2OC/sprint-04/tasks.md" T-04.03 em_andamento "" "src/ui/cabecalho-topo.tsx, tests/ui/cabecalho-topo.test.tsx"
+  c2_fecha "$C2OC/sprint-04/tasks.md"
+  c2_hook "$1" "tests/ui/cabecalho-topo.test.tsx" teste@eu; [ $? -eq 0 ]
+}
+l_c() {
+  l_fixture
+  c2_hook "$1" "tests/ui/cabecalho-topo.test.tsx" teste@eu
+  [ $? -eq 2 ] && printf '%s' "$C2_SAIDA" | grep -qF "arquivo_de_task_irma" \
+    && printf '%s' "$C2_SAIDA" | grep -qF "T-04.03" && printf '%s' "$C2_SAIDA" | grep -qF "T-03.01"
+}
+l_d() {
+  l_fixture
+  c2_abre 03 "$C2OC/sprint-03/tasks.md"
+  c2_tarefa "$C2OC/sprint-03/tasks.md" T-03.01 concluida "src/ui/cabecalho-topo.tsx, tests/ui/cabecalho-topo.test.tsx" ""
+  c2_tarefa "$C2OC/sprint-03/tasks.md" T-03.02 concluida "" "src/shared/util.ts"
+  c2_tarefa "$C2OC/sprint-03/tasks.md" T-03.05 pendente "" "src/shared/util.ts"
+  c2_fecha "$C2OC/sprint-03/tasks.md"
+  c2_hook "$1" "src/shared/util.ts" teste@eu
+  [ $? -eq 2 ] && printf '%s' "$C2_SAIDA" | grep -qF "T-03.02" && printf '%s' "$C2_SAIDA" | grep -qF "T-03.05"
+}
+l_e() {
+  l_fixture
+  c2_hook "$1" "src/random/nope.ts" teste@eu
+  [ $? -eq 0 ] && ! printf '%s' "$C2_SAIDA" | grep -qF "defeito_de_plano"
+}
+l_f() {
+  l_fixture
+  c2_abre 03 "$C2OC/sprint-03/tasks.md"
+  c2_tarefa "$C2OC/sprint-03/tasks.md" T-03.01 concluida "src/ui/cabecalho-topo.tsx, tests/ui/cabecalho-topo.test.tsx" ""
+  sed -i 's/Task T-03.01 original/Cabecalho novo — reescrita total do topo/' "$C2OC/sprint-03/tasks.md"
+  c2_fecha "$C2OC/sprint-03/tasks.md"
+  c2_hook "$1" "tests/ui/cabecalho-topo.test.tsx" teste@eu; [ $? -eq 2 ]
+}
+l_g() {
+  l_fixture
+  c2_abre 03 "$C2OC/sprint-03/tasks.md"
+  c2_tarefa "$C2OC/sprint-03/tasks.md" T-03.05 pendente "" "src/shared/util.ts"
+  c2_tarefa "$C2OC/sprint-03/tasks.md" T-03.01 concluida "src/ui/cabecalho-topo.tsx, tests/ui/cabecalho-topo.test.tsx" ""
+  c2_tarefa "$C2OC/sprint-03/tasks.md" T-03.02 concluida "" "src/shared/util.ts"
+  c2_fecha "$C2OC/sprint-03/tasks.md"
+  c2_hook "$1" "tests/ui/cabecalho-topo.test.tsx" teste@eu; [ $? -eq 2 ]
+}
+l_h() {
+  l_fixture
+  mkdir -p "$C2OC/sprint-02"
+  c2_abre 02 "$C2OC/sprint-02/tasks.md"
+  c2_tarefa "$C2OC/sprint-02/tasks.md" T-02.09 em_andamento "" "src/outro/coisa.ts"
+  c2_fecha "$C2OC/sprint-02/tasks.md"
+  c2_evento task_iniciada T-02.09 "outra@sessao"
+  c2_hook "$1" "src/ui/cabecalho-topo.tsx" teste@eu; [ $? -eq 0 ]
+}
+l_i0() {
+  l_fixture
+  : > "$C2RASTRO"
+  c2_hook "$1" "src/ui/cabecalho-topo.tsx" teste@eu
+  [ $? -eq 2 ] && ! printf '%s' "$C2_SAIDA" | grep -qF "arquivo_de_task_irma"
+}
+l_i1() {
+  l_fixture
+  c2_abre 04 "$C2OC/sprint-04/tasks.md"
+  c2_tarefa "$C2OC/sprint-04/tasks.md" T-04.03 em_andamento "" "src/ui/cabecalho-topo.tsx"
+  c2_tarefa "$C2OC/sprint-04/tasks.md" T-04.05 em_andamento "" "src/menu/outra.ts"
+  c2_fecha "$C2OC/sprint-04/tasks.md"
+  c2_evento task_iniciada T-04.05 "teste@eu"
+  c2_hook "$1" "src/ui/cabecalho-topo.tsx" teste@eu; [ $? -eq 2 ]
+}
+l_j() {
+  l_fixture
+  c2_abre 04 "$C2OC/sprint-04/tasks.md"
+  c2_tarefa "$C2OC/sprint-04/tasks.md" T-04.03 bloqueada "" "src/ui/cabecalho-topo.tsx"
+  c2_fecha "$C2OC/sprint-04/tasks.md"
+  c2_hook "$1" "tests/ui/cabecalho-topo.test.tsx" teste@eu; [ $? -eq 0 ]
+}
+l_modo_aviso() {
+  l_fixture
+  mkdir -p "$C2/.expx"; echo '{"hooks":{"escopo-da-task":{"modo":"aviso"}}}' > "$C2/.expx/hooks.json"
+  c2_hook "$1" "tests/ui/cabecalho-topo.test.tsx" teste@eu; [ $? -eq 2 ]
+}
+l_modo_desligado() {
+  l_fixture
+  mkdir -p "$C2/.expx"; echo '{"hooks":{"escopo-da-task":{"modo":"desligado"}}}' > "$C2/.expx/hooks.json"
+  c2_hook "$1" "tests/ui/cabecalho-topo.test.tsx" teste@eu; [ $? -eq 0 ]
+}
+
+for par in l_a:la-arquivo-so-da-corrente-permitido l_b:lb-arquivo-corrente-e-irma-permitido \
+  l_c:lc-arquivo-so-da-irma-bloqueado l_d:ld-arquivo-de-duas-irmas-bloqueado \
+  l_e:le-arquivo-de-nenhuma-permitido-sem-defeito_de_plano l_f:lf-titulo-mudou-mesmo-resultado \
+  l_g:lg-ordem-mudou-mesmo-resultado l_h:lh-sessao-acha-a-propria-task-nao-a-primeira \
+  l_i0:li0-zero-correspondencias-fail-closed l_i1:li1-duas-correspondencias-fail-closed \
+  l_j:lj-task-bloqueada-nao-repete-bloqueio l_modo_aviso:lmodo-irma-bloqueia-mesmo-em-aviso \
+  l_modo_desligado:lmodo-desligado-desativa-tudo; do
+  "${par%%:*}" "$H/sprintx/escopo-da-task.sh"; afirma "${par#*:}" $? "${par%%:*}"
+done
+
+# L-K. Ciclo real: irma -> bloqueio -> B-01 -> replanejamento -> plano ganha o
+# arquivo -> aprovacao -> T-03.01 continua congelada -> edicao permitida.
+grava_evento_menu() { # grava_evento_menu <dir> <evento> <task> <sessao>
+  local arq="$1/docs/eventos/menu.jsonl"; mkdir -p "$(dirname "$arq")"
+  python3 -c "
+import sys, datetime
+evento, task, sessao = sys.argv[1:4]
+extras = ',\"sessao\":\"%s\",\"harness\":\"%s\"' % (sessao, sessao.split('@')[0])
+linha = ('{\"ts\":\"%s\",\"expx_eventos\":1,\"trabalho_id\":\"menu\",'
+         '\"ferramenta\":\"sprintx\",\"origem\":\"skill\",\"evento\":\"%s\",\"fase\":\"f6\",'
+         '\"task\":\"%s\",\"agente\":\"principal\",\"resultado\":\"ok\",\"detalhe\":null,'
+         '\"arquivos\":[]%s}') % (datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'), evento, task, extras)
+open(sys.argv[4], 'a').write(linha + '\n')
+" "$2" "$3" "$4" "$arq"
+}
+roda_hook_menu() { # roda_hook_menu <dir> <hook> <arquivo-relativo> <sessao>
+  printf '{"cwd":"%s","tool_input":{"file_path":"%s"}}' "$1" "$1/$3" | (cd "$1" && EXPX_SESSAO="$4" bash "$2") 2>&1
+}
+l_k() { # ciclo real completo — hook = $1
+  local d f c0 saida1 rc1 out saida2 rc2 c1
+  d="$K/c2ciclo.$$.$RANDOM"; mkdir -p "$d"
+  k_fx "$d" 0 3 buildx 1 || return 1
+  f="$(kf "$d")"; c0="$(cat "$f/sprint-03/tasks.md")"
+  k_plano "$d" c em_andamento
+  grava_evento_menu "$d" task_iniciada T-04.03 "teste@eu"
+  saida1="$(roda_hook_menu "$d" "$1" tests/ui/cabecalho-topo.test.tsx teste@eu)"; rc1=$?
+  [ "$rc1" -eq 2 ] && printf '%s' "$saida1" | grep -qF "arquivo_de_task_irma" || return 1
+  kbl "$PL" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo_de_task_irma: tests/ui/cabecalho-topo.test.tsx pertence a T-03.01' 'ampliar ownership de T-04.03' >/dev/null || return 1
+  k_plano "$d" c bloqueada
+  out="$(kpl "$PL" "$d" replanejar-execucao menu)" || return 1
+  [ "$(kv "$out" replanejamento)" = iniciado ] || return 1
+  k_plano "$d" c bloqueada 'src/ui/cabecalho-topo.tsx, tests/ui/cabecalho-topo.test.tsx'
+  kpl "$PL" "$d" avanca menu f3 >/dev/null && kpl "$PL" "$d" avanca menu f4 >/dev/null || return 1
+  k_aud "$d" 4 SIM
+  out="$(kpl "$PL" "$d" avanca menu f5)" || return 1
+  [ "$(kv "$out" estado)" = aprovado ] && [ "$(kst "$d" T-04.03)" = pendente ] || return 1
+  k_plano "$d" c em_andamento 'src/ui/cabecalho-topo.tsx, tests/ui/cabecalho-topo.test.tsx'
+  grava_evento_menu "$d" task_iniciada T-04.03 "teste@eu"
+  saida2="$(roda_hook_menu "$d" "$1" tests/ui/cabecalho-topo.test.tsx teste@eu)"; rc2=$?
+  [ "$rc2" -eq 0 ] || return 1
+  c1="$(cat "$f/sprint-03/tasks.md")"
+  [ "$c0" = "$c1" ]
+}
+l_k "$H/sprintx/escopo-da-task.sh"; afirma "lk-ciclo-real-irma-bloqueio-replanejamento-permitido" $? "irma -> B-01 -> replanejar-execucao -> aprovado -> permitido, T-03.01 congelada"
+
+# Mutantes minimos do C2. Copia do hook preserva sprintx/+comum/ irmaos (o
+# hook faz `source ../comum/rastro.sh`); cada mutante tem de morrer pelo caso
+# designado, e a copia sem mutacao tem de sobreviver a todos.
+LM="$K/c2mut"; mkdir -p "$LM/sprintx" "$LM/comum"
+cp "$H/comum/rastro.sh" "$LM/comum/rastro.sh"
+cp "$H/sprintx/escopo-da-task.sh" "$LM/sprintx/controle.sh"
+l_mutante() { # l_mutante <nome> <rc-geracao> <arquivo-mutante> <caso que TEM de matar>...
+  local nome="$1" rc="$2" s="$3" c vivos=""; shift 3
+  if [ "$rc" -eq 0 ]; then for c in "$@"; do "$c" "$s" && vivos="$vivos$c "; done; fi
+  [ "$rc" -eq 0 ] && [ -z "$vivos" ]; afirma "$nome" $? "morto por: $* ${vivos:+— SOBREVIVEU a: $vivos}(rc geracao=$rc)"
+}
+vivosl=""
+for c in l_a l_b l_c l_d l_e l_f l_g l_h l_i0 l_i1 l_j l_modo_aviso l_modo_desligado; do
+  "$c" "$LM/sprintx/controle.sh" || vivosl="$vivosl$c "
+done
+l_k "$LM/sprintx/controle.sh" || vivosl="${vivosl}l_k "
+[ -z "$vivosl" ]; afirma "lm-controle-copia-intacta-sobrevive" $? "${vivosl:-nenhum caso designado reprova a copia sem mutacao}"
+
+muta_lit "$H/sprintx/escopo-da-task.sh" "$LM/sprintx/m1.sh" \
+  'if [ -n "$TASKS_IRMAS" ]; then' 'if [ -n "$TASKS_IRMAS" ] && false; then'
+l_mutante "lm-mutante-1-uniao-vence-escopo-unitario" $? "$LM/sprintx/m1.sh" l_c l_d
+
+muta_lit "$H/sprintx/escopo-da-task.sh" "$LM/sprintx/m2.sh" \
+  'rastro_bloqueia "$MSG_IRMA"' 'rastro_aviso_ao_modelo PreToolUse "$MSG_IRMA"'
+l_mutante "lm-mutante-2-arquivo-de-irma-vira-so-aviso" $? "$LM/sprintx/m2.sh" l_c
+
+muta_lit "$H/sprintx/escopo-da-task.sh" "$LM/sprintx/m3.sh" \
+  'rastro_aviso_ao_modelo PreToolUse "$MSG"' 'rastro_bloqueia "$MSG"'
+l_mutante "lm-mutante-3-arquivo-de-nenhuma-vira-defeito_de_plano" $? "$LM/sprintx/m3.sh" l_e
+
+muta_lit "$H/sprintx/escopo-da-task.sh" "$LM/sprintx/m4.sh" \
+  'if printf '"'"'%s\n'"'"' "$CURRENT_DECLARADOS" | grep -qxF "$REL"; then' \
+  'if printf '"'"'%s\n'"'"' "$CURRENT_DECLARADOS" | grep -qxF "$REL" && false; then'
+l_mutante "lm-mutante-4-atual-mais-irma-bloqueado-incorretamente" $? "$LM/sprintx/m4.sh" l_b
+l_mutante "lm-mutante-7-depois-do-replanejamento-ainda-bloqueia" $? "$LM/sprintx/m4.sh" l_k
+
+muta_lit "$H/sprintx/escopo-da-task.sh" "$LM/sprintx/m5a.sh" \
+  'if [ "$N_MINHAS" -ne 1 ]; then' 'if false; then' \
+  && muta_lit "$LM/sprintx/m5a.sh" "$LM/sprintx/m5.sh" \
+    'CURRENT_ID="$(printf '"'"'%s'"'"' "$MINHAS" | head -1)"' \
+    'CURRENT_ID="$(printf '"'"'%s\n'"'"' "$IDS_UNICOS" | head -1)"'
+l_mutante "lm-mutante-5-seleciona-a-primeira-nao-a-da-sessao" $? "$LM/sprintx/m5.sh" l_h
+
+muta_lit "$H/sprintx/escopo-da-task.sh" "$LM/sprintx/m6.sh" \
+  "grep -q 'status: em_andamento' \"\$f\" 2>/dev/null && ANY_EM_ANDAMENTO=1" \
+  "grep -qE 'status: (em_andamento|bloqueada)' \"\$f\" 2>/dev/null && ANY_EM_ANDAMENTO=1"
+l_mutante "lm-mutante-6-depois-do-bloqueio-continua-abrindo-task" $? "$LM/sprintx/m6.sh" l_j
+
+muta_lit "$H/sprintx/escopo-da-task.sh" "$LM/sprintx/m8.sh" \
+  '[ -n "$ANY_EM_ANDAMENTO" ] || exit 0' '[ -n "$ANY_EM_ANDAMENTO" ] || true'
+l_mutante "lm-mutante-8-cria-b-nn-duplicado-numa-repeticao" $? "$LM/sprintx/m8.sh" l_j
+
+# Decisao registrada e hook documentado como excecao normativa mesmo em aviso.
+DSF2="$SK/DECISOES-DA-SKILL.md"
+[ "$(grep -c '^| DS-149 |' "$DSF2")" -eq 1 ] && [ "$(grep -c '^| DS-150 |' "$DSF2")" -eq 1 ] \
+  && tem "$DSF2" 'arquivo_de_task_irma' && tem "$DSF2" 'rastro_sessao_dona'
+afirma "l24-ds149-ds150-registradas" $? "DECISOES-DA-SKILL.md"
+tem "$SKILLMD" 'arquivo_de_task_irma' && tem "$SKILLMD" 'bloqueia sempre, mesmo em modo'
+afirma "l25-skillmd-documenta-excecao" $? "tabela de hooks"
+
 rm -rf "$K"
 
 echo

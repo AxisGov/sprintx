@@ -4,13 +4,22 @@
 # "Nao toque no que nao esta na task" — a regra que se dissolve na task 14 de
 # uma execucao autonoma. Aqui ela vira mecanica.
 #
-# Le o tasks.md da task em andamento e compara o arquivo sendo editado com o
-# campo `arquivos`. Fora da lista -> aviso (e, depois de promovido, bloqueio).
+# Le os tasks.md da feature e compara o arquivo sendo editado com o campo
+# `arquivos` da task em andamento DESTA sessao. Fora da lista -> aviso (e,
+# depois de promovido, bloqueio).
+#
+# Excecao normativa: arquivo_de_task_irma. Se o arquivo nao esta na task
+# corrente mas esta em outra task da mesma feature, o dono e inequivoco —
+# bloqueia sempre, mesmo com o hook em modo aviso. Ver DS-149 em
+# DECISOES-DA-SKILL.md.
 #
 # Modo: nasce em `aviso`. Promova em .expx/hooks.json so depois de semanas
-# sem falso positivo.
+# sem falso positivo — a excecao acima nao depende dessa promocao.
 #
-# Contrato: falha aberta. Qualquer duvida sobre o estado do plano => permite.
+# Contrato: falha aberta, com uma excecao. Duvida sobre o ESTADO DO PLANO
+# (arquivo nao declarado em lugar nenhum) => permite, como sempre. Duvida
+# sobre A SESSAO DONA (rastro nao resolve esta sessao a uma unica task
+# em_andamento) => bloqueia por contrato; nunca escolhe a primeira.
 set -uo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,105 +46,188 @@ case "$REL" in
   docs/sprintx/*|docs/eventos/*|docs/entregas/*|.expx/*) exit 0 ;;
 esac
 
-# ------------------------------------------------ achar a task em andamento
-# Sem estado proprio: a task em andamento e a que tem status em_andamento no
-# frontmatter de algum sprint-NN/tasks.md.
-# Os dois layouts sao varridos: o novo (docs/sprintx/features/<slug>/) e o
-# antigo (docs/<slug>/), que a SKILL.md declara continuar suportando. Um glob
-# so pelo layout novo faz o hook nao disparar em projeto antigo — silencio que
-# parece "tudo em escopo".
+# --------------------------------------------------------- varre os tasks.md
+# Sem estado proprio: le todo tasks.md da arvore. Os dois layouts sao
+# varridos: o novo (docs/sprintx/features/<slug>/) e o antigo (docs/<slug>/),
+# que a SKILL.md declara continuar suportando.
 # `find` em vez de glob: no zsh um padrao sem match aborta o script (nomatch),
 # e o hook morreria em projeto que ainda nao tem plano.
-TASKS_MD=""
-while IFS= read -r f; do
-  [ -f "$f" ] || continue
-  if grep -q 'status: em_andamento' "$f" 2>/dev/null; then TASKS_MD="$f"; break; fi
-done <<EOF
-$(find "$RAIZ/docs" -maxdepth 5 -name tasks.md -type f 2>/dev/null)
-EOF
-
-# Nenhuma task aberta => a skill nao esta em execucao. Nao e papel deste hook
-# opinar sobre edicao fora do metodo.
+TASKS_MD="$(find "$RAIZ/docs" -maxdepth 5 -name tasks.md -type f 2>/dev/null)"
 [ -n "$TASKS_MD" ] || exit 0
 
-# Extrai o bloco da task em andamento e os arquivos que ela declarou.
-# Faixa: da linha "- id:" que precede o em_andamento ate o proximo "- id:".
-LIDO="$(awk '
-  /^  - id:/ { bloco=""; dentro=1 }
-  dentro     { bloco = bloco $0 "\n" }
-  /^  - id:/ { id=$3 }
-  /status: em_andamento/ { if (dentro) { print id; printf "%s", bloco; achou=1 } }
-  achou && /^  - id:/ && !primeiro { primeiro=1 }
-' "$TASKS_MD" 2>/dev/null)"
+# Nenhuma task aberta em lugar nenhum da feature => a skill nao esta em
+# execucao (F6). Fora de execucao, o hook preserva o comportamento antigo:
+# nao opina.
+ANY_EM_ANDAMENTO=""
+while IFS= read -r f; do
+  [ -f "$f" ] || continue
+  grep -q 'status: em_andamento' "$f" 2>/dev/null && ANY_EM_ANDAMENTO=1
+done <<EOF
+$TASKS_MD
+EOF
+[ -n "$ANY_EM_ANDAMENTO" ] || exit 0
 
-TASK_ID="$(printf '%s' "$LIDO" | head -1 | tr -d ' ')"
-[ -n "$TASK_ID" ] || exit 0
+MODO="$(rastro_modo "$RAIZ" escopo-da-task metodo)"
+# Desligado nao roda e nao registra: quem desligou nao quer nem o aviso —
+# nem a excecao de arquivo_de_task_irma, nem o fail-closed de sessao ambigua.
+[ "$MODO" = "desligado" ] && exit 0
 
-# Coleta os caminhos declarados em `arquivos:` da task aberta.
-#
-# O campo tem DUAS formas em uso: o mapa {cria, altera}, que as skills gravam,
-# e a lista plana `arquivos: [a.ts, b.ts]`, que e a forma do contrato. Ler so
-# o mapa faz DECLARADOS ficar vazio diante da lista plana, e o hook sai
-# permitindo tudo — falha ABERTA num hook cujo proposito e barrar. As duas
-# formas sao lidas.
-DECLARADOS="$(awk -v alvo="$TASK_ID" '
-  # Emite todo caminho dentro de colchetes na linha. Percorre grupo a grupo:
-  # `{cria: [a], altera: [b]}` tem DOIS grupos, e um gsub guloso de `.*\[`
-  # descartaria o primeiro em silencio.
-  function emitir(linha,   ini, fim, corpo, p, n, i) {
-    while (match(linha, /\[[^]]*\]/)) {
-      ini = RSTART; fim = RLENGTH
-      corpo = substr(linha, ini + 1, fim - 2)
-      n = split(corpo, p, ",")
-      for (i = 1; i <= n; i++) {
-        gsub(/^[ \t]+|[ \t]+$/, "", p[i])
-        gsub(/^["'\'']|["'\'']$/, "", p[i])
-        if (p[i] != "") print p[i]
+# Pares <task_id> TAB <tasks_md-que-a-declara>, um por linha — junta as tasks
+# de TODOS os tasks.md encontrados, para montar CURRENT/OTHERS mais abaixo.
+PARES=""
+while IFS= read -r f; do
+  [ -f "$f" ] || continue
+  while IFS= read -r id; do
+    [ -n "$id" ] || continue
+    PARES="$PARES$id	$f
+"
+  done <<EOF2
+$(awk '/^  - id:/ { id=$3; sub(/^[ \t]+/, "", id); if (id != "") print id }' "$f" 2>/dev/null)
+EOF2
+done <<EOF
+$TASKS_MD
+EOF
+
+# --------------------------------------------------- dono da task DESTA sessao
+# Fonte mecanica: o rastro (docs/eventos/<trabalho_id>.jsonl) — a mesma que
+# task-reivindicada.sh usa para achar quem tem uma task aberta agora
+# (rastro_sessao_dona em comum/rastro.sh). "Existe uma task em_andamento" nao
+# decide o dono sozinho: pode haver mais de uma task em andamento na feature
+# (paralelismo). A tarefa desta sessao precisa ser inequivoca.
+TRABALHO="$(rastro_trabalho_id "$RAIZ")"
+RASTRO_ARQ="$RAIZ/docs/eventos/$TRABALHO.jsonl"
+MINHA_SESSAO="$(rastro_sessao)"
+
+IDS_UNICOS="$(printf '%s\n' "$PARES" | awk -F'\t' 'NF{print $1}' | sort -u)"
+
+MINHAS=""
+N_MINHAS=0
+while IFS= read -r id; do
+  [ -n "$id" ] || continue
+  dona="$(rastro_sessao_dona "$RASTRO_ARQ" "$id")"
+  if [ -n "$dona" ] && [ "$dona" = "$MINHA_SESSAO" ]; then
+    MINHAS="$MINHAS$id
+"
+    N_MINHAS=$((N_MINHAS + 1))
+  fi
+done <<EOF
+$IDS_UNICOS
+EOF
+
+# A sessao precisa resolver para EXATAMENTE uma task aberta. Zero (o rastro
+# nao reconhece esta sessao como dona de nada) ou duas-ou-mais (estado
+# inconsistente) sao ambiguos — aqui a falha NAO e aberta: para por
+# contrato, nunca escolhe a primeira task em_andamento que encontrar.
+if [ "$N_MINHAS" -ne 1 ]; then
+  MSG_AMB="sprintx/escopo-da-task: sessao_ambigua — esta sessao nao foi associada de forma inequivoca a uma task em andamento pelo rastro ($N_MINHAS correspondencia(s) para a sessao $MINHA_SESSAO em $RASTRO_ARQ). Por contrato a edicao fica bloqueada; a maquina nunca escolhe a primeira task em_andamento que encontra. Reivindique a task (evento task_iniciada no rastro) antes de editar."
+  EXTRAS_AMB="\"condicao\":\"sessao_ambigua\",\"tasks_candidatas\":$N_MINHAS"
+  rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "sessao_ambigua" "[]" "$EXTRAS_AMB"
+  rastro_bloqueia "$MSG_AMB"
+fi
+
+CURRENT_ID="$(printf '%s' "$MINHAS" | head -1)"
+CURRENT_TASKS_MD="$(printf '%s\n' "$PARES" | awk -F'\t' -v id="$CURRENT_ID" '$1 == id { print $2; exit }')"
+[ -n "$CURRENT_TASKS_MD" ] || exit 0
+
+# -------------------------------------------------------- arquivos declarados
+# Extrai `arquivos:` (mapa {cria, altera} ou lista plana — as duas formas em
+# uso) de UMA task especifica em UM tasks.md.
+_arquivos_da_task() { # _arquivos_da_task <task_id> <tasks_md>
+  awk -v alvo="$1" '
+    # Emite todo caminho dentro de colchetes na linha. Percorre grupo a grupo:
+    # `{cria: [a], altera: [b]}` tem DOIS grupos, e um gsub guloso de `.*\[`
+    # descartaria o primeiro em silencio.
+    function emitir(linha,   ini, fim, corpo, p, n, i) {
+      while (match(linha, /\[[^]]*\]/)) {
+        ini = RSTART; fim = RLENGTH
+        corpo = substr(linha, ini + 1, fim - 2)
+        n = split(corpo, p, ",")
+        for (i = 1; i <= n; i++) {
+          gsub(/^[ \t]+|[ \t]+$/, "", p[i])
+          gsub(/^["'\'']|["'\'']$/, "", p[i])
+          if (p[i] != "") print p[i]
+        }
+        linha = substr(linha, ini + fim)
       }
-      linha = substr(linha, ini + fim)
     }
-  }
-  $0 ~ /^  - id:/ { atual = $3; sub(/^[ \t]+/, "", atual); emlista = 0 }
-  atual != alvo { next }
-  # mapa: arquivos: {cria: [...], altera: [...]}, em uma linha ou em duas
-  /cria:|altera:/ { emitir($0); next }
-  # lista plana na mesma linha: arquivos: [a.ts, b.ts]
-  /^[ \t]*arquivos:[ \t]*\[/ { emitir($0); emlista = 0; next }
-  # lista plana em bloco: arquivos: seguido de "- caminho"
-  /^[ \t]*arquivos:[ \t]*$/ { emlista = 1; next }
-  emlista && /^[ \t]*-[ \t]+/ {
-    linha = $0
-    sub(/^[ \t]*-[ \t]+/, "", linha)
-    gsub(/^[ \t]+|[ \t]+$/, "", linha)
-    gsub(/^["'\'']|["'\'']$/, "", linha)
-    if (linha != "") print linha
-    next
-  }
-  emlista { emlista = 0 }
-' "$TASKS_MD" 2>/dev/null)"
+    $0 ~ /^  - id:/ { atual = $3; sub(/^[ \t]+/, "", atual); emlista = 0 }
+    atual != alvo { next }
+    # mapa: arquivos: {cria: [...], altera: [...]}, em uma linha ou em duas
+    /cria:|altera:/ { emitir($0); next }
+    # lista plana na mesma linha: arquivos: [a.ts, b.ts]
+    /^[ \t]*arquivos:[ \t]*\[/ { emitir($0); emlista = 0; next }
+    # lista plana em bloco: arquivos: seguido de "- caminho"
+    /^[ \t]*arquivos:[ \t]*$/ { emlista = 1; next }
+    emlista && /^[ \t]*-[ \t]+/ {
+      linha = $0
+      sub(/^[ \t]*-[ \t]+/, "", linha)
+      gsub(/^[ \t]+|[ \t]+$/, "", linha)
+      gsub(/^["'\'']|["'\'']$/, "", linha)
+      if (linha != "") print linha
+      next
+    }
+    emlista { emlista = 0 }
+  ' "$2" 2>/dev/null
+}
 
-# Task sem `arquivos` legivel => nao da para julgar. Permite.
-[ -n "$DECLARADOS" ] || exit 0
+CURRENT_DECLARADOS="$(_arquivos_da_task "$CURRENT_ID" "$CURRENT_TASKS_MD")"
 
-# O arquivo esta na lista?
-if printf '%s\n' "$DECLARADOS" | grep -qxF "$REL"; then
+# Task corrente sem `arquivos` legivel => nao da pra julgar quem e dono de
+# que. Permite (falha aberta), como sempre.
+[ -n "$CURRENT_DECLARADOS" ] || exit 0
+
+# CURRENT vence: mesmo que o arquivo tambem esteja numa task irma (regra de
+# conjuntos — interseccao com a task corrente sempre permite).
+if printf '%s\n' "$CURRENT_DECLARADOS" | grep -qxF "$REL"; then
   exit 0
 fi
 
+# ------------------------------------------------------- arquivo_de_task_irma?
+# Nao esta em CURRENT. Esta em alguma OUTRA task da feature (OTHERS)? Se
+# estiver, e inequivoco: pertence so a task irma. Se nao estiver em lugar
+# nenhum (nem CURRENT, nem OTHERS), cai no caso antigo mais abaixo.
+TASKS_IRMAS=""
+while IFS= read -r par; do
+  [ -n "$par" ] || continue
+  id="${par%%	*}"
+  f="${par#*	}"
+  [ "$id" != "$CURRENT_ID" ] || continue
+  decl="$(_arquivos_da_task "$id" "$f")"
+  if printf '%s\n' "$decl" | grep -qxF "$REL"; then
+    TASKS_IRMAS="$TASKS_IRMAS$id
+"
+  fi
+done <<EOF
+$PARES
+EOF
+TASKS_IRMAS="$(printf '%s\n' "$TASKS_IRMAS" | awk 'NF' | sort -u)"
+
+if [ -n "$TASKS_IRMAS" ]; then
+  LISTA_IRMAS="$(printf '%s' "$TASKS_IRMAS" | tr '\n' ' ')"
+  MSG_IRMA="sprintx/escopo-da-task: arquivo_de_task_irma — o arquivo $REL esta declarado so em task(s) irma(s) ($LISTA_IRMAS), nao na task corrente $CURRENT_ID. Bloqueado por contrato mesmo em modo aviso: registre um bloqueio classe defeito_de_plano (scripts/bloqueios.sh registrar), marque $CURRENT_ID como bloqueada e rode scripts/planejamento.sh replanejar-execucao antes de editar este arquivo."
+
+  IRMAS_JSON="$(printf '%s\n' "$TASKS_IRMAS" | awk 'NF{printf "%s\"%s\"", (NR>1?",":""), $0}')"
+  EXTRAS="\"condicao\":\"arquivo_de_task_irma\",\"task_atual\":\"$(rastro_json_escape "$CURRENT_ID")\",\"tasks_irmas\":[$IRMAS_JSON]"
+
+  RASTRO_TASK="\"$CURRENT_ID\""
+  rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "arquivo_de_task_irma" "[\"$(rastro_json_escape "$REL")\"]" "$EXTRAS"
+  rastro_bloqueia "$MSG_IRMA"
+fi
+
 # --------------------------------------------------------------- violacao
-LISTA="$(printf '%s' "$DECLARADOS" | tr '\n' ' ')"
-MSG="sprintx/escopo-da-task: a task $TASK_ID esta em andamento e declarou estes arquivos: $LISTA. O arquivo $REL nao esta na lista. O caminho certo e ampliar a task no plano (tasks.md), nao editar fora dela."
+# Caso geral de sempre: arquivo fora do escopo da task corrente e fora de
+# qualquer outra task da feature. Preserva o comportamento antigo — aviso
+# (ou bloqueio, se o hook ja foi promovido). NUNCA vira defeito_de_plano: e o
+# caso ambiguo (pode ser desvio legitimo), nao o inequivoco.
+LISTA="$(printf '%s' "$CURRENT_DECLARADOS" | tr '\n' ' ')"
+MSG="sprintx/escopo-da-task: a task $CURRENT_ID esta em andamento e declarou estes arquivos: $LISTA. O arquivo $REL nao esta na lista. O caminho certo e ampliar a task no plano (tasks.md), nao editar fora dela."
 
-RASTRO_TASK="\"$TASK_ID\""
-MODO="$(rastro_modo "$RAIZ" escopo-da-task metodo)"
-
-# Desligado nao roda e nao registra: quem desligou nao quer nem o aviso.
-[ "$MODO" = "desligado" ] && exit 0
+RASTRO_TASK="\"$CURRENT_ID\""
 
 if [ "$MODO" = "bloqueio" ]; then
-  rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "fora do escopo da task $TASK_ID" "[\"$(rastro_json_escape "$REL")\"]"
+  rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "fora do escopo da task $CURRENT_ID" "[\"$(rastro_json_escape "$REL")\"]"
   rastro_bloqueia "$MSG"
 fi
 
-rastro_grava "$RAIZ" regra_violada hook aviso "fora do escopo da task $TASK_ID" "[\"$(rastro_json_escape "$REL")\"]"
+rastro_grava "$RAIZ" regra_violada hook aviso "fora do escopo da task $CURRENT_ID" "[\"$(rastro_json_escape "$REL")\"]"
 rastro_aviso_ao_modelo PreToolUse "$MSG"

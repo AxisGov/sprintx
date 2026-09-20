@@ -232,3 +232,48 @@ rastro_bloqueia() {
   printf '%s\n' "$1" >&2
   exit 2
 }
+
+# ------------------------------------------------------------- ownership
+
+# rastro_sessao_dona <rastro_arq> <task_id>
+#
+# Sessao que tem a task ABERTA agora: le o rastro de tras para frente e olha
+# o evento mais recente daquele task_id entre task_iniciada/task_concluida/
+# task_bloqueada. So devolve algo se o mais recente for task_iniciada — task
+# fechada (concluida ou bloqueada) nao tem dona aberta. Mesma logica de
+# _sessao_dona() em task-reivindicada.sh, compartilhada aqui porque
+# escopo-da-task.sh precisa da mesma resolucao (regra 6: sem estado proprio,
+# tudo sai do rastro que ja existe).
+#
+# Falha aberta: sem rastro ou sem jq/awk utilizavel, devolve vazio.
+rastro_sessao_dona() {
+  local arq="$1" tid="$2"
+  [ -f "$arq" ] || return 0
+  if command -v jq >/dev/null 2>&1; then
+    jq -rc --arg t "$tid" '
+      select(.task == $t) | select(.evento == "task_iniciada" or .evento == "task_concluida" or .evento == "task_bloqueada")
+    ' "$arq" 2>/dev/null | tail -1 | jq -r '
+      if .evento == "task_iniciada" then (.sessao // "") else "" end
+    ' 2>/dev/null
+    return 0
+  fi
+  awk -v tid="$tid" '
+    index($0, "\"task\":\"" tid "\"") == 0 { next }
+    { linhas[NR] = $0 }
+    END {
+      for (i = NR; i >= 1; i--) {
+        l = linhas[i]
+        if (index(l, "\"task\":\"" tid "\"") == 0) continue
+        if (index(l, "\"evento\":\"task_concluida\"") || index(l, "\"evento\":\"task_bloqueada\"")) { exit }
+        if (index(l, "\"evento\":\"task_iniciada\"")) {
+          match(l, /"sessao":"[^"]*"/)
+          if (RSTART > 0) {
+            s = substr(l, RSTART + 10, RLENGTH - 11)
+            print s
+          }
+          exit
+        }
+      }
+    }
+  ' "$arq" 2>/dev/null
+}

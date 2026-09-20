@@ -195,7 +195,7 @@ O modo de cada hook vive em `.expx/hooks.json`, e é lá que se promove.
 
 | Hook | Evento | Modo inicial | O que faz |
 |---|---|---|---|
-| `escopo-da-task` | `PreToolUse` (escrita) | `aviso` | Compara o arquivo editado com o campo `arquivos` da task em andamento. Fora da lista, avisa |
+| `escopo-da-task` | `PreToolUse` (escrita) | `aviso` | Compara o arquivo editado com o campo `arquivos` da task da SESSAO corrente (pelo rastro, nunca "a primeira `em_andamento`"). Fora da task corrente mas dentro de outra task da mesma feature — `arquivo_de_task_irma` —, bloqueia sempre, mesmo em modo `aviso` (DS-149); fora de toda task, so avisa |
 | `task-so-fecha-verde` | `PreToolUse` (`tasks.md`) | `aviso` | Barra `status: concluida` quando `suite` não é `verde` nem `parcial`, ou falta `teste_integracao`/`teste_funcional` |
 | `sem-placeholder-no-plano` | `PostToolUse` (plano) | `aviso` | Acha marcador `{{...}}` de template não substituído |
 | `tdd-teste-antes` | `PostToolUse` (escrita) | `aviso` | Avisa quando a implementação nasce antes do teste. **Inativo sem `CONVENCOES.md`** — não chuta onde o teste deveria estar |
