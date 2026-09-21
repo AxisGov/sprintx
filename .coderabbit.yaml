@@ -1,8 +1,9 @@
 # CodeRabbit — configuração de review (sprintx)
 # Schema: https://docs.coderabbit.ai/reference/configuration
 #
-# Mesmo modelo dos outros repositórios do AxisGov: a review da nuvem roda sozinha
-# só uma vez, quando o PR é aberto; depois disso, só por disparo manual.
+# Revisão automática DESLIGADA (ver auto_review, abaixo, com a data e o número que
+# justificam). Neste repositório a review do CodeRabbit é sempre pedida à mão,
+# comentando `@coderabbitai review` no PR.
 language: 'pt-BR'
 early_access: false
 
@@ -21,10 +22,25 @@ reviews:
   # Atenção: o CodeRabbit procura o trecho em QUALQUER parte do título, não só no
   # começo (não existe filtro por prefixo). Use esses trechos só como prefixo de
   # PR de documentação. O disparo manual continua valendo em qualquer PR.
-  # Cota compartilhada do AxisGov: 1 revisão automática por hora para a organização
-  # inteira. Se dois PRs abrirem na mesma hora, o segundo pode precisar do manual.
+  # DESLIGADO em 2026-09-20, decisão do Flávio, por medição — não por preferência.
+  # A cota do CodeRabbit é de 1 revisão por hora para a ORGANIZAÇÃO AxisGov inteira
+  # (não por repositório, não por assento), e 14 repositórios disputam essa fila.
+  # Painel de capacidade, últimos 7 dias: 400 eventos de revisão, 318 BLOQUEADOS
+  # por limite, 67 entregues, 0 continuados. Bloqueio é revisão PERDIDA: não fica
+  # na fila e não é cobrada depois. Pior ainda, com auto_incremental_review: false
+  # a revisão automática caía na ABERTURA do PR, quando ele está mais vazio, e cada
+  # push seguinte só consumia o limite sem revisar nada.
+  # A partir daqui a revisão é PEDIDA À MÃO: comente `@coderabbitai review` no PR,
+  # e só quando o PR valer a cota (fronteira, dois donos, irreversível, ou o CodeAnt
+  # não olhou). Consequência: check verde do CodeRabbit passa a significar "nada foi
+  # pedido", não "foi lido e nada achou".
+  # Antes de religar isto, confira a mesma medição — se a cota continuar em 1/hora
+  # para a organização, religar só devolve o bloqueio.
+  #
+  # As chaves abaixo só têm efeito com enabled: true. Ficam guardadas de propósito,
+  # como registro da configuração que valia, para quem um dia religar.
   auto_review:
-    enabled: true
+    enabled: false
     auto_incremental_review: false
     drafts: false
     ignore_title_keywords:
