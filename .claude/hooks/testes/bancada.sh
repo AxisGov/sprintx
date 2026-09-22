@@ -254,7 +254,8 @@ CAMPOS=$(sed -n '/### Contrato da Task/,/### Contrato da Fase/p' "$SKILLMD" | gr
 
 # 8. Regra 21 e a posse da branch/worktree seguem com a F1.
 tem "$SKILLMD" '21. Uma feature aberta por árvore de trabalho. Com git, ela nasce em worktree próprio na F1'; afirma "regra-21-intacta" $? "regra 21 literal"
-REGRAS=$(sed -n '/^## Regras invioláveis$/,/^## Sessões paralelas$/p' "$SKILLMD" | grep -cE '^[0-9]+\. ')
+conta_regras() { sed -n '/^## Regras invioláveis$/,/^## Sessões paralelas$/p' "$1" | grep -cE '^[0-9]+\. '; }
+REGRAS=$(conta_regras "$SKILLMD")
 [ "$REGRAS" -eq 21 ]; afirma "21-regras-inviolaveis" $? "$REGRAS regras (esperado 21)"
 
 # 9. A mergex nao virou fase da maquina de estados.
@@ -2338,7 +2339,7 @@ afirma "l25-skillmd-documenta-excecao" $? "tabela de hooks"
 
 rm -rf "$K"
 
-echo "== M. portabilidade Git Bash: scripts LF e caminho devolvido pelo Git (P0.2-C7-B S1) =="
+echo "== M. portabilidade Git Bash: scripts e contratos markdown LF, caminho devolvido pelo Git (P0.2-C7-B S1) =="
 # Dois modos. Simulado: `git` e `cygpath` falsos no PATH fazem o Git devolver `Z:/...` e o
 # cygpath traduzir, em qualquer SO — e o que mata os mutantes tanto em Linux quanto no Git
 # Bash. Real: sem falsos; no Git Bash o Git for Windows devolve `C:/...` de verdade.
@@ -2451,44 +2452,66 @@ afirma "m-cygpath-so-no-helper" $? "nenhuma copia da regra fora de caminho-git.s
 mgit() { GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="$MS/gitconfig-vazio" git "$@"; }
 : > "$MS/gitconfig-vazio"
 MSRC_SH="$(git -C "$RAIZ_SRC" ls-files -co --exclude-standard -- '*.sh')"
-m_fixture() { # m_fixture <gitattributes|-> <destino> — origem com os .sh do trabalho (blobs LF), clonada com autocrlf=true
+# Os .md sao contrato lido mecanicamente (sed/grep ancorados em $): CRLF quebra a leitura no Linux.
+MSRC_MD="$(git -C "$RAIZ_SRC" ls-files -co --exclude-standard -- '*.md')"
+MSRC_TXT="$MSRC_SH
+$MSRC_MD"
+m_fixture() { # m_fixture <gitattributes|-> <destino> — origem com os .sh e .md do trabalho (blobs LF), clonada com autocrlf=true
   local o="$2.origem" f
   rm -rf "$o" "$2"; mkdir -p "$o"
   mgit init -q -b main "$o" || return 1
   [ "$1" = - ] || cp "$1" "$o/.gitattributes"
-  for f in $MSRC_SH; do mkdir -p "$o/$(dirname "$f")"; tr -d '\r' < "$RAIZ_SRC/$f" > "$o/$f"; done
+  for f in $MSRC_TXT; do mkdir -p "$o/$(dirname "$f")"; tr -d '\r' < "$RAIZ_SRC/$f" > "$o/$f"; done
   mgit -C "$o" -c core.autocrlf=false add -A \
     && mgit -C "$o" -c core.autocrlf=false -c user.email=t@t.local -c user.name=teste -c commit.gpgsign=false commit -q -m fx \
     && mgit clone -q -c core.autocrlf=true "$o" "$2" && [ "$(mgit -C "$2" config core.autocrlf)" = true ]
 }
-m_eol_indice() { # todo .sh: indice LF, worktree LF, atributo text eol=lf — e todos os scripts presentes
-  local l; l="$(git -C "$1" ls-files --eol -- '*.sh')"; [ -n "$l" ] || return 1
+m_eol_indice() { # m_eol_indice <clone> [<glob> <lista>] — indice LF, worktree LF, atributo text eol=lf — e todos presentes
+  local l g="${2:-*.sh}" n="${3-$MSRC_SH}"; l="$(git -C "$1" ls-files --eol -- "$g")"; [ -n "$l" ] || return 1
   printf '%s\n' "$l" | awk '!/^i\/lf +w\/lf +attr\/text eol=lf[ \t]/ { r = 1 } END { exit r }' || return 1
-  [ "$(printf '%s\n' "$l" | wc -l)" -eq "$(printf '%s\n' $MSRC_SH | wc -l)" ]
+  [ "$(printf '%s\n' "$l" | wc -l)" -eq "$(printf '%s\n' $n | wc -l)" ]
 }
+m_eol_md() { m_eol_indice "$1" '*.md' "$MSRC_MD"; }
 # Por bytes, nunca por grep/$(...): no Git Bash os dois descartam o CR e o scan ficaria cego.
-m_eol_bytes() { # scan de bytes: nenhum CR em nenhum .sh
-  local f; for f in $MSRC_SH; do [ -f "$1/$f" ] && [ "$(tr -d '\r' < "$1/$f" | wc -c)" -eq "$(wc -c < "$1/$f")" ] || return 1; done
+m_eol_bytes() { # m_eol_bytes <clone> [<lista>] — scan de bytes: nenhum CR em nenhum .sh (ou da lista)
+  local f; for f in ${2-$MSRC_SH}; do [ -f "$1/$f" ] && [ "$(tr -d '\r' < "$1/$f" | wc -c)" -eq "$(wc -c < "$1/$f")" ] || return 1; done
 }
 m_hex() { od -An -tx1 | tr -d ' \n'; }
 SHEBANG_HEX="$(printf '#!/usr/bin/env bash\n' | m_hex)"
 m_shebang() { local f; for f in $MSRC_SH; do [ "$(head -c 20 "$1/$f" | m_hex)" = "$SHEBANG_HEX" ] || return 1; done; }
-m_reprova() { ! m_eol_indice "$1" && ! m_eol_bytes "$1" && ! m_shebang "$1"; }
+m_eol_bytes_md() { m_eol_bytes "$1" "$MSRC_MD"; }
+# O teste real (21-regras-inviolaveis) lendo o SKILL.md do clone. No Git Bash o sed tolera o CR e
+# conta 21 mesmo em CRLF; no Linux o `$` nao casa antes do CR e a contagem cai a 0.
+m_skill_legivel() { [ -f "$1/.claude/skills/sprintx/SKILL.md" ] && [ "$(conta_regras "$1/.claude/skills/sprintx/SKILL.md")" -eq 21 ]; }
+m_reprova() { ! m_eol_indice "$1" && ! m_eol_bytes "$1" && ! m_shebang "$1" && ! m_eol_md "$1" && ! m_eol_bytes_md "$1"; }
 
-[ "$(grep -v '^[[:space:]]*\(#\|$\)' "$RAIZ_SRC/.gitattributes" 2>/dev/null)" = '*.sh text eol=lf' ]
-afirma "m-gitattributes-regra-minima" $? "so *.sh text eol=lf"
-git -C "$RAIZ_SRC" ls-files --eol -- '*.sh' | awk '!/^i\/lf +w\/[a-z]+ +attr\/text eol=lf[ \t]/ { r = 1 } END { exit r }'
-afirma "m-repo-blobs-lf-com-atributo" $? "indice LF e atributo em todo .sh versionado"
+[ "$(grep -v '^[[:space:]]*\(#\|$\)' "$RAIZ_SRC/.gitattributes" 2>/dev/null)" = '*.sh text eol=lf
+*.md text eol=lf' ]
+afirma "m-gitattributes-regra-minima" $? "so *.sh e *.md text eol=lf"
+git -C "$RAIZ_SRC" ls-files --eol -- '*.sh' '*.md' | awk '!/^i\/lf +w\/[a-z]+ +attr\/text eol=lf[ \t]/ { r = 1 } END { exit r }'
+afirma "m-repo-blobs-lf-com-atributo" $? "indice LF e atributo em todo .sh e .md versionado"
 m_fixture "$RAIZ_SRC/.gitattributes" "$MS/clone-ok" >/dev/null 2>&1; afirma "mj-clone-autocrlf-true" $? "clone limpo"
 m_eol_indice "$MS/clone-ok"; afirma "mj-ls-files-eol-todos-lf" $? "i/lf w/lf attr/text eol=lf"
 m_eol_bytes "$MS/clone-ok"; afirma "mj-scan-bytes-sem-crlf" $? "nenhum CR"
 m_shebang "$MS/clone-ok"; afirma "ml-shebang-preservado" $? "#!/usr/bin/env bash, sem CR"
+m_eol_md "$MS/clone-ok"; afirma "mj-md-ls-files-eol-todos-lf" $? "todo .md: i/lf w/lf attr/text eol=lf"
+m_eol_bytes_md "$MS/clone-ok"; afirma "mj-md-scan-bytes-sem-crlf" $? "nenhum CR em .md"
+m_skill_legivel "$MS/clone-ok"; afirma "mj-skill-md-legivel-pelo-teste-real" $? "conta_regras do SKILL.md do clone = 21"
 m_fixture - "$MS/clone-sem" >/dev/null 2>&1 && m_reprova "$MS/clone-sem"
 afirma "mk-sem-gitattributes-prova-morre" $? "cada verificacao reprova o clone sem atributo"
 printf '*.sh text\n' > "$MS/attr-text"; m_fixture "$MS/attr-text" "$MS/clone-text" >/dev/null 2>&1 && m_reprova "$MS/clone-text"
 afirma "mm-mutante-2a-regra-sem-eol-morre" $? "*.sh text"
 printf '* text=auto\n' > "$MS/attr-auto"; m_fixture "$MS/attr-auto" "$MS/clone-auto" >/dev/null 2>&1 && m_reprova "$MS/clone-auto"
 afirma "mm-mutante-2b-text-auto-morre" $? "* text=auto"
+# Mutante 11: a regra *.md some. Os .sh seguem LF; os .md saem CRLF e o teste real le o SKILL.md errado no Linux.
+printf '*.sh text eol=lf\n' > "$MS/attr-sem-md"; m_fixture "$MS/attr-sem-md" "$MS/clone-sem-md" >/dev/null 2>&1 \
+  && m_eol_indice "$MS/clone-sem-md" && ! m_eol_md "$MS/clone-sem-md" && ! m_eol_bytes_md "$MS/clone-sem-md"
+afirma "mm-mutante-11-sem-regra-md-morre" $? "*.md sem eol=lf: indice/worktree e bytes reprovam"
+if command -v cygpath >/dev/null 2>&1; then
+  pula "mm-mutante-11-linux-skill-md-ilegivel" "Git Bash: o sed tolera CR; o caso roda no Linux"
+else
+  ! m_skill_legivel "$MS/clone-sem-md"; afirma "mm-mutante-11-linux-skill-md-ilegivel" $? "conta_regras do SKILL.md CRLF != 21"
+fi
 
 # Mutante 10: o proprio teste passa a aceitar CRLF. Cada verificacao mutada, rodada contra o
 # clone sem atributo, ACEITA — e isso que a afirmacao mk ja reprovaria.

@@ -1,2 +1,3 @@
-# Scripts shell sao LF em qualquer checkout, independente de core.autocrlf (DS-151).
+# Scripts shell e contratos markdown sao LF em qualquer checkout, independente de core.autocrlf (DS-151).
 *.sh text eol=lf
+*.md text eol=lf
