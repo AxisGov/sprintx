@@ -1,0 +1,2 @@
+# Scripts shell sao LF em qualquer checkout, independente de core.autocrlf (DS-151).
+*.sh text eol=lf

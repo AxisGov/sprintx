@@ -1446,7 +1446,7 @@ MJ="$J/mut"
 muta_lit() { # muta_lit <origem> <destino> <trecho> <troca> — troca literal; falha se o trecho nao existe
   ML_A="$3" ML_B="$4" awk '{ a = ENVIRON["ML_A"]; i = index($0, a); if (i) { $0 = substr($0, 1, i - 1) ENVIRON["ML_B"] substr($0, i + length(a)); n++ } print } END { exit n ? 0 : 1 }' "$1" > "$2"
 }
-copia_skill() { mkdir -p "$MJ/$1/scripts" "$MJ/$1/assets"; cp "$TPLB" "$MJ/$1/assets/"; printf '%s/%s/scripts/bloqueios.sh' "$MJ" "$1"; }
+copia_skill() { mkdir -p "$MJ/$1/scripts" "$MJ/$1/assets"; cp "$TPLB" "$MJ/$1/assets/"; cp "$SK/scripts/caminho-git.sh" "$MJ/$1/scripts/"; printf '%s/%s/scripts/bloqueios.sh' "$MJ" "$1"; }
 mata() { local c; for c in $CASOS_J; do roda_caso "$c" "$1" || { printf '%s' "$c"; return; }; done; }
 mutante() { # mutante <nome> <rc da geracao> <script> <caso que TEM de matar>... — nao vale morrer de carona
   local nome="$1" rc="$2" s="$3" c vivos=""; shift 3
@@ -2022,7 +2022,7 @@ afirma "k23-ds140-a-ds148-registradas" $? "$n de 7, mais DS-147 e DS-148"
 # casos designados; o controle, copia SEM mutacao na mesma estrutura, tem de sobreviver a
 # todos eles — se morrer, e a bancada que esta quebrada.
 MK="$K/mut"
-copia_skill_k() { mkdir -p "$MK/$1/scripts" "$MK/$1/assets"; cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$MK/$1/assets/"; cp "$BL" "$MK/$1/scripts/"; printf '%s/%s/scripts/planejamento.sh' "$MK" "$1"; }
+copia_skill_k() { mkdir -p "$MK/$1/scripts" "$MK/$1/assets"; cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$MK/$1/assets/"; cp "$BL" "$SK/scripts/caminho-git.sh" "$MK/$1/scripts/"; printf '%s/%s/scripts/planejamento.sh' "$MK" "$1"; }
 mutante_k() { # mutante_k <nome> <rc da geracao> <script> <caso que TEM de matar>...
   local nome="$1" rc="$2" s="$3" c vivos=""; shift 3
   if [ "$rc" -eq 0 ]; then for c in "$@"; do roda_k "$c" "$s" && vivos="$vivos$c "; done; fi
@@ -2337,6 +2337,216 @@ tem "$SKILLMD" 'arquivo_de_task_irma' && tem "$SKILLMD" 'bloqueia sempre, mesmo 
 afirma "l25-skillmd-documenta-excecao" $? "tabela de hooks"
 
 rm -rf "$K"
+
+echo "== M. portabilidade Git Bash: scripts LF e caminho devolvido pelo Git (P0.2-C7-B S1) =="
+# Dois modos. Simulado: `git` e `cygpath` falsos no PATH fazem o Git devolver `Z:/...` e o
+# cygpath traduzir, em qualquer SO — e o que mata os mutantes tanto em Linux quanto no Git
+# Bash. Real: sem falsos; no Git Bash o Git for Windows devolve `C:/...` de verdade.
+MS="$(mktemp -d)"
+RAIZ_SRC="$(cd "$H/../.." && pwd)"
+MSIM="$MS/sim"; MBIN="$MS/bin"; mkdir -p "$MSIM/z" "$MBIN" "$MS/vazio" "$MS/real"
+REALGIT="$(command -v git)"; BASHBIN="$(command -v bash)"
+cat > "$MBIN/cygpath" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$M_CYGLOG"
+[ "$1" = -u ] || exit 64; shift; [ "$1" = -- ] && shift
+[ $# -eq 1 ] || exit 64
+case "$1" in
+  [A-Za-z]:/*) printf '%s/%s/%s\n' "$M_SIMT" "$(printf '%s' "${1%%:*}" | tr 'A-Z' 'a-z')" "${1#?:/}" ;;
+  *) printf '%s\n' "$1" ;;
+esac
+EOF
+cat > "$MBIN/git" <<'EOF'
+#!/usr/bin/env bash
+if [ "$#" -eq 2 ] && [ "$1" = rev-parse ] && [ "$2" = --show-toplevel ]; then
+  t="$("$M_REALGIT" rev-parse --show-toplevel)" || exit $?
+  printf 'Z:/%s\n' "${t##*/}"; exit 0
+fi
+exec "$M_REALGIT" "$@"
+EOF
+chmod +x "$MBIN/cygpath" "$MBIN/git"
+m_sim() { PATH="$MBIN:$PATH" M_SIMT="$MSIM" M_CYGLOG="$MS/cyg.log" M_REALGIT="$REALGIT" "$@"; }
+m_real() { "$@"; }
+m_cg() { "$BASHBIN" -c '. "$1" && caminho_git "$2"' _ "$@"; }   # m_cg <helper> <entrada>
+m_nao_chamou() { [ ! -s "$MS/cyg.log" ]; }
+m_sem_drive() { [ -z "$(find "$1" -name '?:*' 2>/dev/null | head -1)" ]; }
+m_repo() { # m_repo <dir> — repositorio git real, um commit, com subdiretorio sub/
+  rm -rf "$1" "$1--wt"; mkdir -p "$1/sub"
+  git -C "$1" init -q -b main && git -C "$1" -c user.email=t@t.local -c user.name=teste -c commit.gpgsign=false commit -q --allow-empty -m init
+}
+
+# A–E: o helper, isolado. Cada caso recebe a raiz de uma copia da skill.
+m_a() { : > "$MS/cyg.log"; [ "$(m_sim m_cg "$1/scripts/caminho-git.sh" 'C:/repo')" = "$MSIM/c/repo" ]; }
+m_b() { : > "$MS/cyg.log"; [ "$(m_sim m_cg "$1/scripts/caminho-git.sh" 'D:/repo com espaço')" = "$MSIM/d/repo com espaço" ]; }
+m_c() { : > "$MS/cyg.log"; [ "$(m_sim m_cg "$1/scripts/caminho-git.sh" '/home/user/repo')" = /home/user/repo ] && m_nao_chamou; }
+m_d() {
+  : > "$MS/cyg.log"
+  [ "$(m_sim m_cg "$1/scripts/caminho-git.sh" 'docs/sprintx/features/x')" = docs/sprintx/features/x ] \
+    && [ "$(m_sim m_cg "$1/scripts/caminho-git.sh" './rel com espaço')" = './rel com espaço' ] && m_nao_chamou
+}
+m_e() { # sem cygpath no PATH (Linux/macOS): no-op, inclusive para a forma C:/
+  [ "$(PATH="$MS/vazio" m_cg "$1/scripts/caminho-git.sh" 'C:/repo')" = 'C:/repo' ] \
+    && [ "$(PATH="$MS/vazio" m_cg "$1/scripts/caminho-git.sh" '/home/user/repo')" = /home/user/repo ]
+}
+
+# F–H: os scripts, rodados de um subdiretorio, com o Git devolvendo drive Windows.
+m_f() { # m_f <m_sim|m_real> <skill> <base>
+  local r="$3/repo com espaço"
+  m_repo "$r" >/dev/null 2>&1 || return 1
+  (cd "$r/sub" && "$1" bash "$2/scripts/planejamento.sh" criar s1-demo >/dev/null 2>&1) || return 1
+  [ -f "$r/docs/sprintx/features/s1-demo/00-PLANEJAMENTO.md" ] && [ ! -e "$r/sub/docs" ] && m_sem_drive "$3"
+}
+m_g() {
+  local r="$3/repo bloq" b="$2/scripts/bloqueios.sh" out
+  m_repo "$r" >/dev/null 2>&1 || return 1
+  (cd "$r/sub" && "$1" bash "$b" registrar s1-demo null lacuna_de_decisao 'duvida nova' 'decisao registrada' >/dev/null 2>&1) || return 1
+  out="$(cd "$r/sub" && "$1" bash "$b" listar s1-demo 2>/dev/null)" || return 1
+  printf '%s\n' "$out" | grep -q '^B-01	.*	lacuna_de_decisao	aberto$' || return 1
+  (cd "$r/sub" && "$1" bash "$b" validar s1-demo >/dev/null 2>&1) || return 1
+  (cd "$r/sub" && "$1" bash "$b" resolver s1-demo B-01 >/dev/null 2>&1) || return 1
+  out="$(cd "$r/sub" && "$1" bash "$b" listar s1-demo 2>/dev/null)" || return 1
+  printf '%s\n' "$out" | grep -q '^B-01	.*	resolvido$' \
+    && [ -f "$r/docs/sprintx/features/s1-demo/00-BLOQUEIOS.md" ] && [ ! -e "$r/sub/docs" ] && m_sem_drive "$3"
+}
+m_h() { # worktree vinculada: .git e arquivo, o Git devolve a raiz do worktree
+  local r="$3/repo wt" wt="$3/repo wt--wt"
+  m_repo "$r" >/dev/null 2>&1 && git -C "$r" worktree add -q -b wt "$wt" main >/dev/null 2>&1 && mkdir -p "$wt/sub" || return 1
+  [ -f "$wt/.git" ] || return 1
+  (cd "$wt/sub" && "$1" bash "$2/scripts/planejamento.sh" criar s1-wt >/dev/null 2>&1) || return 1
+  (cd "$wt/sub" && "$1" bash "$2/scripts/bloqueios.sh" registrar s1-wt null lacuna_de_decisao 'd' 'x' >/dev/null 2>&1) || return 1
+  [ -f "$wt/docs/sprintx/features/s1-wt/00-PLANEJAMENTO.md" ] && [ -f "$wt/docs/sprintx/features/s1-wt/00-BLOQUEIOS.md" ] \
+    && [ ! -e "$wt/sub/docs" ] && [ ! -e "$r/docs" ] && m_sem_drive "$3"
+}
+m_f_sim() { m_f m_sim "$1" "$MSIM/z"; }
+m_g_sim() { m_g m_sim "$1" "$MSIM/z"; }
+m_h_sim() { m_h m_sim "$1" "$MSIM/z"; }
+
+m_a "$SK"; afirma "ma-sim-c-vira-posix" $? "C:/repo -> cygpath -u"
+m_b "$SK"; afirma "mb-sim-d-com-espaco" $? "D:/repo com espaço, argumento unico"
+m_c "$SK"; afirma "mc-sim-posix-intacto-sem-cygpath" $? "/home/user/repo nao chega ao cygpath"
+m_d "$SK"; afirma "md-sim-relativo-intacto-sem-cygpath" $? "relativo nao chega ao cygpath"
+m_e "$SK"; afirma "me-sem-cygpath-no-op" $? "Linux/macOS: nada muda"
+m_f_sim "$SK"; afirma "mf-sim-planejamento-criar-na-raiz" $? "Z:/... normalizado, nada criado como Z:"
+m_g_sim "$SK"; afirma "mg-sim-bloqueios-registrar-listar-validar-resolver" $? "na raiz, do subdiretorio"
+m_h_sim "$SK"; afirma "mh-sim-worktree-vinculada" $? "raiz do worktree, nao a do principal"
+if command -v cygpath >/dev/null 2>&1; then
+  [ "$(m_cg "$SK/scripts/caminho-git.sh" 'C:/repo')" = /c/repo ]; afirma "ma-real-gitbash-c" $? "cygpath real"
+  [ "$(m_cg "$SK/scripts/caminho-git.sh" 'D:/repo com espaço')" = '/d/repo com espaço' ]; afirma "mb-real-gitbash-d-com-espaco" $? "cygpath real"
+  m_repo "$MS/real/sonda" >/dev/null 2>&1
+  case "$(git -C "$MS/real/sonda" rev-parse --show-toplevel)" in [A-Za-z]:/*) true ;; *) false ;; esac
+  afirma "m-real-gitbash-git-devolve-drive" $? "o Git for Windows devolve C:/..., a condicao do bug existe"
+else
+  m_e "$SK"; afirma "me-real-linux-sem-cygpath" $? "ambiente sem cygpath"
+fi
+m_f m_real "$SK" "$MS/real"; afirma "mf-real-planejamento-criar" $? "git real do ambiente"
+m_g m_real "$SK" "$MS/real"; afirma "mg-real-bloqueios" $? "git real do ambiente"
+m_h m_real "$SK" "$MS/real"; afirma "mh-real-worktree" $? "git real do ambiente"
+for f in planejamento.sh bloqueios.sh; do
+  [ "$(grep -c 'caminho_git "$t"' "$SK/scripts/$f")" -eq 1 ] || false
+done; afirma "m-uma-regra-dois-consumidores" $? "planejamento.sh e bloqueios.sh usam o helper"
+[ "$(find "$SK/scripts" "$H" -name '*.sh' -not -path '*/testes/*' -exec grep -l 'cygpath' {} + | sed 's|.*/||' | sort -u)" = caminho-git.sh ]
+afirma "m-cygpath-so-no-helper" $? "nenhuma copia da regra fora de caminho-git.sh"
+
+# J–L: clone limpo com core.autocrlf=true, sem depender de configuracao global/sistema.
+mgit() { GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="$MS/gitconfig-vazio" git "$@"; }
+: > "$MS/gitconfig-vazio"
+MSRC_SH="$(git -C "$RAIZ_SRC" ls-files -co --exclude-standard -- '*.sh')"
+m_fixture() { # m_fixture <gitattributes|-> <destino> — origem com os .sh do trabalho (blobs LF), clonada com autocrlf=true
+  local o="$2.origem" f
+  rm -rf "$o" "$2"; mkdir -p "$o"
+  mgit init -q -b main "$o" || return 1
+  [ "$1" = - ] || cp "$1" "$o/.gitattributes"
+  for f in $MSRC_SH; do mkdir -p "$o/$(dirname "$f")"; tr -d '\r' < "$RAIZ_SRC/$f" > "$o/$f"; done
+  mgit -C "$o" -c core.autocrlf=false add -A \
+    && mgit -C "$o" -c core.autocrlf=false -c user.email=t@t.local -c user.name=teste -c commit.gpgsign=false commit -q -m fx \
+    && mgit clone -q -c core.autocrlf=true "$o" "$2" && [ "$(mgit -C "$2" config core.autocrlf)" = true ]
+}
+m_eol_indice() { # todo .sh: indice LF, worktree LF, atributo text eol=lf — e todos os scripts presentes
+  local l; l="$(git -C "$1" ls-files --eol -- '*.sh')"; [ -n "$l" ] || return 1
+  printf '%s\n' "$l" | awk '!/^i\/lf +w\/lf +attr\/text eol=lf[ \t]/ { r = 1 } END { exit r }' || return 1
+  [ "$(printf '%s\n' "$l" | wc -l)" -eq "$(printf '%s\n' $MSRC_SH | wc -l)" ]
+}
+# Por bytes, nunca por grep/$(...): no Git Bash os dois descartam o CR e o scan ficaria cego.
+m_eol_bytes() { # scan de bytes: nenhum CR em nenhum .sh
+  local f; for f in $MSRC_SH; do [ -f "$1/$f" ] && [ "$(tr -d '\r' < "$1/$f" | wc -c)" -eq "$(wc -c < "$1/$f")" ] || return 1; done
+}
+m_hex() { od -An -tx1 | tr -d ' \n'; }
+SHEBANG_HEX="$(printf '#!/usr/bin/env bash\n' | m_hex)"
+m_shebang() { local f; for f in $MSRC_SH; do [ "$(head -c 20 "$1/$f" | m_hex)" = "$SHEBANG_HEX" ] || return 1; done; }
+m_reprova() { ! m_eol_indice "$1" && ! m_eol_bytes "$1" && ! m_shebang "$1"; }
+
+[ "$(grep -v '^[[:space:]]*\(#\|$\)' "$RAIZ_SRC/.gitattributes" 2>/dev/null)" = '*.sh text eol=lf' ]
+afirma "m-gitattributes-regra-minima" $? "so *.sh text eol=lf"
+git -C "$RAIZ_SRC" ls-files --eol -- '*.sh' | awk '!/^i\/lf +w\/[a-z]+ +attr\/text eol=lf[ \t]/ { r = 1 } END { exit r }'
+afirma "m-repo-blobs-lf-com-atributo" $? "indice LF e atributo em todo .sh versionado"
+m_fixture "$RAIZ_SRC/.gitattributes" "$MS/clone-ok" >/dev/null 2>&1; afirma "mj-clone-autocrlf-true" $? "clone limpo"
+m_eol_indice "$MS/clone-ok"; afirma "mj-ls-files-eol-todos-lf" $? "i/lf w/lf attr/text eol=lf"
+m_eol_bytes "$MS/clone-ok"; afirma "mj-scan-bytes-sem-crlf" $? "nenhum CR"
+m_shebang "$MS/clone-ok"; afirma "ml-shebang-preservado" $? "#!/usr/bin/env bash, sem CR"
+m_fixture - "$MS/clone-sem" >/dev/null 2>&1 && m_reprova "$MS/clone-sem"
+afirma "mk-sem-gitattributes-prova-morre" $? "cada verificacao reprova o clone sem atributo"
+printf '*.sh text\n' > "$MS/attr-text"; m_fixture "$MS/attr-text" "$MS/clone-text" >/dev/null 2>&1 && m_reprova "$MS/clone-text"
+afirma "mm-mutante-2a-regra-sem-eol-morre" $? "*.sh text"
+printf '* text=auto\n' > "$MS/attr-auto"; m_fixture "$MS/attr-auto" "$MS/clone-auto" >/dev/null 2>&1 && m_reprova "$MS/clone-auto"
+afirma "mm-mutante-2b-text-auto-morre" $? "* text=auto"
+
+# Mutante 10: o proprio teste passa a aceitar CRLF. Cada verificacao mutada, rodada contra o
+# clone sem atributo, ACEITA — e isso que a afirmacao mk ja reprovaria.
+m_muta_fn() { # m_muta_fn <funcao> <nova> <trecho> <troca>
+  declare -f "$1" | sed "1s/^$1 /$2 /" > "$MS/fn.orig" && muta_lit "$MS/fn.orig" "$MS/fn.mut" "$3" "$4" && . "$MS/fn.mut"
+}
+m_muta_fn m_eol_indice m10a 'w\/lf +attr\/text eol=lf[ \t]' 'w\/[a-z]+ +attr\/[a-z =]*[ \t]' && m10a "$MS/clone-sem"
+afirma "mm-mutante-10a-indice-aceita-crlf-morre" $? "a verificacao mutada aceitaria o clone CRLF"
+m_muta_fn m_eol_bytes m10b "tr -d '\\r'" "tr -d '\\001'" && m10b "$MS/clone-sem"
+afirma "mm-mutante-10b-scan-aceita-crlf-morre" $? "a verificacao mutada aceitaria o clone CRLF"
+m_muta_fn m_shebang m10c 'head -c 20 "$1/$f"' 'head -n 1 "$1/$f" | tr -d "\r" | head -c 20' && m10c "$MS/clone-sem"
+afirma "mm-mutante-10c-shebang-aceita-crlf-morre" $? "a verificacao mutada aceitaria o clone CRLF"
+
+# Mutantes dos scripts e do helper, em copia da skill (scripts/ + assets/). O controle, copia
+# sem mutacao, sobrevive a todos os casos; cada mutante morre pelos casos designados.
+copia_skill_m() {
+  local d="$MS/mut/$1"; rm -rf "$d"; mkdir -p "$d/scripts" "$d/assets"
+  cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$d/assets/"
+  cp "$SK/scripts/planejamento.sh" "$SK/scripts/bloqueios.sh" "$SK/scripts/caminho-git.sh" "$d/scripts/"
+  printf '%s' "$d"
+}
+m_troca() { muta_lit "$1" "$1.m" "$2" "$3" && mv "$1.m" "$1"; }
+mutante_m() { # mutante_m <nome> <rc geracao> <skill> <caso que TEM de matar>...
+  local nome="$1" rc="$2" s="$3" c vivos=""; shift 3
+  if [ "$rc" -eq 0 ]; then for c in "$@"; do "$c" "$s" && vivos="$vivos$c "; done; fi
+  [ "$rc" -eq 0 ] && [ -z "$vivos" ]; afirma "$nome" $? "morto por: $* ${vivos:+— SOBREVIVEU a: $vivos}(rc geracao=$rc)"
+}
+CASOS_M="m_a m_b m_c m_d m_e m_f_sim m_g_sim m_h_sim"
+M="$(copia_skill_m controle)"; vivosm=""
+for c in $CASOS_M; do "$c" "$M" || vivosm="$vivosm$c "; done
+[ -z "$vivosm" ]; afirma "mm-controle-copia-intacta-sobrevive" $? "${vivosm:-nenhum caso reprova a copia sem mutacao}"
+LINHA_CG='    [A-Za-z]:/*) if command -v cygpath >/dev/null 2>&1; then cygpath -u -- "$1" && return 0; fi ;;'
+LINHA_RAIZ='  local t; t="$(git rev-parse --show-toplevel 2>/dev/null)" && [ -n "$t" ] && { caminho_git "$t"; return; }'
+LINHA_DIR='  local d="$PWD"; while [ "$d" != / ]; do [ -d "$d/.git" ] && { printf '"'%s'"' "$d"; return; }; d="$(dirname "$d")"; done'
+M="$(copia_skill_m m3)"; m_troca "$M/scripts/caminho-git.sh" "$LINHA_CG" '    [A-Za-z]:/*) : ;;'
+mutante_m "mm-mutante-3-sem-cygpath" $? "$M" m_a m_f_sim
+M="$(copia_skill_m m4)"; m_troca "$M/scripts/caminho-git.sh" "$LINHA_CG" '    *) cygpath -u -- "$1"; return ;;'
+mutante_m "mm-mutante-4-cygpath-em-tudo-quebra-linux" $? "$M" m_c m_e
+M="$(copia_skill_m m4b)"; m_troca "$M/scripts/caminho-git.sh" '    [A-Za-z]:/*) if command' '    *) if command'
+mutante_m "mm-mutante-4b-cygpath-indiscriminado" $? "$M" m_c m_d
+M="$(copia_skill_m m5)"; m_troca "$M/scripts/caminho-git.sh" '    [A-Za-z]:/*) if command' '    [Cc]:/*) if command'
+mutante_m "mm-mutante-5-so-drive-c" $? "$M" m_b
+M="$(copia_skill_m m6)"; m_troca "$M/scripts/planejamento.sh" '{ caminho_git "$t"; return; }' '{ printf '"'%s'"' "$t"; return; }'
+mutante_m "mm-mutante-6-planejamento-ignora-helper" $? "$M" m_f_sim m_h_sim
+M="$(copia_skill_m m7)"; m_troca "$M/scripts/bloqueios.sh" '{ caminho_git "$t"; return; }' '{ printf '"'%s'"' "$t"; return; }'
+mutante_m "mm-mutante-7-bloqueios-ignora-helper" $? "$M" m_g_sim m_h_sim
+M="$(copia_skill_m m8)"; m_troca "$M/scripts/planejamento.sh" "$LINHA_RAIZ" "$LINHA_DIR" \
+  && m_troca "$M/scripts/bloqueios.sh" "$LINHA_RAIZ" "$LINHA_DIR"
+mutante_m "mm-mutante-8-worktree-usa-git-como-diretorio" $? "$M" m_h_sim
+M="$(copia_skill_m m9)"; m_troca "$M/scripts/caminho-git.sh" 'cygpath -u -- "$1"' 'cygpath -u -- $1'
+mutante_m "mm-mutante-9-espaco-quebrado" $? "$M" m_b
+
+DSF3="$SK/DECISOES-DA-SKILL.md"
+[ "$(grep -c '^| DS-151 |' "$DSF3")" -eq 1 ] && [ "$(grep -c '^| DS-152 |' "$DSF3")" -eq 1 ] \
+  && tem "$DSF3" 'eol=lf' && tem "$DSF3" 'caminho_git'
+afirma "m-ds151-ds152-registradas" $? "DECISOES-DA-SKILL.md"
+
+rm -rf "$MS"
 
 echo
 echo "  $ok ok, $falhou falhas, $pulado pulados"

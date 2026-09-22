@@ -47,9 +47,11 @@ CLASSES="defeito_de_plano lacuna_de_decisao prerequisito_ausente suite_vermelha 
 
 falha() { local c="$1"; shift; printf 'bloqueios: %s\n' "$*" >&2; exit "$c"; }
 
+. "$SK/scripts/caminho-git.sh" || falha "$E_USO" "scripts/caminho-git.sh ausente"
+
 resolve_raiz() {
   if [ -n "${SPRINTX_RAIZ:-}" ]; then printf '%s' "$SPRINTX_RAIZ"; return; fi
-  local t; t="$(git rev-parse --show-toplevel 2>/dev/null)" && [ -n "$t" ] && { printf '%s' "$t"; return; }
+  local t; t="$(git rev-parse --show-toplevel 2>/dev/null)" && [ -n "$t" ] && { caminho_git "$t"; return; }
   printf '%s' "$PWD"
 }
 
