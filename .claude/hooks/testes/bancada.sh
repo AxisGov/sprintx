@@ -376,8 +376,14 @@ tem "$EST" 'ou três arquivos'; afirma "c-f35-aceita-os-dois" $? "F3.5 tambem re
 AGENTE=$(grep -lF 'kind: plano' "$H/../agents/auditor-plano.md" "$H/../../.opencode/agent/auditor-plano.md" 2>/dev/null | wc -l)
 [ "$AGENTE" -eq 2 ]; afirma "c-agente-nos-dois-harnesses" $? "$AGENTE/2 espelhos do auditor corrigidos"
 
-pulado=0
-pula() { pulado=$((pulado+1)); printf '  pula %-46s %s\n' "$1" "$2"; }
+# Dois contadores, deliberadamente separados — misturar os dois esconde o que
+# importa. `pula` e SKIP INTERNO: caso que a logica da sprintx deixou de
+# cobrir nesta plataforma. A base candidata fecha com zero, e o proprio
+# script cobra isso no fim. `pula_externo` e dependencia externa ausente
+# (outro repositorio, outro pacote): nao e buraco de cobertura da sprintx.
+pulado=0; pulado_externo=0
+pula() { pulado=$((pulado+1)); printf '  pula %-46s SKIP INTERNO: %s\n' "$1" "$2"; }
+pula_externo() { pulado_externo=$((pulado_externo+1)); printf '  dep  %-46s dependencia externa ausente: %s\n' "$1" "$2"; }
 
 echo "== D. frontmatter dos agentes carrega =="
 # O E2E achou o revisor-testes invisivel ao Claude Code: `description:` sem aspas
@@ -467,7 +473,7 @@ PY
   done
   yaml_ok "$AG/dois-pontos.md"; [ $? -ne 0 ]; afirma "d3-yaml-confirma-bug-e2e" $? "PyYAML tambem rejeita o caso do E2E"
 else
-  pula "d3-yaml-real" "nenhum python com PyYAML; so a guarda estrutural rodou"
+  pula_externo "d3-yaml-real" "PyYAML (python3); so a guarda estrutural rodou"
 fi
 
 echo "== E. CONVENCOES.md: caminho canonico e precedencia =="
@@ -1053,7 +1059,7 @@ if [ -f "$MXH" ] && command -v jq >/dev/null 2>&1; then
   case "$s" in *"nenhuma task declarou"*) true ;; *) false ;; esac; afirma "g-mergex-controle-acusa-produto" $? "o hook esta ativo de verdade"
   [ -z "$(find "$MX" -newer "$G/marco-mergex" -not -path '*/.git/*' 2>/dev/null | head -1)" ]; afirma "g-mergex-intocada" $? "nenhum arquivo da mergex escrito pelo teste"
 else
-  pula "g-mergex-aceita-planejamento" "mergex nao encontrada em \$MERGEX_DIR/../mergex, ou sem jq"
+  pula_externo "g-mergex-aceita-planejamento" "mergex em \$MERGEX_DIR/../mergex, ou jq"
 fi
 rm -rf "$G"
 
@@ -2482,10 +2488,29 @@ m_hex() { od -An -tx1 | tr -d ' \n'; }
 SHEBANG_HEX="$(printf '#!/usr/bin/env bash\n' | m_hex)"
 m_shebang() { local f; for f in $MSRC_SH; do [ "$(head -c 20 "$1/$f" | m_hex)" = "$SHEBANG_HEX" ] || return 1; done; }
 m_eol_bytes_md() { m_eol_bytes "$1" "$MSRC_MD"; }
-# O teste real (21-regras-inviolaveis) lendo o SKILL.md do clone. No Git Bash o sed tolera o CR e
-# conta 21 mesmo em CRLF; no Linux o `$` nao casa antes do CR e a contagem cai a 0.
-m_skill_legivel() { [ -f "$1/.claude/skills/sprintx/SKILL.md" ] && [ "$(conta_regras "$1/.claude/skills/sprintx/SKILL.md")" -eq 21 ]; }
-m_reprova() { ! m_eol_indice "$1" && ! m_eol_bytes "$1" && ! m_shebang "$1" && ! m_eol_md "$1" && ! m_eol_bytes_md "$1"; }
+# O teste real (21-regras-inviolaveis) lendo o SKILL.md do clone.
+M_SKILL=.claude/skills/sprintx/SKILL.md
+m_skill_legivel() { [ -f "$1/$M_SKILL" ] && [ "$(conta_regras "$1/$M_SKILL")" -eq 21 ]; }
+# O `sed` do Git Bash ignora o CR antes do `$` e conta 21 num SKILL.md CRLF;
+# o do GNU/Linux nao. Isso e propriedade do LEITOR desta maquina, nao do dano:
+# um oraculo que dependa dele fica cego em metade das plataformas, e foi por
+# isso que este caso vivia com `skip` no Git Bash. O que prova o dano em
+# qualquer plataforma e a MATERIALIZACAO do arquivo que o consumidor recebe —
+# indice, arvore, atributo e bytes —, e e ela que passa a ser o oraculo.
+m_skill_materializa_lf() { m_eol_indice "$1" "$M_SKILL" "$M_SKILL" && m_eol_bytes "$1" "$M_SKILL"; }
+# Medido, nunca suposto nem deduzido de `cygpath`: o sed desta maquina tolera CR?
+m_sed_tolera_cr() { [ -n "$(printf 'x\r\n' | sed -n '/^x$/p')" ]; }
+# O oraculo do mutante 11. Clausula 1 — a materializacao — vale em qualquer
+# plataforma e sozinha ja mata o mutante. Clausula 2 — o leitor real do
+# contrato — entra onde o leitor sente o CR, como reforco: nunca substitui a
+# primeira, e a ausencia dela nunca vira skip.
+m_mutante11_morre() { # m_mutante11_morre <clone>
+  ! m_skill_materializa_lf "$1" || return 1
+  if ! m_sed_tolera_cr; then ! m_skill_legivel "$1" || return 1; fi
+  return 0
+}
+M11_EXTRA=""; m_sed_tolera_cr || M11_EXTRA=" + o leitor real do contrato conta != 21"
+m_reprova() { ! m_eol_indice "$1" && ! m_eol_bytes "$1" && ! m_shebang "$1" && ! m_eol_md "$1" && ! m_eol_bytes_md "$1" && ! m_skill_materializa_lf "$1"; }
 
 [ "$(grep -v '^[[:space:]]*\(#\|$\)' "$RAIZ_SRC/.gitattributes" 2>/dev/null)" = '*.sh text eol=lf
 *.md text eol=lf' ]
@@ -2499,6 +2524,7 @@ m_shebang "$MS/clone-ok"; afirma "ml-shebang-preservado" $? "#!/usr/bin/env bash
 m_eol_md "$MS/clone-ok"; afirma "mj-md-ls-files-eol-todos-lf" $? "todo .md: i/lf w/lf attr/text eol=lf"
 m_eol_bytes_md "$MS/clone-ok"; afirma "mj-md-scan-bytes-sem-crlf" $? "nenhum CR em .md"
 m_skill_legivel "$MS/clone-ok"; afirma "mj-skill-md-legivel-pelo-teste-real" $? "conta_regras do SKILL.md do clone = 21"
+m_skill_materializa_lf "$MS/clone-ok"; afirma "mj-skill-md-materializa-lf" $? "SKILL.md: i/lf w/lf attr/text eol=lf e sem CR"
 m_fixture - "$MS/clone-sem" >/dev/null 2>&1 && m_reprova "$MS/clone-sem"
 afirma "mk-sem-gitattributes-prova-morre" $? "cada verificacao reprova o clone sem atributo"
 printf '*.sh text\n' > "$MS/attr-text"; m_fixture "$MS/attr-text" "$MS/clone-text" >/dev/null 2>&1 && m_reprova "$MS/clone-text"
@@ -2507,13 +2533,16 @@ printf '* text=auto\n' > "$MS/attr-auto"; m_fixture "$MS/attr-auto" "$MS/clone-a
 afirma "mm-mutante-2b-text-auto-morre" $? "* text=auto"
 # Mutante 11: a regra *.md some. Os .sh seguem LF; os .md saem CRLF e o teste real le o SKILL.md errado no Linux.
 printf '*.sh text eol=lf\n' > "$MS/attr-sem-md"; m_fixture "$MS/attr-sem-md" "$MS/clone-sem-md" >/dev/null 2>&1 \
-  && m_eol_indice "$MS/clone-sem-md" && ! m_eol_md "$MS/clone-sem-md" && ! m_eol_bytes_md "$MS/clone-sem-md"
-afirma "mm-mutante-11-sem-regra-md-morre" $? "*.md sem eol=lf: indice/worktree e bytes reprovam"
-if command -v cygpath >/dev/null 2>&1; then
-  pula "mm-mutante-11-linux-skill-md-ilegivel" "Git Bash: o sed tolera CR; o caso roda no Linux"
-else
-  ! m_skill_legivel "$MS/clone-sem-md"; afirma "mm-mutante-11-linux-skill-md-ilegivel" $? "conta_regras do SKILL.md CRLF != 21"
-fi
+  && m_eol_indice "$MS/clone-sem-md" && ! m_eol_md "$MS/clone-sem-md" && ! m_eol_bytes_md "$MS/clone-sem-md" \
+  && ! m_skill_materializa_lf "$MS/clone-sem-md"
+afirma "mm-mutante-11-sem-regra-md-morre" $? "*.md sem eol=lf: indice/worktree, bytes e o SKILL.md do consumidor reprovam"
+# O mesmo mutante, agora pelo oraculo do consumidor — sem `skip` em plataforma
+# nenhuma: onde o sed tolera CR, a materializacao mata sozinha; onde nao
+# tolera, a leitura real do contrato entra junto.
+m_mutante11_morre "$MS/clone-sem-md"
+afirma "mm-mutante-11-skill-md-nao-chega-lf" $? "a materializacao do SKILL.md reprova em qualquer plataforma$M11_EXTRA"
+! m_mutante11_morre "$MS/clone-ok"
+afirma "mm-controle-11-clone-com-a-regra-passa" $? "o clone com *.md text eol=lf nao e reprovado pelo oraculo"
 
 # Mutante 10: o proprio teste passa a aceitar CRLF. Cada verificacao mutada, rodada contra o
 # clone sem atributo, ACEITA — e isso que a afirmacao mk ja reprovaria.
@@ -2526,6 +2555,16 @@ m_muta_fn m_eol_bytes m10b "tr -d '\\r'" "tr -d '\\001'" && m10b "$MS/clone-sem"
 afirma "mm-mutante-10b-scan-aceita-crlf-morre" $? "a verificacao mutada aceitaria o clone CRLF"
 m_muta_fn m_shebang m10c 'head -c 20 "$1/$f"' 'head -n 1 "$1/$f" | tr -d "\r" | head -c 20' && m10c "$MS/clone-sem"
 afirma "mm-mutante-10c-shebang-aceita-crlf-morre" $? "a verificacao mutada aceitaria o clone CRLF"
+# 11a: o oraculo deixa de exigir a materializacao e passa a achar o clone CRLF verde.
+m_muta_fn m_skill_materializa_lf m11a 'm_eol_indice "$1" "$M_SKILL" "$M_SKILL" && m_eol_bytes "$1" "$M_SKILL"' 'true' \
+  && m11a "$MS/clone-sem-md"
+afirma "mm-mutante-11a-oraculo-sem-materializacao-morre" $? "sem a materializacao, o oraculo aceitaria o SKILL.md CRLF"
+# 11b: o oraculo volta a depender SO do leitor real. Nao precisa de Git Bash
+# para provar que fica cego: basta dar a ele o que um leitor tolerante a CR
+# enxerga do MESMO arquivo — e ele conta 21, sem ver dano nenhum.
+mkdir -p "$MS/tolerante"; tr -d '\r' < "$MS/clone-sem-md/$M_SKILL" > "$MS/tolerante/SKILL.md"
+[ "$(conta_regras "$MS/tolerante/SKILL.md")" -eq 21 ]
+afirma "mm-mutante-11b-oraculo-so-sed-fica-cego" $? "leitor tolerante a CR conta 21 no SKILL.md CRLF: so o sed nao mata o mutante"
 
 # Mutantes dos scripts e do helper, em copia da skill (scripts/ + assets/). O controle, copia
 # sem mutacao, sobrevive a todos os casos; cada mutante morre pelos casos designados.
@@ -3218,5 +3257,6 @@ afirma "o-ds155-registrada" $? "DECISOES-DA-SKILL.md e 08-rastro.md"
 rm -rf "$OF_DIR"
 
 echo
-echo "  $ok ok, $falhou falhas, $pulado pulados"
-[ "$falhou" -eq 0 ]
+echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"
+[ "$pulado" -eq 0 ] || echo "  ATENCAO: skip interno e buraco de cobertura da sprintx nesta plataforma, nao dependencia externa."
+[ "$falhou" -eq 0 ] && [ "$pulado" -eq 0 ]
