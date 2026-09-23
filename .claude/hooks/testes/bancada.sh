@@ -2313,12 +2313,14 @@ muta_lit "$H/sprintx/escopo-da-task.sh" "$LM/sprintx/m4.sh" \
 l_mutante "lm-mutante-4-atual-mais-irma-bloqueado-incorretamente" $? "$LM/sprintx/m4.sh" l_b
 l_mutante "lm-mutante-7-depois-do-replanejamento-ainda-bloqueia" $? "$LM/sprintx/m4.sh" l_k
 
-muta_lit "$H/sprintx/escopo-da-task.sh" "$LM/sprintx/m5a.sh" \
-  'if [ "$N_MINHAS" -ne 1 ]; then' 'if false; then' \
-  && muta_lit "$LM/sprintx/m5a.sh" "$LM/sprintx/m5.sh" \
-    'CURRENT_ID="$(printf '"'"'%s'"'"' "$MINHAS" | head -1)"' \
-    'CURRENT_ID="$(printf '"'"'%s\n'"'"' "$IDS_UNICOS" | head -1)"'
-l_mutante "lm-mutante-5-seleciona-a-primeira-nao-a-da-sessao" $? "$LM/sprintx/m5.sh" l_h
+# Este mutante mora no helper, nao no hook: sem o filtro de sessao, o par
+# TRABALHO+TASK volta a ser "o primeiro que o rastro mostrar". Copia propria de
+# sprintx/+comum/, para nao contaminar os outros mutantes.
+LM5="$K/c2mut5"; mkdir -p "$LM5/sprintx" "$LM5/comum"
+cp "$H/sprintx/escopo-da-task.sh" "$LM5/sprintx/m5.sh"
+muta_lit "$H/comum/rastro.sh" "$LM5/comum/rastro.sh" \
+  'if (dono[k] == "" || dono[k] != ses) continue' 'if (dono[k] == "") continue'
+l_mutante "lm-mutante-5-seleciona-a-primeira-nao-a-da-sessao" $? "$LM5/sprintx/m5.sh" l_h
 
 muta_lit "$H/sprintx/escopo-da-task.sh" "$LM/sprintx/m6.sh" \
   "grep -q 'status: em_andamento' \"\$f\" 2>/dev/null && ANY_EM_ANDAMENTO=1" \
@@ -2570,6 +2572,393 @@ DSF3="$SK/DECISOES-DA-SKILL.md"
 afirma "m-ds151-ds152-registradas" $? "DECISOES-DA-SKILL.md"
 
 rm -rf "$MS"
+
+echo "== N. escopo e ownership do TRABALHO corrente, nao do id da task (P0.2-C7-B S2) =="
+# Features se acumulam no repositorio: `T-01.01` existe na feature de hoje e em
+# toda feature antiga. O id sozinho nunca identifica o plano — a sessao resolve
+# TRABALHO + TASK pelo rastro, e so o plano daquele trabalho participa (DS-153).
+NF_DIR="$(mktemp -d)"
+N_SEQ=0
+N_SAIDA=""; N_RC=0
+
+n_ev() { # n_ev <dir> <arquivo-de-rastro> <evento> <task> <sessao> [trabalho_id-do-campo]
+  local d="$1" tr="$2" evt="$3" tk="$4" ses="$5" campo="${6:-$2}" arq
+  arq="$d/docs/eventos/$tr.jsonl"; mkdir -p "$(dirname "$arq")"
+  N_SEQ=$((N_SEQ + 1))
+  printf '{"ts":"2026-09-22T10:%02d:00Z","expx_eventos":1,"trabalho_id":"%s","ferramenta":"sprintx","origem":"skill","evento":"%s","fase":"f6","task":"%s","agente":"principal","resultado":"ok","detalhe":null,"arquivos":[],"sessao":"%s","harness":"claude"}\n' \
+    "$N_SEQ" "$campo" "$evt" "$tk" "$ses" >> "$arq"
+}
+n_task() { # n_task <id> <status> <altera> [titulo]
+  printf '  - id: %s\n    titulo: %s\n    status: %s\n    objetivo: obj\n    arquivos:\n      cria: []\n      altera: [%s]\n    teste_integracao: t\n    teste_funcional: t\n    criterio_aceite: c\n    depende_de: []\n    paralelizavel: false\n    concluida_em: null\n    suite: nao_executada\n' \
+    "$1" "${4:-Task $1 original}" "$2" "$3"
+}
+n_plano() { # n_plano <arquivo> <trabalho_id> <sprint-NN> — tasks vem do stdin
+  mkdir -p "$(dirname "$1")"
+  { printf -- '---\nexpx_schema: 1\nexpx_tool: sprintx\nkind: tasks\ntrabalho_id: %s\nsprint_id: sprint-%s\ntasks:\n' "$2" "$3"
+    cat
+    printf -- '---\n'; } > "$1"
+}
+n_hook() { # n_hook <dir> <hook> <arquivo-relativo> <sessao> — rc em N_RC, saida em N_SAIDA
+  N_SAIDA="$(printf '{"cwd":"%s","tool_input":{"file_path":"%s"}}' "$1" "$1/$3" \
+    | (cd "$1" && EXPX_SESSAO="$4" bash "$2") 2>&1)"; N_RC=$?
+}
+n_tem() { printf '%s' "$N_SAIDA" | grep -qF "$1"; }
+n_silencio() { [ "$N_RC" -eq 0 ] && [ -z "$N_SAIDA" ]; }
+
+# n_fx <dir> <slug-historico> <ordem: hist|corr>
+# Duas features vivas no mesmo repo, ambas com T-01.01. <slug-historico> troca a
+# ordem alfabetica; <ordem> troca a ordem de criacao e o mtime — a feature
+# HISTORICA fica sempre como a mais recente no disco, para que nada que olhe
+# mtime (rastro_trabalho_id) possa ser confundido com o trabalho da sessao.
+# A branch tambem leva o nome da historica, para matar "trabalho pelo branch".
+n_fx() {
+  local d="$1" h="$2" ordem="$3" f
+  rm -rf "$d"; mkdir -p "$d/src"
+  # Repo sem commit: o hook so precisa da raiz (rastro_raiz acha o .git). A
+  # branch leva o nome da HISTORICA, para matar "trabalho pelo nome da branch".
+  git init -q --template= -b "feature/$h" "$d" >/dev/null 2>&1
+  N_HIST="$h"; N_CORR=corrente
+  n_corrente() { n_plano "$d/docs/sprintx/features/corrente/sprint-01/tasks.md" corrente 01; }
+  n_historica() { n_plano "$d/docs/sprintx/features/$h/sprint-01/tasks.md" "$h" 01; }
+  if [ "$ordem" = corr ]; then
+    n_corrente <<EOF
+$(n_task T-01.01 em_andamento src/novo.ts)
+EOF
+    n_historica <<EOF
+$(n_task T-01.01 concluida src/antigo.ts)
+EOF
+  else
+    n_historica <<EOF
+$(n_task T-01.01 concluida src/antigo.ts)
+EOF
+    n_corrente <<EOF
+$(n_task T-01.01 em_andamento src/novo.ts)
+EOF
+  fi
+  # historica sempre a mais nova no disco
+  touch "$d/docs/sprintx/features/$h/sprint-01/tasks.md" "$d/docs/sprintx/features/$h"
+  n_ev "$d" corrente task_iniciada T-01.01 eu@sessao
+}
+# Reescreve o plano de um trabalho ja existente na fixture.
+n_replano() { # n_replano <dir> <trabalho> — tasks do stdin
+  n_plano "$1/docs/sprintx/features/$2/sprint-01/tasks.md" "$2" 01
+}
+
+# ---------------------------------------------------------------- os casos
+# Cada caso monta a fixture do zero e roda o hook recebido em $1 — e assim que
+# os mutantes sao julgados.
+n_a() { # mesma task id nas duas features: a corrente usa so o proprio plano
+  n_fx "$NF_DIR/a" alfa-antiga hist
+  n_hook "$NF_DIR/a" "$1" src/novo.ts eu@sessao; n_silencio
+}
+n_b() { # historica primeiro no alfabeto: resultado identico
+  n_fx "$NF_DIR/b" alfa-antiga hist
+  n_hook "$NF_DIR/b" "$1" src/novo.ts eu@sessao; n_silencio
+}
+n_c() { # ordem invertida (nome, criacao, mtime): resultado identico
+  n_fx "$NF_DIR/c" zeta-antiga corr
+  n_hook "$NF_DIR/c" "$1" src/novo.ts eu@sessao || return 1
+  n_silencio
+}
+n_d() { # arquivo so da task historica: nao planejado na corrente, NAO irma
+  n_fx "$NF_DIR/d" alfa-antiga hist
+  n_hook "$NF_DIR/d" "$1" src/antigo.ts eu@sessao
+  [ "$N_RC" -eq 0 ] && n_tem "nao esta na lista" && ! n_tem "arquivo_de_task_irma" && ! n_tem "defeito_de_plano"
+}
+n_e() { # o mesmo arquivo tambem numa irma DA CORRENTE: irma-only, bloqueio duro
+  n_fx "$NF_DIR/e" alfa-antiga hist
+  n_replano "$NF_DIR/e" corrente <<EOF
+$(n_task T-01.01 em_andamento src/novo.ts)
+$(n_task T-01.02 pendente src/antigo.ts)
+EOF
+  n_hook "$NF_DIR/e" "$1" src/antigo.ts eu@sessao
+  [ "$N_RC" -eq 2 ] && n_tem arquivo_de_task_irma && n_tem T-01.02
+}
+n_f() { # mesmo arquivo na task atual corrente e na historica: current vence
+  n_fx "$NF_DIR/f" alfa-antiga hist
+  n_replano "$NF_DIR/f" alfa-antiga <<EOF
+$(n_task T-01.01 concluida src/novo.ts)
+EOF
+  n_hook "$NF_DIR/f" "$1" src/novo.ts eu@sessao; n_silencio
+}
+n_g() { # atual + irma corrente + historica: current vence
+  n_fx "$NF_DIR/g" alfa-antiga hist
+  n_replano "$NF_DIR/g" corrente <<EOF
+$(n_task T-01.01 em_andamento src/novo.ts)
+$(n_task T-01.02 pendente src/novo.ts)
+EOF
+  n_replano "$NF_DIR/g" alfa-antiga <<EOF
+$(n_task T-01.01 concluida src/novo.ts)
+EOF
+  n_hook "$NF_DIR/g" "$1" src/novo.ts eu@sessao; n_silencio
+}
+n_h() { # duas irmas correntes + uma historica: lista SO as correntes
+  n_fx "$NF_DIR/h" alfa-antiga hist
+  n_replano "$NF_DIR/h" corrente <<EOF
+$(n_task T-01.01 em_andamento src/novo.ts)
+$(n_task T-01.02 pendente src/compartilhado.ts)
+$(n_task T-01.03 pendente src/compartilhado.ts)
+EOF
+  n_replano "$NF_DIR/h" alfa-antiga <<EOF
+$(n_task T-01.09 concluida src/compartilhado.ts)
+EOF
+  n_hook "$NF_DIR/h" "$1" src/compartilhado.ts eu@sessao
+  [ "$N_RC" -eq 2 ] && n_tem T-01.02 && n_tem T-01.03 && ! n_tem T-01.09
+}
+n_i() { # a sessao resolve trabalho + task: o aviso cita a task e os arquivos DO plano corrente
+  n_fx "$NF_DIR/i" alfa-antiga hist
+  n_hook "$NF_DIR/i" "$1" src/nada.ts eu@sessao
+  [ "$N_RC" -eq 0 ] && n_tem "a task T-01.01" && n_tem src/novo.ts && ! n_tem src/antigo.ts
+}
+n_j() { # zero sessao ativa: fail-closed
+  n_fx "$NF_DIR/j" alfa-antiga hist
+  : > "$NF_DIR/j/docs/eventos/corrente.jsonl"
+  n_hook "$NF_DIR/j" "$1" src/novo.ts eu@sessao
+  [ "$N_RC" -eq 2 ] && n_tem sessao_ambigua
+}
+n_k() { # a mesma sessao reivindicando task em DOIS trabalhos: fail-closed
+  n_fx "$NF_DIR/k" alfa-antiga hist
+  n_replano "$NF_DIR/k" alfa-antiga <<EOF
+$(n_task T-01.01 em_andamento src/antigo.ts)
+EOF
+  n_ev "$NF_DIR/k" alfa-antiga task_iniciada T-01.01 eu@sessao
+  n_hook "$NF_DIR/k" "$1" src/novo.ts eu@sessao
+  [ "$N_RC" -eq 2 ] && n_tem sessao_ambigua
+}
+n_l() { # plano do trabalho corrente ausente: fail-closed, sem cair na historica
+  n_fx "$NF_DIR/l" alfa-antiga hist
+  n_replano "$NF_DIR/l" alfa-antiga <<EOF
+$(n_task T-01.01 em_andamento src/antigo.ts)
+EOF
+  rm -rf "$NF_DIR/l/docs/sprintx/features/corrente"
+  n_hook "$NF_DIR/l" "$1" src/novo.ts eu@sessao
+  [ "$N_RC" -eq 2 ] && n_tem plano_corrente_ausente
+}
+n_m() { # plano do trabalho corrente ilegivel: fail-closed
+  n_fx "$NF_DIR/m" alfa-antiga hist
+  printf 'isto nao e um plano\n' > "$NF_DIR/m/docs/sprintx/features/corrente/sprint-01/tasks.md"
+  n_replano "$NF_DIR/m" alfa-antiga <<EOF
+$(n_task T-01.01 em_andamento src/antigo.ts)
+EOF
+  n_hook "$NF_DIR/m" "$1" src/novo.ts eu@sessao
+  [ "$N_RC" -eq 2 ] && n_tem plano_corrente_ilegivel
+}
+n_n() { # layout legado DO trabalho corrente: funciona, com as mesmas regras
+  n_fx "$NF_DIR/n" alfa-antiga hist
+  rm -rf "$NF_DIR/n/docs/sprintx/features/corrente"
+  n_plano "$NF_DIR/n/docs/corrente/sprint-01/tasks.md" corrente 01 <<EOF
+$(n_task T-01.01 em_andamento src/novo.ts)
+$(n_task T-01.02 pendente src/legado-irma.ts)
+EOF
+  n_hook "$NF_DIR/n" "$1" src/novo.ts eu@sessao; n_silencio || return 1
+  n_hook "$NF_DIR/n" "$1" src/legado-irma.ts eu@sessao
+  [ "$N_RC" -eq 2 ] && n_tem arquivo_de_task_irma && n_tem T-01.02
+}
+n_o() { # legado de OUTRO trabalho nunca vira fallback do corrente
+  n_fx "$NF_DIR/o" alfa-antiga hist
+  rm -rf "$NF_DIR/o/docs/sprintx/features/corrente"
+  n_plano "$NF_DIR/o/docs/legado-de-outro/sprint-01/tasks.md" legado-de-outro 01 <<EOF
+$(n_task T-01.01 em_andamento src/antigo.ts)
+EOF
+  n_hook "$NF_DIR/o" "$1" src/novo.ts eu@sessao
+  [ "$N_RC" -eq 2 ] && n_tem plano_corrente_ausente
+}
+n_p() { # titulos mudam: resultado identico ao n_e
+  n_fx "$NF_DIR/p" alfa-antiga hist
+  n_replano "$NF_DIR/p" corrente <<EOF
+$(n_task T-01.01 em_andamento src/novo.ts 'Reescrita total do topo — antigo.ts tambem')
+$(n_task T-01.02 pendente src/antigo.ts 'Nome completamente diferente')
+EOF
+  n_replano "$NF_DIR/p" alfa-antiga <<EOF
+$(n_task T-01.01 concluida src/antigo.ts 'Task historica renomeada')
+EOF
+  n_hook "$NF_DIR/p" "$1" src/antigo.ts eu@sessao
+  [ "$N_RC" -eq 2 ] && n_tem arquivo_de_task_irma && n_tem T-01.02
+}
+n_q() { # C2 preservado: irma-only bloqueia mesmo em modo aviso, com historica no repo
+  n_fx "$NF_DIR/q" alfa-antiga hist
+  n_replano "$NF_DIR/q" corrente <<EOF
+$(n_task T-01.01 em_andamento src/novo.ts)
+$(n_task T-01.02 pendente src/antigo.ts)
+EOF
+  mkdir -p "$NF_DIR/q/.expx"
+  printf '{"hooks":{"escopo-da-task":{"modo":"aviso"}}}\n' > "$NF_DIR/q/.expx/hooks.json"
+  n_hook "$NF_DIR/q" "$1" src/antigo.ts eu@sessao
+  [ "$N_RC" -eq 2 ] && n_tem arquivo_de_task_irma
+}
+n_s() { # arquivo de task nenhuma: segue aviso, nunca defeito_de_plano
+  n_fx "$NF_DIR/s" alfa-antiga hist
+  n_hook "$NF_DIR/s" "$1" src/nada.ts eu@sessao
+  [ "$N_RC" -eq 0 ] && ! n_tem defeito_de_plano && ! n_tem arquivo_de_task_irma
+}
+n_t() { # duas sessoes, dois trabalhos: cada uma no seu escopo
+  n_fx "$NF_DIR/t" alfa-antiga hist
+  n_replano "$NF_DIR/t" alfa-antiga <<EOF
+$(n_task T-01.01 em_andamento src/antigo.ts)
+$(n_task T-01.02 pendente src/so-da-antiga.ts)
+EOF
+  n_ev "$NF_DIR/t" alfa-antiga task_iniciada T-01.01 outra@sessao
+  n_hook "$NF_DIR/t" "$1" src/novo.ts eu@sessao; n_silencio || return 1
+  n_hook "$NF_DIR/t" "$1" src/antigo.ts outra@sessao; n_silencio || return 1
+  # a irma da outra feature so existe para a sessao da outra feature
+  n_hook "$NF_DIR/t" "$1" src/so-da-antiga.ts outra@sessao
+  [ "$N_RC" -eq 2 ] && n_tem arquivo_de_task_irma || return 1
+  n_hook "$NF_DIR/t" "$1" src/so-da-antiga.ts eu@sessao
+  [ "$N_RC" -eq 0 ] && n_tem "nao esta na lista"
+}
+n_u() { # acumulo: uma TERCEIRA feature historica nao muda resposta nenhuma
+  n_fx "$NF_DIR/u" alfa-antiga hist
+  n_replano "$NF_DIR/u" corrente <<EOF
+$(n_task T-01.01 em_andamento src/novo.ts)
+$(n_task T-01.02 pendente src/antigo.ts)
+EOF
+  local antes depois rc_antes
+  n_hook "$NF_DIR/u" "$1" src/antigo.ts eu@sessao; antes="$N_SAIDA"; rc_antes="$N_RC"
+  n_plano "$NF_DIR/u/docs/sprintx/features/meio-antiga/sprint-01/tasks.md" meio-antiga 01 <<EOF
+$(n_task T-01.01 concluida src/antigo.ts)
+$(n_task T-01.02 concluida src/novo.ts)
+$(n_task T-01.03 em_andamento src/terceiro.ts)
+EOF
+  n_ev "$NF_DIR/u" meio-antiga task_iniciada T-01.03 terceira@sessao
+  n_hook "$NF_DIR/u" "$1" src/antigo.ts eu@sessao; depois="$N_SAIDA"
+  [ "$rc_antes" -eq 2 ] && [ "$N_RC" -eq 2 ] && [ "$antes" = "$depois" ] || return 1
+  n_hook "$NF_DIR/u" "$1" src/novo.ts eu@sessao; n_silencio
+}
+n_div() { # nome do arquivo de rastro x campo trabalho_id do evento: fail-closed
+  n_fx "$NF_DIR/div" alfa-antiga hist
+  : > "$NF_DIR/div/docs/eventos/corrente.jsonl"
+  n_ev "$NF_DIR/div" corrente task_iniciada T-01.01 eu@sessao outro-trabalho
+  n_hook "$NF_DIR/div" "$1" src/novo.ts eu@sessao
+  [ "$N_RC" -eq 2 ] && n_tem contexto_de_trabalho_divergente
+}
+n_amb() { # o mesmo trabalho nos dois layouts: nao da para amarrar plano a trabalho
+  n_fx "$NF_DIR/amb" alfa-antiga hist
+  n_plano "$NF_DIR/amb/docs/corrente/sprint-01/tasks.md" corrente 01 <<EOF
+$(n_task T-01.01 em_andamento src/outro-novo.ts)
+EOF
+  n_hook "$NF_DIR/amb" "$1" src/novo.ts eu@sessao
+  [ "$N_RC" -eq 2 ] && n_tem plano_corrente_ambiguo
+}
+n_fora() { # task reivindicada que o plano do proprio trabalho nao declara
+  n_fx "$NF_DIR/fora" alfa-antiga hist
+  n_replano "$NF_DIR/fora" corrente <<EOF
+$(n_task T-07.07 em_andamento src/novo.ts)
+EOF
+  n_hook "$NF_DIR/fora" "$1" src/novo.ts eu@sessao
+  [ "$N_RC" -eq 2 ] && n_tem task_fora_do_plano_corrente
+}
+
+NHOOK="$H/sprintx/escopo-da-task.sh"
+bash -n "$NHOOK"; afirma "n0-hook-sintaxe" $? "bash -n"
+for par in \
+  n_a:na-duas-features-mesmo-id-usa-so-o-proprio-plano \
+  n_b:nb-historica-primeiro-no-alfabeto-nao-muda \
+  n_c:nc-ordem-de-criacao-e-mtime-invertidos-nao-mudam \
+  n_d:nd-arquivo-so-da-historica-nao-e-irma \
+  n_e:ne-arquivo-de-irma-corrente-bloqueia \
+  n_f:nf-mesmo-arquivo-na-atual-e-na-historica-current-vence \
+  n_g:ng-atual-mais-irma-mais-historica-current-vence \
+  n_h:nh-lista-so-as-irmas-correntes \
+  n_i:ni-sessao-resolve-trabalho-e-task \
+  n_j:nj-zero-sessao-ativa-fail-closed \
+  n_k:nk-sessao-em-dois-trabalhos-fail-closed \
+  n_l:nl-plano-corrente-ausente-fail-closed \
+  n_m:nm-plano-corrente-ilegivel-fail-closed \
+  n_n:nn-legado-do-trabalho-corrente-funciona \
+  n_o:no-legado-de-outro-trabalho-nunca-e-fallback \
+  n_p:np-titulos-mudam-resultado-igual \
+  n_q:nq-irma-bloqueia-mesmo-em-aviso \
+  n_s:ns-arquivo-de-ninguem-segue-aviso \
+  n_t:nt-duas-sessoes-dois-trabalhos \
+  n_u:nu-terceira-feature-historica-nao-muda-nada \
+  n_div:ndiv-trabalho-divergente-fail-closed \
+  n_amb:namb-dois-layouts-do-mesmo-trabalho-fail-closed \
+  n_fora:nfora-task-fora-do-plano-corrente-fail-closed; do
+  "${par%%:*}" "$NHOOK"; afirma "${par#*:}" $? "${par%%:*}"
+done
+
+# ------------------------------------------------------------------ mutantes
+# Cada mutante mora num diretorio proprio com sprintx/ + comum/ (o hook faz
+# `source ../comum/rastro.sh`), porque alguns mutam o helper, nao o hook.
+NM="$NF_DIR/mut"
+n_copia() { # n_copia <nome> — devolve o caminho do hook copiado
+  local d="$NM/$1"; rm -rf "$d"; mkdir -p "$d/sprintx" "$d/comum"
+  cp "$H/comum/rastro.sh" "$d/comum/rastro.sh"
+  cp "$NHOOK" "$d/sprintx/escopo-da-task.sh"
+  printf '%s' "$d/sprintx/escopo-da-task.sh"
+}
+n_muta() { # n_muta <arquivo> <trecho> <troca>
+  muta_lit "$1" "$1.m" "$2" "$3" && mv "$1.m" "$1"
+}
+n_mutante() { # n_mutante <nome> <rc geracao> <hook mutante> <caso que TEM de matar>...
+  local nome="$1" rc="$2" s="$3" c vivos=""; shift 3
+  if [ "$rc" -eq 0 ]; then for c in "$@"; do "$c" "$s" && vivos="$vivos$c "; done; fi
+  [ "$rc" -eq 0 ] && [ -z "$vivos" ]
+  afirma "$nome" $? "morto por: $* ${vivos:+— SOBREVIVEU a: $vivos}(rc geracao=$rc)"
+}
+CASOS_N="n_a n_c n_d n_e n_f n_g n_h n_i n_j n_k n_l n_m n_n n_o n_p n_q n_s n_t n_u n_div n_amb n_fora"
+
+NMC="$(n_copia controle)"; vivosn=""
+for c in $CASOS_N; do "$c" "$NMC" || vivosn="$vivosn$c "; done
+[ -z "$vivosn" ]; afirma "nm-controle-copia-intacta-sobrevive" $? "${vivosn:-nenhum caso reprova a copia sem mutacao}"
+
+L_CANON='TASKS_CANON="$(find "$RAIZ/docs/sprintx/features/$TRABALHO" -maxdepth 3 -name tasks.md -type f 2>/dev/null | LC_ALL=C sort)"'
+L_LEGADO='TASKS_LEGADO="$(find "$RAIZ/docs/$TRABALHO" -maxdepth 3 -name tasks.md -type f 2>/dev/null | LC_ALL=C sort)"'
+L_GLOBAL='TASKS_CANON="$(find "$RAIZ/docs" -maxdepth 5 -name tasks.md -type f 2>/dev/null | LC_ALL=C sort)"'
+
+NMUT="$(n_copia m1)"; n_muta "$NMUT" "$L_CANON" "$L_GLOBAL"
+n_mutante "nm-mutante-1-volta-ao-find-global" $? "$NMUT" n_d n_h
+
+# So n_h: com a task homonima da historica tendo o MESMO id da corrente, quem
+# vence em n_d depende da ordem que o find devolve — e ordem nao e prova. Em
+# n_h a irma historica tem id proprio (T-01.09) e aparece na lista em qualquer
+# filesystem.
+NMUT="$(n_copia m2)"; n_muta "$NMUT" '$TASKS_TRABALHO' '$TASKS_MD'
+n_mutante "nm-mutante-2-primeiro-plano-com-o-mesmo-id" $? "$NMUT" n_h
+
+NMUT="$(n_copia m3)"; n_muta "$NMUT" 'TASKS_TRABALHO="$TASKS_CANON"' 'TASKS_TRABALHO="$TASKS_MD"'
+n_mutante "nm-mutante-3-plano-historico-como-fallback" $? "$NMUT" n_l n_o
+
+NMUT="$(n_copia m4)"; n_muta "$NMUT" \
+  'CURRENT_TASKS_MD="$(printf '"'"'%s\n'"'"' "$PARES" | awk -F'"'"'\t'"'"' -v id="$CURRENT_ID" '"'"'$1 == id { print $2; exit }'"'"')"' \
+  'CURRENT_TASKS_MD="$(grep -l "id: $CURRENT_ID" $TASKS_MD 2>/dev/null | LC_ALL=C sort | head -1)"'
+n_mutante "nm-mutante-4-uniao-de-todas-as-features-como-others" $? "$NMUT" n_a n_i
+
+NMUT="$(n_copia m5)"; n_muta "$NMUT" 'TRABALHO="$(printf '"'"'%s'"'"' "$PAR_SESSAO" | cut -f1)"' \
+  'TRABALHO="$(git -C "$RAIZ" symbolic-ref --short HEAD 2>/dev/null | sed '"'"'s|.*/||'"'"')"'
+n_mutante "nm-mutante-5-trabalho-pelo-nome-da-branch" $? "$NMUT" n_a n_d
+
+NMUT="$(n_copia m6)"; n_muta "$NMUT" 'MINHAS="$(rastro_reivindicacoes_da_sessao "$RAIZ" "$MINHA_SESSAO")"' \
+  'MINHAS="$(printf '"'"'%s\n'"'"' "$TASKS_MD" | while IFS= read -r a; do [ -f "$a" ] && awk -v A="$a" '"'"'/^  - id:/{id=$3} /status: em_andamento/{n=split(A,p,"/"); print p[n-2] "\t" id "\tok"; exit}'"'"' "$a"; done)"'
+n_mutante "nm-mutante-6-primeira-task-em-andamento" $? "$NMUT" n_t n_u
+
+NMUT="$(n_copia m7)"; n_muta "$NMUT" 'if [ "$COERENCIA" != "ok" ]; then' 'if false; then'
+n_mutante "nm-mutante-7-ignora-trabalho-divergente" $? "$NMUT" n_div
+
+NMUT="$(n_copia m8)"; n_muta "$NMUT" 'if [ -n "$TASKS_IRMAS" ]; then' \
+  'if [ -n "$TASKS_IRMAS" ] || grep -l "$REL" $TASKS_MD >/dev/null 2>&1; then'
+n_mutante "nm-mutante-8-irma-historica-vira-irma-da-corrente" $? "$NMUT" n_d
+
+NMUT="$(n_copia m9)"; n_muta "$NMUT" 'CURRENT_DECLARADOS="$(_arquivos_da_task "$CURRENT_ID" "$CURRENT_TASKS_MD")"' \
+  'CURRENT_DECLARADOS="$(for a in $TASKS_MD; do _arquivos_da_task "$CURRENT_ID" "$a"; done)"'
+n_mutante "nm-mutante-9-task-homonima-historica-autoriza" $? "$NMUT" n_e n_p
+
+NMUT="$(n_copia m10)"; n_muta "$NMUT" "$L_LEGADO" \
+  'TASKS_LEGADO="$(find "$RAIZ/docs" -maxdepth 3 -name tasks.md -type f 2>/dev/null | LC_ALL=C sort)"'
+n_mutante "nm-mutante-10-legado-de-outro-trabalho-como-fallback" $? "$NMUT" n_o
+
+# Mutante do helper: sem o filtro de sessao, o par volta a ser "o primeiro que
+# aparece no rastro" — a regressao que a DS-150 proibiu.
+NMUT="$(n_copia m11)"; n_muta "$NM/m11/comum/rastro.sh" \
+  'if (dono[k] == "" || dono[k] != ses) continue' 'if (dono[k] == "") continue'
+n_mutante "nm-mutante-11-helper-ignora-a-sessao" $? "$NMUT" n_t n_u
+
+DSF4="$SK/DECISOES-DA-SKILL.md"
+[ "$(grep -c '^| DS-153 |' "$DSF4")" -eq 1 ] && [ "$(grep -c '^| DS-154 |' "$DSF4")" -eq 1 ] \
+  && tem "$DSF4" 'rastro_reivindicacoes_da_sessao' && tem "$DSF4" 'plano_corrente_ausente'
+afirma "n-ds153-ds154-registradas" $? "DECISOES-DA-SKILL.md"
+
+rm -rf "$NF_DIR"
 
 echo
 echo "  $ok ok, $falhou falhas, $pulado pulados"

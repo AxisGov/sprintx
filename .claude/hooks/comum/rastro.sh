@@ -277,3 +277,82 @@ rastro_sessao_dona() {
     }
   ' "$arq" 2>/dev/null
 }
+
+# rastro_reivindicacoes_da_sessao <raiz> <sessao>
+#
+# Identidade composta da sessao: TRABALHO + TASK, numa unidade. Emite uma
+# linha `<trabalho_id>\t<task_id>\t<ok|divergente>` por reivindicacao ATIVA
+# da sessao, em ordem deterministica (sort), varrendo todo
+# `docs/eventos/<trabalho_id>.jsonl`.
+#
+# Por que o trabalho vem daqui e nao do id da task: `T-01.01` e local a
+# feature e se repete entre features. So o rastro amarra sessao -> trabalho
+# -> task de forma inequivoca (DS-153). `rastro_trabalho_id()` responde outra
+# pergunta — "qual feature esta ativa no disco" (mtime) — e nao serve como
+# dono de sessao.
+#
+# Fonte normativa do trabalho: o NOME do arquivo de eventos, que o contrato
+# define como `docs/eventos/<trabalho_id>.jsonl` (o sufixo de rotacao `.N` e
+# descartado, e o arquivo rotacionado e lido ANTES do corrente). O campo
+# `trabalho_id` de dentro do evento e usado so como consistencia: divergir do
+# nome marca a linha como `divergente`, e quem chama decide (fail-closed).
+#
+# Reivindicacao ativa e a mesma semantica de rastro_sessao_dona, por
+# (trabalho, task): vale o evento mais recente entre task_iniciada,
+# task_concluida e task_bloqueada; so task_iniciada deixa dono aberto.
+rastro_reivindicacoes_da_sessao() {
+  local raiz="$1" ses="$2"
+  # Declaracao separada: no bash 5.3 uma variavel do MESMO `local` ainda nao
+  # esta visivel para as seguintes, e `set -u` mataria o hook aqui.
+  local dir="$raiz/docs/eventos"
+  [ -d "$dir" ] || return 0
+
+  local f base tid rank lista=""
+  for f in "$dir"/*.jsonl; do
+    [ -f "$f" ] || continue
+    base="${f##*/}"; tid="${base%.jsonl}"; rank=0
+    case "${tid##*.}" in
+      ''|*[!0-9]*) ;;
+      *) case "$tid" in *.*) rank="${tid##*.}"; tid="${tid%.*}" ;; esac ;;
+    esac
+    lista="$lista$tid	$rank	$f
+"
+  done
+  [ -n "$lista" ] || return 0
+
+  # Rotacionado (rank maior) antes do corrente: o awk decide pelo evento mais
+  # recente, e "mais recente" e a ordem de leitura.
+  local arqs=() linha
+  while IFS= read -r linha; do
+    [ -n "$linha" ] || continue
+    arqs+=("${linha#*	*	}")
+  done <<EOF
+$(printf '%s' "$lista" | awk 'NF' | LC_ALL=C sort -t'	' -k1,1 -k2,2nr)
+EOF
+  [ "${#arqs[@]}" -gt 0 ] || return 0
+
+  awk -v ses="$ses" '
+    function tid_do_arquivo(p,   b) {
+      b = p; sub(/.*\//, "", b); sub(/\.jsonl$/, "", b); sub(/\.[0-9]+$/, "", b); return b
+    }
+    {
+      if (!match($0, /"task":"[^"]*"/)) next
+      task = substr($0, RSTART + 8, RLENGTH - 9)
+      k = tid_do_arquivo(FILENAME) SUBSEP task
+      if (index($0, "\"evento\":\"task_iniciada\"")) {
+        s = ""; if (match($0, /"sessao":"[^"]*"/)) s = substr($0, RSTART + 10, RLENGTH - 11)
+        d = ""; if (match($0, /"trabalho_id":"[^"]*"/)) d = substr($0, RSTART + 15, RLENGTH - 16)
+        dono[k] = s; campo[k] = d
+      } else if (index($0, "\"evento\":\"task_concluida\"") || index($0, "\"evento\":\"task_bloqueada\"")) {
+        dono[k] = ""
+      }
+    }
+    END {
+      for (k in dono) {
+        if (dono[k] == "" || dono[k] != ses) continue
+        split(k, p, SUBSEP)
+        print p[1] "\t" p[2] "\t" ((campo[k] == "" || campo[k] == p[1]) ? "ok" : "divergente")
+      }
+    }
+  ' "${arqs[@]}" 2>/dev/null | LC_ALL=C sort
+}

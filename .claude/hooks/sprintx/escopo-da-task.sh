@@ -4,9 +4,13 @@
 # "Nao toque no que nao esta na task" — a regra que se dissolve na task 14 de
 # uma execucao autonoma. Aqui ela vira mecanica.
 #
-# Le os tasks.md da feature e compara o arquivo sendo editado com o campo
-# `arquivos` da task em andamento DESTA sessao. Fora da lista -> aviso (e,
-# depois de promovido, bloqueio).
+# Resolve, pelo rastro, o par TRABALHO + TASK desta sessao; le o plano SO
+# desse trabalho e compara o arquivo sendo editado com o campo `arquivos` da
+# task corrente. Fora da lista -> aviso (e, depois de promovido, bloqueio).
+#
+# Ids de task (T-01.01) sao locais a feature e se repetem entre features:
+# nenhuma busca global por id decide escopo. Plano de outra feature nunca
+# participa, nem como fallback. Ver DS-153/DS-154.
 #
 # Excecao normativa: arquivo_de_task_irma. Se o arquivo nao esta na task
 # corrente mas esta em outra task da mesma feature, o dono e inequivoco —
@@ -16,10 +20,13 @@
 # Modo: nasce em `aviso`. Promova em .expx/hooks.json so depois de semanas
 # sem falso positivo — a excecao acima nao depende dessa promocao.
 #
-# Contrato: falha aberta, com uma excecao. Duvida sobre o ESTADO DO PLANO
-# (arquivo nao declarado em lugar nenhum) => permite, como sempre. Duvida
-# sobre A SESSAO DONA (rastro nao resolve esta sessao a uma unica task
-# em_andamento) => bloqueia por contrato; nunca escolhe a primeira.
+# Contrato: falha aberta, com excecoes. Duvida sobre o ESTADO DO PLANO
+# (arquivo nao declarado em task nenhuma do trabalho corrente) => permite,
+# como sempre. Duvida sobre O CONTEXTO — a sessao dona (rastro nao resolve
+# esta sessao a uma unica task), o trabalho (fontes divergentes) ou o plano
+# do trabalho corrente (ausente, ambiguo, ilegivel, sem a task
+# reivindicada) => bloqueia por contrato; nunca escolhe a primeira nem cai
+# no plano de outra feature.
 set -uo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -46,10 +53,10 @@ case "$REL" in
   docs/sprintx/*|docs/eventos/*|docs/entregas/*|.expx/*) exit 0 ;;
 esac
 
-# --------------------------------------------------------- varre os tasks.md
-# Sem estado proprio: le todo tasks.md da arvore. Os dois layouts sao
-# varridos: o novo (docs/sprintx/features/<slug>/) e o antigo (docs/<slug>/),
-# que a SKILL.md declara continuar suportando.
+# ------------------------------------------------ a skill esta executando?
+# Porteiro, nao ownership: so decide se a F6 esta rodando em algum lugar da
+# arvore. Quem e dono de que sai do trabalho corrente, resolvido mais abaixo
+# — nenhum plano encontrado aqui participa da decisao de escopo.
 # `find` em vez de glob: no zsh um padrao sem match aborta o script (nomatch),
 # e o hook morreria em projeto que ainda nao tem plano.
 TASKS_MD="$(find "$RAIZ/docs" -maxdepth 5 -name tasks.md -type f 2>/dev/null)"
@@ -72,8 +79,80 @@ MODO="$(rastro_modo "$RAIZ" escopo-da-task metodo)"
 # nem a excecao de arquivo_de_task_irma, nem o fail-closed de sessao ambigua.
 [ "$MODO" = "desligado" ] && exit 0
 
-# Pares <task_id> TAB <tasks_md-que-a-declara>, um por linha — junta as tasks
-# de TODOS os tasks.md encontrados, para montar CURRENT/OTHERS mais abaixo.
+# ------------------------------- trabalho e task DESTA sessao, como uma unidade
+# Fonte mecanica normativa: o rastro (docs/eventos/<trabalho_id>.jsonl) — a
+# mesma que task-reivindicada.sh usa para achar quem tem uma task aberta
+# agora. `rastro_reivindicacoes_da_sessao` devolve o par TRABALHO + TASK
+# junto: `T-01.01` e local a feature e se repete entre features, entao o id
+# da task sozinho nunca identifica o plano (DS-153). "Existe uma task
+# em_andamento" tambem nao decide o dono: pode haver mais de uma task em
+# andamento (paralelismo). O payload do hook nao traz identificador de
+# trabalho — so `cwd` e `tool_input` —, e `rastro_trabalho_id()` responde
+# "que feature mexeu por ultimo no disco" (mtime), nao "qual e a desta
+# sessao": nenhum dos dois entra aqui.
+MINHA_SESSAO="$(rastro_sessao)"
+MINHAS="$(rastro_reivindicacoes_da_sessao "$RAIZ" "$MINHA_SESSAO")"
+N_MINHAS="$(printf '%s\n' "$MINHAS" | awk 'NF' | wc -l | tr -d ' ')"
+
+# A sessao precisa resolver para EXATAMENTE uma task aberta. Zero (o rastro
+# nao reconhece esta sessao como dona de nada) ou duas-ou-mais (estado
+# inconsistente) sao ambiguos — aqui a falha NAO e aberta: para por
+# contrato, nunca escolhe a primeira task em_andamento que encontrar.
+if [ "$N_MINHAS" -ne 1 ]; then
+  MSG_AMB="sprintx/escopo-da-task: sessao_ambigua — esta sessao nao foi associada de forma inequivoca a uma task em andamento pelo rastro ($N_MINHAS correspondencia(s) para a sessao $MINHA_SESSAO em $RAIZ/docs/eventos/*.jsonl). Por contrato a edicao fica bloqueada; a maquina nunca escolhe a primeira task em_andamento que encontra. Reivindique a task (evento task_iniciada no rastro) antes de editar."
+  EXTRAS_AMB="\"condicao\":\"sessao_ambigua\",\"tasks_candidatas\":$N_MINHAS"
+  rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "sessao_ambigua" "[]" "$EXTRAS_AMB"
+  rastro_bloqueia "$MSG_AMB"
+fi
+
+PAR_SESSAO="$(printf '%s\n' "$MINHAS" | awk 'NF' | head -1)"
+TRABALHO="$(printf '%s' "$PAR_SESSAO" | cut -f1)"
+CURRENT_ID="$(printf '%s' "$PAR_SESSAO" | cut -f2)"
+COERENCIA="$(printf '%s' "$PAR_SESSAO" | cut -f3)"
+
+# Coerencia entre as fontes mecanicas do trabalho: o nome do arquivo de
+# eventos (normativo) e o campo trabalho_id de dentro do evento. Divergir e
+# contexto quebrado — nunca se escolhe uma das duas em silencio.
+if [ "$COERENCIA" != "ok" ]; then
+  MSG_DIV="sprintx/escopo-da-task: contexto_de_trabalho_divergente — a reivindicacao desta sessao esta em docs/eventos/$TRABALHO.jsonl mas o proprio evento declara outro trabalho_id. Por contrato a edicao fica bloqueada: o trabalho corrente precisa ser inequivoco antes de qualquer decisao de escopo."
+  EXTRAS_DIV="\"condicao\":\"contexto_de_trabalho_divergente\",\"trabalho\":\"$(rastro_json_escape "$TRABALHO")\""
+  rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "contexto_de_trabalho_divergente" "[]" "$EXTRAS_DIV"
+  rastro_bloqueia "$MSG_DIV"
+fi
+
+# ------------------------------------------- plano SO do trabalho corrente
+# Nada de procurar o id da task em todos os planos da arvore: o plano vem do
+# trabalho ja resolvido. Dois layouts, os mesmos que a SKILL.md declara
+# suportar — o canonico docs/sprintx/features/<slug>/ e o antigo docs/<slug>/
+# —, e nos dois o arquivo continua sendo sprint-NN/tasks.md (00-schema.md),
+# entao condensado e separado nao mudam o caminho. `sort` porque a ordem que
+# o filesystem devolve nao pode decidir nada.
+TASKS_CANON="$(find "$RAIZ/docs/sprintx/features/$TRABALHO" -maxdepth 3 -name tasks.md -type f 2>/dev/null | LC_ALL=C sort)"
+TASKS_LEGADO="$(find "$RAIZ/docs/$TRABALHO" -maxdepth 3 -name tasks.md -type f 2>/dev/null | LC_ALL=C sort)"
+
+_para_por_contrato() { # _para_por_contrato <condicao> <mensagem>
+  rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "$1" "[\"$(rastro_json_escape "$REL")\"]" \
+    "\"condicao\":\"$1\",\"trabalho\":\"$(rastro_json_escape "$TRABALHO")\",\"task_atual\":\"$(rastro_json_escape "$CURRENT_ID")\""
+  rastro_bloqueia "sprintx/escopo-da-task: $1 — $2"
+}
+
+# Os dois layouts com o mesmo slug: nao da para amarrar plano a trabalho.
+if [ -n "$TASKS_CANON" ] && [ -n "$TASKS_LEGADO" ]; then
+  _para_por_contrato plano_corrente_ambiguo "o trabalho $TRABALHO tem plano em docs/sprintx/features/$TRABALHO/ E em docs/$TRABALHO/. Deixe um so layout antes de executar; a maquina nao escolhe entre eles."
+fi
+
+TASKS_TRABALHO="$TASKS_CANON"
+[ -n "$TASKS_TRABALHO" ] || TASKS_TRABALHO="$TASKS_LEGADO"
+
+# Execucao e task-based: a sessao afirma trabalho + task. Sem o plano DESSE
+# trabalho nao ha escopo a verificar — e nenhum plano de outra feature serve
+# de substituto. Falha fechada, sem fallback global.
+if [ -z "$TASKS_TRABALHO" ]; then
+  _para_por_contrato plano_corrente_ausente "a sessao reivindicou $CURRENT_ID no trabalho $TRABALHO, mas nao ha sprint-NN/tasks.md em docs/sprintx/features/$TRABALHO/ nem em docs/$TRABALHO/. Nenhum plano de outra feature e usado no lugar."
+fi
+
+# Pares <task_id> TAB <tasks_md-que-a-declara>, um por linha — so as tasks do
+# trabalho corrente, para montar CURRENT/OTHERS mais abaixo.
 PARES=""
 while IFS= read -r f; do
   [ -f "$f" ] || continue
@@ -85,49 +164,24 @@ while IFS= read -r f; do
 $(awk '/^  - id:/ { id=$3; sub(/^[ \t]+/, "", id); if (id != "") print id }' "$f" 2>/dev/null)
 EOF2
 done <<EOF
-$TASKS_MD
+$TASKS_TRABALHO
 EOF
 
-# --------------------------------------------------- dono da task DESTA sessao
-# Fonte mecanica: o rastro (docs/eventos/<trabalho_id>.jsonl) — a mesma que
-# task-reivindicada.sh usa para achar quem tem uma task aberta agora
-# (rastro_sessao_dona em comum/rastro.sh). "Existe uma task em_andamento" nao
-# decide o dono sozinho: pode haver mais de uma task em andamento na feature
-# (paralelismo). A tarefa desta sessao precisa ser inequivoca.
-TRABALHO="$(rastro_trabalho_id "$RAIZ")"
-RASTRO_ARQ="$RAIZ/docs/eventos/$TRABALHO.jsonl"
-MINHA_SESSAO="$(rastro_sessao)"
+IDS_UNICOS="$(printf '%s\n' "$PARES" | awk -F'\t' 'NF{print $1}' | LC_ALL=C sort -u)"
 
-IDS_UNICOS="$(printf '%s\n' "$PARES" | awk -F'\t' 'NF{print $1}' | sort -u)"
-
-MINHAS=""
-N_MINHAS=0
-while IFS= read -r id; do
-  [ -n "$id" ] || continue
-  dona="$(rastro_sessao_dona "$RASTRO_ARQ" "$id")"
-  if [ -n "$dona" ] && [ "$dona" = "$MINHA_SESSAO" ]; then
-    MINHAS="$MINHAS$id
-"
-    N_MINHAS=$((N_MINHAS + 1))
-  fi
-done <<EOF
-$IDS_UNICOS
-EOF
-
-# A sessao precisa resolver para EXATAMENTE uma task aberta. Zero (o rastro
-# nao reconhece esta sessao como dona de nada) ou duas-ou-mais (estado
-# inconsistente) sao ambiguos — aqui a falha NAO e aberta: para por
-# contrato, nunca escolhe a primeira task em_andamento que encontrar.
-if [ "$N_MINHAS" -ne 1 ]; then
-  MSG_AMB="sprintx/escopo-da-task: sessao_ambigua — esta sessao nao foi associada de forma inequivoca a uma task em andamento pelo rastro ($N_MINHAS correspondencia(s) para a sessao $MINHA_SESSAO em $RASTRO_ARQ). Por contrato a edicao fica bloqueada; a maquina nunca escolhe a primeira task em_andamento que encontra. Reivindique a task (evento task_iniciada no rastro) antes de editar."
-  EXTRAS_AMB="\"condicao\":\"sessao_ambigua\",\"tasks_candidatas\":$N_MINHAS"
-  rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "sessao_ambigua" "[]" "$EXTRAS_AMB"
-  rastro_bloqueia "$MSG_AMB"
+# Plano do trabalho corrente existe mas nao entrega task nenhuma: ilegivel.
+if [ -z "$IDS_UNICOS" ]; then
+  _para_por_contrato plano_corrente_ilegivel "o plano do trabalho $TRABALHO existe mas nenhuma task pode ser lida dele. Corrija o plano; a maquina nao procura a task em outra feature."
 fi
 
-CURRENT_ID="$(printf '%s' "$MINHAS" | head -1)"
 CURRENT_TASKS_MD="$(printf '%s\n' "$PARES" | awk -F'\t' -v id="$CURRENT_ID" '$1 == id { print $2; exit }')"
-[ -n "$CURRENT_TASKS_MD" ] || exit 0
+
+# A task reivindicada nao esta no plano do proprio trabalho: contexto
+# quebrado. Antes isto permitia em silencio, e o id podia casar com a task
+# homonima de outra feature.
+if [ -z "$CURRENT_TASKS_MD" ]; then
+  _para_por_contrato task_fora_do_plano_corrente "a sessao reivindicou $CURRENT_ID no trabalho $TRABALHO, mas o plano desse trabalho nao declara essa task. A mesma id em outra feature nao vale."
+fi
 
 # -------------------------------------------------------- arquivos declarados
 # Extrai `arquivos:` (mapa {cria, altera} ou lista plana — as duas formas em
