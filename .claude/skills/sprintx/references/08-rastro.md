@@ -30,6 +30,21 @@ Escrito pelos hooks e **pela própria skill nas transições de fase e de task**
 
 Você não grava o que o hook já grava. Gravar duas vezes o mesmo fato faz o painel contar em dobro.
 
+## Em qual arquivo o evento entra
+
+O destino é `docs/eventos/<trabalho_id>.jsonl` do **trabalho corrente** — e "corrente" tem uma definição mecânica, não uma heurística de disco:
+
+| Quem grava | De onde sai o `<trabalho_id>` |
+|---|---|
+| a skill (F1–F6), `planejamento.sh`, `bloqueios.sh` | o slug da feature que a fase está tratando — a skill sempre o conhece |
+| hook que conhece o trabalho | ele o **declara**: `rastro_grava_trabalho <raiz> <trabalho_id> <evento> ...` |
+| hook sem contexto de trabalho | `rastro_grava <raiz> <evento> ...`, e o destino é o **trabalho corrente da sessão**: a reivindicação ativa dela no rastro (`task_iniciada` sem fechamento posterior), exatamente uma e coerente |
+| nada disso resolve | `docs/eventos/sem-trabalho.jsonl` |
+
+**`mtime` nunca seleciona o destino** (DS-155). "Qual feature mexeu por último no disco" é outra pergunta, e a resposta dela não pertence a esta: num repositório com features acumuladas, ou com duas sessões em trabalhos diferentes, ela manda o evento para o rastro errado sem ninguém perceber.
+
+**Trabalho declarado que contradiz o trabalho provado pelo rastro da sessão é erro de contexto, e falha fechado**: a linha não entra nem num arquivo nem no outro. A incoerência é registrada em `sem-trabalho.jsonl` como `acao_bloqueada` com `contexto_de_trabalho_divergente` no `detalhe`, para o painel ver que o evento existiu e por que não foi atribuído.
+
 ## Formato da linha
 
 Chaves em `snake_case` sem acento, enums minúsculos sem acento, datas ISO, e **chave nunca omitida** — ausente é `null`. As mesmas regras do `expx-schema` (`references/00-schema.md`).

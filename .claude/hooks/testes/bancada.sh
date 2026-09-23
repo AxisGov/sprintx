@@ -2609,7 +2609,7 @@ n_silencio() { [ "$N_RC" -eq 0 ] && [ -z "$N_SAIDA" ]; }
 # Duas features vivas no mesmo repo, ambas com T-01.01. <slug-historico> troca a
 # ordem alfabetica; <ordem> troca a ordem de criacao e o mtime — a feature
 # HISTORICA fica sempre como a mais recente no disco, para que nada que olhe
-# mtime (rastro_trabalho_id) possa ser confundido com o trabalho da sessao.
+# mtime possa ser confundido com o trabalho da sessao.
 # A branch tambem leva o nome da historica, para matar "trabalho pelo branch".
 n_fx() {
   local d="$1" h="$2" ordem="$3" f
@@ -2959,6 +2959,263 @@ DSF4="$SK/DECISOES-DA-SKILL.md"
 afirma "n-ds153-ds154-registradas" $? "DECISOES-DA-SKILL.md"
 
 rm -rf "$NF_DIR"
+
+echo "== O. o rastro grava no TRABALHO corrente, nunca no mais recente por mtime (P0.2-C7-B S3) =="
+# Duas features vivas, duas sessoes, e a feature ERRADA deixada de proposito
+# como a mais recente no disco. O destino do evento sai do trabalho que o
+# chamador declara, ou do trabalho corrente da sessao — mtime nunca participa
+# (DS-155). Reusa n_plano/n_task da secao N: o plano e o mesmo artefato.
+OF_DIR="$(mktemp -d)"
+O_SEQ=0; O_SAIDA=""; O_RC=0
+
+o_ev() { # o_ev <dir> <trabalho> <task> <sessao>
+  local arq="$1/docs/eventos/$2.jsonl"; mkdir -p "$(dirname "$arq")"
+  O_SEQ=$((O_SEQ + 1))
+  printf '{"ts":"2026-09-23T09:%02d:00Z","expx_eventos":1,"trabalho_id":"%s","ferramenta":"sprintx","origem":"skill","evento":"task_iniciada","fase":"f6","task":"%s","agente":"principal","resultado":"ok","detalhe":null,"arquivos":[],"sessao":"%s","harness":"claude"}\n' \
+    "$O_SEQ" "$2" "$3" "$4" >> "$arq"
+}
+o_ck() { cksum < "$1" 2>/dev/null; }                      # byte a byte
+o_linhas() { grep -c '' "$1" 2>/dev/null || printf 0; }
+# Deixa <trabalho> como o mais recente no disco — pasta, plano E arquivo de
+# rastro. Nada disso pode mover o destino de uma linha de evento.
+o_toca() { # o_toca <dir> <trabalho>
+  touch "$1/docs/sprintx/features/$2/sprint-01/tasks.md" "$1/docs/sprintx/features/$2/sprint-01" \
+        "$1/docs/sprintx/features/$2" "$1/docs/eventos/$2.jsonl" 2>/dev/null
+}
+o_fx() { # o_fx <dir> <trabalho mais recente no disco>
+  local d="$1"
+  # `.git` vazio basta: `rastro_raiz` so testa `[ -e ]`, e nenhum dos tres
+  # hooks desta secao chama git. `git init` custa segundos por fixture.
+  rm -rf "$d"; mkdir -p "$d/src" "$d/.git"
+  n_plano "$d/docs/sprintx/features/feature-a/sprint-01/tasks.md" feature-a 01 <<EOF
+$(n_task T-01.01 em_andamento src/a.ts)
+$(n_task T-01.02 pendente src/irma-a.ts)
+EOF
+  n_plano "$d/docs/sprintx/features/feature-b/sprint-01/tasks.md" feature-b 01 <<EOF
+$(n_task T-01.01 em_andamento src/b.ts)
+$(n_task T-01.02 pendente src/irma-b.ts)
+EOF
+  o_ev "$d" feature-a T-01.01 sessao-a
+  o_ev "$d" feature-b T-01.01 sessao-b
+  o_toca "$d" "$2"
+}
+o_hook() { # o_hook <raiz-hooks> <dir> <hook-relativo> <arquivo-relativo> <sessao>
+  O_SAIDA="$(printf '{"cwd":"%s","tool_input":{"file_path":"%s"}}' "$2" "$2/$4" \
+    | (cd "$2" && EXPX_SESSAO="$5" bash "$1/$3") 2>&1)"; O_RC=$?
+}
+# Chama uma funcao da biblioteca copiada (possivelmente mutada), com a
+# identidade de sessao do caso.
+o_chama() { # o_chama <raiz-hooks> <dir> <sessao> <funcao> [args...]
+  local hr="$1" d="$2" ses="$3"; shift 3
+  (cd "$d" && EXPX_SESSAO="$ses" bash -c '. "$0/comum/rastro.sh"; f="$1"; shift; "$f" "$@"' "$hr" "$@") 2>/dev/null
+}
+o_json_write() { # o_json_write <cwd> <file_path> — conteudo do stdin
+  python3 -c "
+import json, sys
+print(json.dumps({'cwd': sys.argv[1], 'tool_name': 'Write', 'tool_input': {'file_path': sys.argv[2], 'content': sys.stdin.read()}}))
+" "$1" "$2"
+}
+
+# ---------------------------------------------------------------- os casos
+o_a() { # sessao em feature-a, feature-b mais recente: so feature-a.jsonl muda
+  local d="$OF_DIR/a" b
+  o_fx "$d" feature-b
+  b="$(o_ck "$d/docs/eventos/feature-b.jsonl")"
+  o_hook "$1" "$d" sprintx/escopo-da-task.sh src/irma-a.ts sessao-a
+  [ "$O_RC" -eq 2 ] || return 1
+  grep -q '"trabalho_id":"feature-a".*"detalhe":"arquivo_de_task_irma"' "$d/docs/eventos/feature-a.jsonl" || return 1
+  [ "$(o_linhas "$d/docs/eventos/feature-a.jsonl")" -eq 2 ] || return 1
+  [ "$(o_ck "$d/docs/eventos/feature-b.jsonl")" = "$b" ] || return 1
+  [ "$(o_linhas "$d/docs/eventos/sem-trabalho.jsonl")" -eq 0 ]
+}
+o_b() { # mtimes invertidos: resultado identico
+  local d="$OF_DIR/b" b
+  o_fx "$d" feature-a
+  b="$(o_ck "$d/docs/eventos/feature-b.jsonl")"
+  o_hook "$1" "$d" sprintx/escopo-da-task.sh src/irma-a.ts sessao-a
+  [ "$O_RC" -eq 2 ] && [ "$(o_linhas "$d/docs/eventos/feature-a.jsonl")" -eq 2 ] \
+    && [ "$(o_ck "$d/docs/eventos/feature-b.jsonl")" = "$b" ]
+}
+o_c() { # uma TERCEIRA feature, mais recente que as duas: resultado identico
+  local d="$OF_DIR/c" b c
+  o_fx "$d" feature-b
+  n_plano "$d/docs/sprintx/features/feature-c/sprint-01/tasks.md" feature-c 01 <<EOF
+$(n_task T-01.01 em_andamento src/c.ts)
+EOF
+  o_ev "$d" feature-c T-01.01 sessao-c
+  o_toca "$d" feature-c
+  b="$(o_ck "$d/docs/eventos/feature-b.jsonl")"; c="$(o_ck "$d/docs/eventos/feature-c.jsonl")"
+  o_hook "$1" "$d" sprintx/escopo-da-task.sh src/irma-a.ts sessao-a
+  [ "$O_RC" -eq 2 ] && [ "$(o_linhas "$d/docs/eventos/feature-a.jsonl")" -eq 2 ] \
+    && [ "$(o_ck "$d/docs/eventos/feature-b.jsonl")" = "$b" ] \
+    && [ "$(o_ck "$d/docs/eventos/feature-c.jsonl")" = "$c" ]
+}
+o_d() { # paralelismo: sessao A -> arquivo A, sessao B -> arquivo B, sem cruzamento
+  local d="$OF_DIR/d"
+  o_fx "$d" feature-b
+  o_hook "$1" "$d" sprintx/escopo-da-task.sh src/irma-a.ts sessao-a; [ "$O_RC" -eq 2 ] || return 1
+  o_hook "$1" "$d" sprintx/escopo-da-task.sh src/irma-b.ts sessao-b; [ "$O_RC" -eq 2 ] || return 1
+  [ "$(o_linhas "$d/docs/eventos/feature-a.jsonl")" -eq 2 ] \
+    && [ "$(o_linhas "$d/docs/eventos/feature-b.jsonl")" -eq 2 ] \
+    && [ "$(grep -c '"trabalho_id":"feature-b"' "$d/docs/eventos/feature-a.jsonl")" -eq 0 ] \
+    && [ "$(grep -c '"trabalho_id":"feature-a"' "$d/docs/eventos/feature-b.jsonl")" -eq 0 ] \
+    && [ "$(o_linhas "$d/docs/eventos/sem-trabalho.jsonl")" -eq 0 ]
+}
+o_e() { # trabalho explicito x trabalho provado pela sessao: nao grava em A nem em B
+  local d="$OF_DIR/e" a b
+  o_fx "$d" feature-b
+  a="$(o_ck "$d/docs/eventos/feature-a.jsonl")"; b="$(o_ck "$d/docs/eventos/feature-b.jsonl")"
+  o_chama "$1" "$d" sessao-a rastro_grava_trabalho "$d" feature-b regra_violada hook aviso "evento cruzado" "[]"
+  [ "$(o_ck "$d/docs/eventos/feature-a.jsonl")" = "$a" ] \
+    && [ "$(o_ck "$d/docs/eventos/feature-b.jsonl")" = "$b" ] \
+    && [ "$(grep -c 'contexto_de_trabalho_divergente' "$d/docs/eventos/sem-trabalho.jsonl")" -eq 1 ]
+}
+o_f() { # retomada: gravar nao teleporta a sessao para outro trabalho
+  local d="$OF_DIR/f" antes depois esperado
+  o_fx "$d" feature-b
+  esperado="$(printf 'feature-a\tT-01.01\tok')"
+  antes="$(o_chama "$1" "$d" sessao-a rastro_reivindicacoes_da_sessao "$d" sessao-a)"
+  [ "$antes" = "$esperado" ] || return 1
+  o_hook "$1" "$d" sprintx/escopo-da-task.sh src/irma-a.ts sessao-a; [ "$O_RC" -eq 2 ] || return 1
+  o_chama "$1" "$d" sessao-a rastro_grava_trabalho "$d" - arquivo_alterado hook ok Write "[]"
+  o_chama "$1" "$d" sessao-a rastro_grava_trabalho "$d" feature-b regra_violada hook aviso "tentativa cruzada" "[]"
+  depois="$(o_chama "$1" "$d" sessao-a rastro_reivindicacoes_da_sessao "$d" sessao-a)"
+  [ "$depois" = "$esperado" ] \
+    && [ "$(o_chama "$1" "$d" sessao-a rastro_trabalho_da_sessao "$d")" = feature-a ] \
+    && [ "$(o_linhas "$d/docs/eventos/feature-a.jsonl")" -eq 3 ]
+}
+o_g() { # sessao sem reivindicacao: sem-trabalho, e nenhuma feature e tocada
+  local d="$OF_DIR/g" a b
+  o_fx "$d" feature-b
+  a="$(o_ck "$d/docs/eventos/feature-a.jsonl")"; b="$(o_ck "$d/docs/eventos/feature-b.jsonl")"
+  o_chama "$1" "$d" sessao-x rastro_grava "$d" regra_violada hook aviso "sem trabalho" "[]"
+  [ "$(o_ck "$d/docs/eventos/feature-a.jsonl")" = "$a" ] \
+    && [ "$(o_ck "$d/docs/eventos/feature-b.jsonl")" = "$b" ] \
+    && [ "$(grep -c '"trabalho_id":"sem-trabalho"' "$d/docs/eventos/sem-trabalho.jsonl")" -eq 1 ]
+}
+o_h() { # trabalho deterministico pelo CAMINHO (sem-placeholder-no-plano)
+  local d="$OF_DIR/h" a alvo
+  o_fx "$d" feature-a                       # feature-a e a mais recente no disco
+  alvo="$d/docs/sprintx/features/feature-b/00-PLANEJAMENTO.md"
+  printf -- '---\nkind: planejamento\ntrabalho_id: feature-b\n---\nobjetivo: {{marcador}}\n' > "$alvo"
+  a="$(o_ck "$d/docs/eventos/feature-a.jsonl")"
+  o_hook "$1" "$d" sprintx/sem-placeholder-no-plano.sh \
+    docs/sprintx/features/feature-b/00-PLANEJAMENTO.md sessao-x
+  [ "$(grep -c '"trabalho_id":"feature-b".*placeholder' "$d/docs/eventos/feature-b.jsonl")" -eq 1 ] \
+    && [ "$(o_ck "$d/docs/eventos/feature-a.jsonl")" = "$a" ] \
+    && [ "$(o_linhas "$d/docs/eventos/sem-trabalho.jsonl")" -eq 0 ]
+}
+o_i() { # trabalho deterministico pelo FRONTMATTER (task-reivindicada)
+  local d="$OF_DIR/i" a j
+  o_fx "$d" feature-a                       # feature-a e a mais recente no disco
+  n_plano "$OF_DIR/i-novo.md" feature-b 01 <<EOF
+$(n_task T-01.01 em_andamento src/b.ts)
+EOF
+  j="$(o_json_write "$d" "$d/docs/sprintx/features/feature-b/sprint-01/tasks.md" < "$OF_DIR/i-novo.md")"
+  a="$(o_ck "$d/docs/eventos/feature-a.jsonl")"
+  O_SAIDA="$(printf '%s' "$j" | (cd "$d" && EXPX_SESSAO=sessao-x bash "$1/sprintx/task-reivindicada.sh") 2>&1)"; O_RC=$?
+  # T-01.01 de feature-b esta aberta por sessao-b: sessao-x e avisada, e o
+  # evento vai para o rastro de feature-b — o trabalho_id do proprio tasks.md.
+  [ "$O_RC" -eq 0 ] && printf '%s' "$O_SAIDA" | grep -qF 'sessao-b' \
+    && [ "$(grep -c '"trabalho_id":"feature-b".*regra_violada' "$d/docs/eventos/feature-b.jsonl")" -eq 1 ] \
+    && [ "$(o_ck "$d/docs/eventos/feature-a.jsonl")" = "$a" ]
+}
+
+o_j() { # arvore-limpa: o escopo comparado e o do trabalho da SESSAO
+  local d="$OF_DIR/j" b
+  o_fx "$d" feature-b
+  # este hook roda `git status`, entao aqui a fixture precisa de repo de verdade
+  rm -rf "$d/.git"; git init -q --template= -b main "$d" >/dev/null 2>&1
+  : > "$d/src/a.ts"                 # declarado na T-01.01 de feature-a
+  : > "$d/src/fora-do-plano.ts"     # de task nenhuma
+  b="$(o_ck "$d/docs/eventos/feature-b.jsonl")"
+  O_SAIDA="$(printf '{"cwd":"%s","tool_input":{"command":"npm test"}}' "$d" \
+    | (cd "$d" && EXPX_SESSAO=sessao-a bash "$1/sprintx/arvore-limpa-antes-da-suite.sh") 2>&1)"; O_RC=$?
+  [ "$O_RC" -eq 0 ] || return 1
+  printf '%s' "$O_SAIDA" | grep -qF 'src/fora-do-plano.ts' || return 1
+  printf '%s' "$O_SAIDA" | grep -qF ' src/a.ts' && return 1
+  grep -q '"trabalho_id":"feature-a".*"detalhe":"arvore contaminada"' "$d/docs/eventos/feature-a.jsonl" || return 1
+  [ "$(o_ck "$d/docs/eventos/feature-b.jsonl")" = "$b" ] || return 1
+  # sessao sem reivindicacao: nao ha escopo a comparar, e o hook sai calado
+  O_SAIDA="$(printf '{"cwd":"%s","tool_input":{"command":"npm test"}}' "$d" \
+    | (cd "$d" && EXPX_SESSAO=sessao-x bash "$1/sprintx/arvore-limpa-antes-da-suite.sh") 2>&1)"; O_RC=$?
+  [ "$O_RC" -eq 0 ] && [ -z "$O_SAIDA" ]
+}
+
+OHR="$H"
+bash -n "$H/comum/rastro.sh"; afirma "o0-rastro-sintaxe" $? "bash -n"
+for par in \
+  o_a:oa-destino-e-o-trabalho-da-sessao-nao-o-mtime \
+  o_b:ob-mtimes-invertidos-resultado-identico \
+  o_c:oc-terceira-feature-recente-nao-muda-nada \
+  o_d:od-duas-sessoes-dois-arquivos-sem-cruzamento \
+  o_e:oe-divergencia-nao-grava-em-a-nem-em-b \
+  o_f:of-retomada-evento-posterior-nao-teleporta \
+  o_g:og-sem-reivindicacao-vai-para-sem-trabalho \
+  o_h:oh-trabalho-pelo-caminho-do-plano \
+  o_i:oi-trabalho-pelo-frontmatter-do-tasks-md \
+  o_j:oj-arvore-limpa-compara-o-escopo-do-trabalho-da-sessao; do
+  "${par%%:*}" "$OHR"; afirma "${par#*:}" $? "${par%%:*}"
+done
+
+# Nenhuma producao pode voltar a escolher destino por mtime.
+[ "$(grep -rln 'rastro_trabalho_id' "$H/comum" "$H/sprintx" "$SK/scripts" 2>/dev/null | wc -l)" -eq 0 ]
+afirma "o-sem-rastro-trabalho-id" $? "a funcao que escolhia por mtime nao existe mais"
+[ "$(grep -rln -- '-nt ' "$H/comum" "$H/sprintx" 2>/dev/null | wc -l)" -eq 0 ]
+afirma "o-sem-comparacao-de-mtime-nos-hooks" $? "nenhum hook compara data de arquivo"
+
+# ------------------------------------------------------------------ mutantes
+OM="$OF_DIR/mut"
+o_copia() { # o_copia <nome> — devolve a raiz de hooks copiada
+  local d="$OM/$1"; rm -rf "$d"; mkdir -p "$d/sprintx" "$d/comum"
+  cp "$H/comum/rastro.sh" "$d/comum/rastro.sh"
+  cp "$H/sprintx/escopo-da-task.sh" "$H/sprintx/task-reivindicada.sh" \
+     "$H/sprintx/sem-placeholder-no-plano.sh" "$H/sprintx/arvore-limpa-antes-da-suite.sh" "$d/sprintx/"
+  printf '%s' "$d"
+}
+o_muta() { muta_lit "$1" "$1.m" "$2" "$3" && mv "$1.m" "$1"; }
+o_mutante() { # o_mutante <nome> <rc geracao> <raiz> <caso que TEM de matar>...
+  local nome="$1" rc="$2" s="$3" c vivos=""; shift 3
+  if [ "$rc" -eq 0 ]; then for c in "$@"; do "$c" "$s" && vivos="$vivos$c "; done; fi
+  [ "$rc" -eq 0 ] && [ -z "$vivos" ]
+  afirma "$nome" $? "morto por: $* ${vivos:+— SOBREVIVEU a: $vivos}(rc geracao=$rc)"
+}
+CASOS_O="o_a o_b o_c o_d o_e o_f o_g o_h o_i o_j"
+
+OMC="$(o_copia controle)"; vivoso=""
+for c in $CASOS_O; do "$c" "$OMC" || vivoso="$vivoso$c "; done
+[ -z "$vivoso" ]; afirma "om-controle-copia-intacta-sobrevive" $? "${vivoso:-nenhum caso reprova a copia sem mutacao}"
+
+L_SESSAO='  local raiz="$1" ses="${2:-}"'
+L_MTIME='  local raiz="$1" ses="${2:-}"; local f mais_novo=""; for f in "$raiz"/docs/sprintx/features/*/; do [ -d "$f" ] || continue; if [ -z "$mais_novo" ] || [ "$f" -nt "$mais_novo" ]; then mais_novo="$f"; fi; done; [ -n "$mais_novo" ] && basename "${mais_novo%/}"; return 0'
+OMUT="$(o_copia m1)"; o_muta "$OM/m1/comum/rastro.sh" "$L_SESSAO" "$L_MTIME"
+o_mutante "om-mutante-1-destino-por-mtime" $? "$OMUT" o_a o_d o_i o_j
+
+OMUT="$(o_copia m2)"; o_muta "$OM/m2/comum/rastro.sh" \
+  '  local raiz="$1" pedido="$2" evento="$3"' '  local raiz="$1" pedido="-" evento="$3"'
+o_mutante "om-mutante-2-ignora-trabalho-explicito" $? "$OMUT" o_h o_i
+
+OMUT="$(o_copia m3)"; o_muta "$OM/m3/comum/rastro.sh" '      tid="$pedido"' \
+  '      tid="$(cd "$dir" 2>/dev/null && ls -t *.jsonl 2>/dev/null | head -1)"; tid="${tid%.jsonl}"; [ -n "$tid" ] || tid="$pedido"'
+o_mutante "om-mutante-3-grava-na-feature-mais-recente" $? "$OMUT" o_a o_i
+
+OMUT="$(o_copia m4)"; o_muta "$OM/m4/comum/rastro.sh" \
+  '    elif [ -n "$sessao_tid" ] && [ "$sessao_tid" != "$pedido" ]; then' '    elif false; then'
+o_mutante "om-mutante-4-aceita-trabalho-divergente" $? "$OMUT" o_e
+
+# Sem o filtro de sessao no helper, as duas sessoes passam a enxergar as duas
+# reivindicacoes — e e assim que dois trabalhos cruzariam o mesmo arquivo.
+OMUT="$(o_copia m5)"; o_muta "$OM/m5/comum/rastro.sh" \
+  'if (dono[k] == "" || dono[k] != ses) continue' 'if (dono[k] == "") continue'
+o_mutante "om-mutante-5-sessoes-cruzam-arquivos" $? "$OMUT" o_a o_d o_f o_j
+
+DSF5="$SK/DECISOES-DA-SKILL.md"
+[ "$(grep -c '^| DS-155 |' "$DSF5")" -eq 1 ] && tem "$DSF5" 'rastro_grava_trabalho' \
+  && tem "$SK/references/08-rastro.md" 'Em qual arquivo o evento entra' \
+  && tem "$SK/references/08-rastro.md" 'nunca seleciona o destino'
+afirma "o-ds155-registrada" $? "DECISOES-DA-SKILL.md e 08-rastro.md"
+
+rm -rf "$OF_DIR"
 
 echo
 echo "  $ok ok, $falhou falhas, $pulado pulados"

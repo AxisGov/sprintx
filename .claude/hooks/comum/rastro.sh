@@ -102,27 +102,68 @@ rastro_tool_input_get() {
 
 # ------------------------------------------------------------ trabalho_id
 
-# Descobre o trabalho_id (= slug da feature) sem manter estado proprio:
-# e a feature com o ORQUESTRADOR.md modificado mais recentemente.
-# Sem nenhuma feature em disco, devolve "sem-trabalho".
-rastro_trabalho_id() {
-  local raiz="$1" f mais_novo=""
-  local base="$raiz/docs/sprintx/features"
-  [ -d "$base" ] || { printf 'sem-trabalho'; return 0; }
-  for f in "$base"/*/ORQUESTRADOR.md; do
-    [ -f "$f" ] || continue
-    if [ -z "$mais_novo" ] || [ "$f" -nt "$mais_novo" ]; then mais_novo="$f"; fi
-  done
-  if [ -z "$mais_novo" ]; then
-    # Fase anterior a F4: ainda nao ha ORQUESTRADOR. Usa a pasta mais recente.
-    for f in "$base"/*/; do
-      [ -d "$f" ] || continue
-      if [ -z "$mais_novo" ] || [ "$f" -nt "$mais_novo" ]; then mais_novo="$f"; fi
-    done
-    [ -n "$mais_novo" ] && { basename "${mais_novo%/}"; return 0; }
-    printf 'sem-trabalho'; return 0
-  fi
-  basename "$(dirname "$mais_novo")"
+# Um trabalho_id e o slug da feature: o mesmo nome do diretorio da feature e do
+# arquivo de eventos. Barra, `..` e vazio nunca passam — um trabalho_id torto
+# escolheria um destino fora de docs/eventos/.
+rastro_trabalho_valido() {
+  case "${1:-}" in
+    ''|.|..)           return 1 ;;
+    .*|-*)             return 1 ;;
+    *[!A-Za-z0-9._-]*) return 1 ;;
+  esac
+  return 0
+}
+
+# rastro_trabalho_da_sessao <raiz> [sessao]
+#
+# O trabalho CORRENTE desta sessao, pela identidade normativa da DS-153:
+# trabalho + task formam uma unidade, e quem amarra a sessao a essa unidade e
+# a reivindicacao ATIVA no rastro. Exatamente uma reivindicacao, coerente
+# (`ok`), devolve o trabalho; zero, duas-ou-mais, ou divergente devolvem
+# vazio — a sessao nao tem trabalho corrente inequivoco, e a maquina nunca
+# escolhe um por conta propria.
+#
+# Nao ha mtime aqui, e e deliberado (DS-155): "que feature mexeu por ultimo no
+# disco" e outra pergunta, e a resposta dela nunca escolhe destino de rastro.
+rastro_trabalho_da_sessao() {
+  local raiz="$1" ses="${2:-}"
+  [ -n "$ses" ] || ses="$(rastro_sessao)"
+  local linhas
+  linhas="$(rastro_reivindicacoes_da_sessao "$raiz" "$ses" | awk 'NF')"
+  [ -n "$linhas" ] || return 0
+  [ "$(printf '%s\n' "$linhas" | wc -l | tr -d ' ')" -eq 1 ] || return 0
+  local tid coer
+  tid="$(printf '%s' "$linhas" | cut -f1)"
+  coer="$(printf '%s' "$linhas" | cut -f3)"
+  [ "$coer" = ok ] || return 0
+  rastro_trabalho_valido "$tid" || return 0
+  printf '%s' "$tid"
+}
+
+# rastro_trabalho_do_texto <texto>
+#
+# O `trabalho_id` declarado no frontmatter de um artefato da skill (tasks.md,
+# 00-PLANEJAMENTO.md, ...). Deterministico: sai do proprio conteudo, nao do
+# disco em volta. Vazio quando a chave nao esta la ou o valor nao e um slug.
+rastro_trabalho_do_texto() {
+  local tid
+  tid="$(printf '%s' "$1" | tr -d '\r' | awk '
+    NR == 1 && $0 != "---" { exit }
+    NR == 1 { next }
+    $0 == "---" { exit }
+    /^trabalho_id:[ \t]*/ {
+      sub(/^trabalho_id:[ \t]*/, ""); sub(/[ \t]+$/, "")
+      gsub(/^"|"$/, ""); print; exit
+    }')"
+  rastro_trabalho_valido "$tid" || return 0
+  printf '%s' "$tid"
+}
+
+# rastro_trabalho_do_arquivo <arquivo>
+# O mesmo, lido do frontmatter de um artefato em disco.
+rastro_trabalho_do_arquivo() {
+  [ -f "$1" ] || return 0
+  rastro_trabalho_do_texto "$(head -40 "$1" 2>/dev/null)"
 }
 
 # ------------------------------------------------------------------ modo
@@ -161,54 +202,111 @@ rastro_modo() {
 
 # ---------------------------------------------------------------- gravacao
 
-# rastro_grava <raiz> <evento> <origem> <resultado> <detalhe> [arquivos_json] [extras_json]
+# _rastro_linha <arquivo> <trabalho_id> <evento> <origem> <resultado> <detalhe> <arquivos_json> <extras_json>
 #
-# Grava UMA linha JSON em docs/eventos/<trabalho_id>.jsonl, no formato exato
-# do contrato. As chaves saem sempre todas, na ordem do contrato, e chave
-# ausente vai como null — nunca omitida.
+# Uma linha JSON no formato exato do contrato, acrescentada ao arquivo dado.
+# As chaves saem sempre todas, na ordem do contrato, e chave ausente vai como
+# null — nunca omitida. Rotacao: acima de 5 MB o arquivo vira
+# <trabalho_id>.1.jsonl (contrato), e a politica nao muda com o destino.
+_rastro_linha() {
+  local arq="$1" tid="$2" evento="$3" origem="$4" resultado="$5" detalhe="$6"
+  local arquivos="$7" extras="$8"
+
+  if [ -f "$arq" ]; then
+    local tam
+    tam=$(wc -c < "$arq" 2>/dev/null | tr -d ' ')
+    if [ -n "$tam" ] && [ "$tam" -gt 5242880 ] 2>/dev/null; then
+      mv -f "$arq" "${arq%.jsonl}.1.jsonl" 2>/dev/null || true
+    fi
+  fi
+
+  local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  local linha
+  linha="{\"ts\":\"$ts\""
+  linha="$linha,\"expx_eventos\":1"
+  linha="$linha,\"trabalho_id\":\"$(rastro_json_escape "$tid")\""
+  linha="$linha,\"ferramenta\":\"sprintx\""
+  linha="$linha,\"origem\":\"$origem\""
+  linha="$linha,\"evento\":\"$evento\""
+  linha="$linha,\"fase\":${RASTRO_FASE:-null}"
+  linha="$linha,\"task\":${RASTRO_TASK:-null}"
+  linha="$linha,\"agente\":\"${RASTRO_AGENTE:-principal}\""
+  linha="$linha,\"resultado\":\"$resultado\""
+  linha="$linha,\"detalhe\":\"$(rastro_json_escape "$detalhe")\""
+  linha="$linha,\"arquivos\":$arquivos"
+  [ -n "$extras" ] && linha="$linha,$extras"
+  linha="$linha}"
+
+  printf '%s\n' "$linha" >> "$arq" 2>/dev/null || true
+}
+
+# rastro_grava_trabalho <raiz> <trabalho_id|-> <evento> <origem> <resultado> <detalhe> [arquivos_json] [extras_json]
+#
+# Grava UMA linha JSON em docs/eventos/<trabalho_id>.jsonl — no rastro do
+# trabalho DADO, nunca no da feature que por acaso mexeu por ultimo no disco.
+#
+# O segundo argumento e o trabalho corrente que o chamador ja conhece de forma
+# deterministica: a reivindicacao da sessao, o `trabalho_id` do frontmatter do
+# artefato, ou o slug do proprio caminho sendo escrito. `-` significa "este
+# chamador nao tem contexto de trabalho": o destino sai entao do trabalho
+# corrente da sessao (`rastro_trabalho_da_sessao`) e, sem ele, de
+# `sem-trabalho`. mtime nao participa de nenhum dos dois caminhos (DS-155).
+#
+# Coerencia, fail-closed: trabalho explicito que contradiz o trabalho que o
+# rastro prova para esta sessao e erro de CONTEXTO. Nada e gravado em nenhum
+# dos dois — a maquina nunca escolhe entre A e B. A incoerencia sai em
+# docs/eventos/sem-trabalho.jsonl, para o painel ver que o evento existiu e
+# por que nao foi atribuido a trabalho nenhum.
 #
 # Falha aberta: qualquer erro aqui e engolido. Um hook nunca trava o trabalho
 # por nao conseguir escrever o proprio rastro.
-rastro_grava() {
-  local raiz="$1" evento="$2" origem="$3" resultado="$4" detalhe="$5"
-  local arquivos="${6:-[]}" extras="${7:-}"
+rastro_grava_trabalho() {
+  local raiz="$1" pedido="$2" evento="$3" origem="$4" resultado="$5" detalhe="$6"
+  local arquivos="${7:-[]}" extras="${8:-}"
 
   {
     local dir="$raiz/docs/eventos"
     mkdir -p "$dir" 2>/dev/null || return 0
 
-    local tid; tid="$(rastro_trabalho_id "$raiz")"
-    local arq="$dir/$tid.jsonl"
-
-    # Rotacao: acima de 5 MB o arquivo vira <trabalho_id>.1.jsonl (contrato).
-    if [ -f "$arq" ]; then
-      local tam
-      tam=$(wc -c < "$arq" 2>/dev/null | tr -d ' ')
-      if [ -n "$tam" ] && [ "$tam" -gt 5242880 ] 2>/dev/null; then
-        mv -f "$arq" "$dir/$tid.1.jsonl" 2>/dev/null || true
-      fi
+    # O trabalho da sessao nao muda durante o processo do hook: resolve uma vez
+    # (varre docs/eventos/*.jsonl) e reusa.
+    local sessao_tid
+    if [ -n "${RASTRO_TRABALHO_DA_SESSAO+x}" ]; then
+      sessao_tid="$RASTRO_TRABALHO_DA_SESSAO"
+    else
+      sessao_tid="$(rastro_trabalho_da_sessao "$raiz")"
+      RASTRO_TRABALHO_DA_SESSAO="$sessao_tid"
     fi
 
-    local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    local linha
-    linha="{\"ts\":\"$ts\""
-    linha="$linha,\"expx_eventos\":1"
-    linha="$linha,\"trabalho_id\":\"$(rastro_json_escape "$tid")\""
-    linha="$linha,\"ferramenta\":\"sprintx\""
-    linha="$linha,\"origem\":\"$origem\""
-    linha="$linha,\"evento\":\"$evento\""
-    linha="$linha,\"fase\":${RASTRO_FASE:-null}"
-    linha="$linha,\"task\":${RASTRO_TASK:-null}"
-    linha="$linha,\"agente\":\"${RASTRO_AGENTE:-principal}\""
-    linha="$linha,\"resultado\":\"$resultado\""
-    linha="$linha,\"detalhe\":\"$(rastro_json_escape "$detalhe")\""
-    linha="$linha,\"arquivos\":$arquivos"
-    [ -n "$extras" ] && linha="$linha,$extras"
-    linha="$linha}"
+    local tid
+    if [ -z "$pedido" ] || [ "$pedido" = "-" ]; then
+      tid="$sessao_tid"
+      [ -n "$tid" ] || tid="sem-trabalho"
+    elif ! rastro_trabalho_valido "$pedido"; then
+      _rastro_linha "$dir/sem-trabalho.jsonl" sem-trabalho acao_bloqueada "$origem" bloqueado \
+        "trabalho_id_invalido: $evento pedido para '$pedido'" '[]' ''
+      return 0
+    elif [ -n "$sessao_tid" ] && [ "$sessao_tid" != "$pedido" ]; then
+      _rastro_linha "$dir/sem-trabalho.jsonl" sem-trabalho acao_bloqueada "$origem" bloqueado \
+        "contexto_de_trabalho_divergente: $evento pedido em '$pedido', a sessao reivindica '$sessao_tid'" '[]' ''
+      return 0
+    else
+      tid="$pedido"
+    fi
 
-    printf '%s\n' "$linha" >> "$arq" 2>/dev/null || true
+    _rastro_linha "$dir/$tid.jsonl" "$tid" "$evento" "$origem" "$resultado" "$detalhe" "$arquivos" "$extras"
   } 2>/dev/null || true
   return 0
+}
+
+# rastro_grava <raiz> <evento> <origem> <resultado> <detalhe> [arquivos_json] [extras_json]
+#
+# Forma curta para o chamador que NAO conhece o trabalho: o destino e o
+# trabalho corrente da sessao. Quem conhece o trabalho chama
+# `rastro_grava_trabalho` e o declara.
+rastro_grava() {
+  local raiz="$1"; shift
+  rastro_grava_trabalho "$raiz" - "$@"
 }
 
 # ------------------------------------------------------------------ saida
@@ -287,9 +385,9 @@ rastro_sessao_dona() {
 #
 # Por que o trabalho vem daqui e nao do id da task: `T-01.01` e local a
 # feature e se repete entre features. So o rastro amarra sessao -> trabalho
-# -> task de forma inequivoca (DS-153). `rastro_trabalho_id()` responde outra
-# pergunta — "qual feature esta ativa no disco" (mtime) — e nao serve como
-# dono de sessao.
+# -> task de forma inequivoca (DS-153). Nenhum mtime responde isso: "qual
+# feature mexeu por ultimo no disco" e outra pergunta, e ela nao escolhe nem
+# dono de sessao nem destino de gravacao (DS-155).
 #
 # Fonte normativa do trabalho: o NOME do arquivo de eventos, que o contrato
 # define como `docs/eventos/<trabalho_id>.jsonl` (o sufixo de rotacao `.N` e

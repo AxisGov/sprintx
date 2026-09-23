@@ -33,8 +33,15 @@ NOVO="$(rastro_tool_input_get "$ENTRADA" content)"
 [ -n "$NOVO" ] || NOVO="$(rastro_tool_input_get "$ENTRADA" new_string)"
 [ -n "$NOVO" ] || exit 0
 
-TRABALHO="$(rastro_trabalho_id "$RAIZ")"
-[ "$TRABALHO" != "sem-trabalho" ] || exit 0
+# O trabalho deste tasks.md sai do PROPRIO artefato: o `trabalho_id` do
+# frontmatter que esta sendo gravado, ou o do arquivo em disco quando a
+# gravacao e so um trecho (Edit). So depois disso, o trabalho corrente da
+# sessao. mtime nunca decide (DS-155): "a feature que mexeu por ultimo no
+# disco" nao e "a feature deste tasks.md".
+TRABALHO="$(rastro_trabalho_do_texto "$NOVO")"
+[ -n "$TRABALHO" ] || TRABALHO="$(rastro_trabalho_do_arquivo "$ALVO")"
+[ -n "$TRABALHO" ] || TRABALHO="$(rastro_trabalho_da_sessao "$RAIZ")"
+[ -n "$TRABALHO" ] || exit 0
 
 RASTRO_ARQ="$RAIZ/docs/eventos/$TRABALHO.jsonl"
 [ -f "$RASTRO_ARQ" ] || exit 0
@@ -108,9 +115,9 @@ MODO="$(rastro_modo "$RAIZ" task-reivindicada metodo)"
 [ "$MODO" = "desligado" ] && exit 0
 
 if [ "$MODO" = "bloqueio" ]; then
-  rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "$TASK_REIVINDICADA reivindicada por $DONA" "[]"
+  rastro_grava_trabalho "$RAIZ" "$TRABALHO" acao_bloqueada hook bloqueado "$TASK_REIVINDICADA reivindicada por $DONA" "[]"
   rastro_bloqueia "$MSG"
 fi
 
-rastro_grava "$RAIZ" regra_violada hook aviso "$TASK_REIVINDICADA reivindicada por $DONA" "[]"
+rastro_grava_trabalho "$RAIZ" "$TRABALHO" regra_violada hook aviso "$TASK_REIVINDICADA reivindicada por $DONA" "[]"
 rastro_aviso_ao_modelo PreToolUse "$MSG"

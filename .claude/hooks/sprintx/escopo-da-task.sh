@@ -87,9 +87,9 @@ MODO="$(rastro_modo "$RAIZ" escopo-da-task metodo)"
 # da task sozinho nunca identifica o plano (DS-153). "Existe uma task
 # em_andamento" tambem nao decide o dono: pode haver mais de uma task em
 # andamento (paralelismo). O payload do hook nao traz identificador de
-# trabalho — so `cwd` e `tool_input` —, e `rastro_trabalho_id()` responde
-# "que feature mexeu por ultimo no disco" (mtime), nao "qual e a desta
-# sessao": nenhum dos dois entra aqui.
+# trabalho — so `cwd` e `tool_input` —, e mtime responde "que feature mexeu
+# por ultimo no disco", nao "qual e a desta sessao": nenhum dos dois entra
+# aqui, nem para decidir escopo nem para escolher onde gravar (DS-155).
 MINHA_SESSAO="$(rastro_sessao)"
 MINHAS="$(rastro_reivindicacoes_da_sessao "$RAIZ" "$MINHA_SESSAO")"
 N_MINHAS="$(printf '%s\n' "$MINHAS" | awk 'NF' | wc -l | tr -d ' ')"
@@ -101,6 +101,8 @@ N_MINHAS="$(printf '%s\n' "$MINHAS" | awk 'NF' | wc -l | tr -d ' ')"
 if [ "$N_MINHAS" -ne 1 ]; then
   MSG_AMB="sprintx/escopo-da-task: sessao_ambigua — esta sessao nao foi associada de forma inequivoca a uma task em andamento pelo rastro ($N_MINHAS correspondencia(s) para a sessao $MINHA_SESSAO em $RAIZ/docs/eventos/*.jsonl). Por contrato a edicao fica bloqueada; a maquina nunca escolhe a primeira task em_andamento que encontra. Reivindique a task (evento task_iniciada no rastro) antes de editar."
   EXTRAS_AMB="\"condicao\":\"sessao_ambigua\",\"tasks_candidatas\":$N_MINHAS"
+  # Sem trabalho corrente inequivoco nao ha rastro de trabalho onde gravar: a
+  # forma curta manda para `sem-trabalho`, que e exatamente o que aconteceu.
   rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "sessao_ambigua" "[]" "$EXTRAS_AMB"
   rastro_bloqueia "$MSG_AMB"
 fi
@@ -116,7 +118,7 @@ COERENCIA="$(printf '%s' "$PAR_SESSAO" | cut -f3)"
 if [ "$COERENCIA" != "ok" ]; then
   MSG_DIV="sprintx/escopo-da-task: contexto_de_trabalho_divergente — a reivindicacao desta sessao esta em docs/eventos/$TRABALHO.jsonl mas o proprio evento declara outro trabalho_id. Por contrato a edicao fica bloqueada: o trabalho corrente precisa ser inequivoco antes de qualquer decisao de escopo."
   EXTRAS_DIV="\"condicao\":\"contexto_de_trabalho_divergente\",\"trabalho\":\"$(rastro_json_escape "$TRABALHO")\""
-  rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "contexto_de_trabalho_divergente" "[]" "$EXTRAS_DIV"
+  rastro_grava_trabalho "$RAIZ" "$TRABALHO" acao_bloqueada hook bloqueado "contexto_de_trabalho_divergente" "[]" "$EXTRAS_DIV"
   rastro_bloqueia "$MSG_DIV"
 fi
 
@@ -131,7 +133,7 @@ TASKS_CANON="$(find "$RAIZ/docs/sprintx/features/$TRABALHO" -maxdepth 3 -name ta
 TASKS_LEGADO="$(find "$RAIZ/docs/$TRABALHO" -maxdepth 3 -name tasks.md -type f 2>/dev/null | LC_ALL=C sort)"
 
 _para_por_contrato() { # _para_por_contrato <condicao> <mensagem>
-  rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "$1" "[\"$(rastro_json_escape "$REL")\"]" \
+  rastro_grava_trabalho "$RAIZ" "$TRABALHO" acao_bloqueada hook bloqueado "$1" "[\"$(rastro_json_escape "$REL")\"]" \
     "\"condicao\":\"$1\",\"trabalho\":\"$(rastro_json_escape "$TRABALHO")\",\"task_atual\":\"$(rastro_json_escape "$CURRENT_ID")\""
   rastro_bloqueia "sprintx/escopo-da-task: $1 — $2"
 }
@@ -264,7 +266,7 @@ if [ -n "$TASKS_IRMAS" ]; then
   EXTRAS="\"condicao\":\"arquivo_de_task_irma\",\"task_atual\":\"$(rastro_json_escape "$CURRENT_ID")\",\"tasks_irmas\":[$IRMAS_JSON]"
 
   RASTRO_TASK="\"$CURRENT_ID\""
-  rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "arquivo_de_task_irma" "[\"$(rastro_json_escape "$REL")\"]" "$EXTRAS"
+  rastro_grava_trabalho "$RAIZ" "$TRABALHO" acao_bloqueada hook bloqueado "arquivo_de_task_irma" "[\"$(rastro_json_escape "$REL")\"]" "$EXTRAS"
   rastro_bloqueia "$MSG_IRMA"
 fi
 
@@ -279,9 +281,9 @@ MSG="sprintx/escopo-da-task: a task $CURRENT_ID esta em andamento e declarou est
 RASTRO_TASK="\"$CURRENT_ID\""
 
 if [ "$MODO" = "bloqueio" ]; then
-  rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "fora do escopo da task $CURRENT_ID" "[\"$(rastro_json_escape "$REL")\"]"
+  rastro_grava_trabalho "$RAIZ" "$TRABALHO" acao_bloqueada hook bloqueado "fora do escopo da task $CURRENT_ID" "[\"$(rastro_json_escape "$REL")\"]"
   rastro_bloqueia "$MSG"
 fi
 
-rastro_grava "$RAIZ" regra_violada hook aviso "fora do escopo da task $CURRENT_ID" "[\"$(rastro_json_escape "$REL")\"]"
+rastro_grava_trabalho "$RAIZ" "$TRABALHO" regra_violada hook aviso "fora do escopo da task $CURRENT_ID" "[\"$(rastro_json_escape "$REL")\"]"
 rastro_aviso_ao_modelo PreToolUse "$MSG"

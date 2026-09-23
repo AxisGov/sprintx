@@ -28,6 +28,12 @@ case "$ALVO" in
   */docs/sprintx/features/*) ;;
   *) exit 0 ;;
 esac
+
+# O trabalho sai do PROPRIO caminho: em docs/sprintx/features/<slug>/... o
+# slug e o trabalho_id (references/08-rastro.md). Deterministico, sem mtime
+# e sem depender de qual feature mexeu por ultimo no disco (DS-155).
+RESTO="${ALVO#*/docs/sprintx/features/}"
+TRABALHO="${RESTO%%/*}"
 [ -f "$ALVO" ] || exit 0
 
 # O marcador dos templates. Ignora o proprio template (que DEVE ter marcador).
@@ -41,5 +47,5 @@ ACHADOS="$(grep -o '{{[^}]*}}' "$ALVO" 2>/dev/null | sort -u | head -5 | tr '\n'
 REL="${ALVO#"$RAIZ"/}"
 MSG="sprintx/sem-placeholder-no-plano: $REL ainda tem marcador de template nao substituido: $ACHADOS. Um arquivo do plano com {{marcador}} esta gerado pela metade — substitua tudo antes de seguir para a proxima fase."
 
-rastro_grava "$RAIZ" regra_violada hook aviso "placeholder nao substituido em $REL" "[\"$(rastro_json_escape "$REL")\"]"
+rastro_grava_trabalho "$RAIZ" "$TRABALHO" regra_violada hook aviso "placeholder nao substituido em $REL" "[\"$(rastro_json_escape "$REL")\"]"
 rastro_aviso_ao_modelo PostToolUse "$MSG"
