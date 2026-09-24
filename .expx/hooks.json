@@ -6,7 +6,7 @@
       "modo": "bloqueio",
       "tipo": "seguranca"
     },
-    "git-perigoso": {
+    "sprintx/git-perigoso": {
       "modo": "bloqueio",
       "tipo": "seguranca"
     },

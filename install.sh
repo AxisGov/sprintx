@@ -68,14 +68,37 @@ copy_commands() {
 # A MESCLA e a parte delicada: settings.json e arquivo do usuario. Nunca
 # sobrescrevemos — so acrescentamos o bloco "hooks" quando ele nao existe,
 # e avisamos quando ja existe, para o usuario decidir.
+#
+# Os hooks vao arquivo por arquivo, sem apagar .claude/hooks/ inteiro: outras skills
+# (a mergex) publicam hooks no mesmo lugar, inclusive em comum/, e a ordem de instalacao
+# nao pode decidir quem sobrevive. So o namespace sprintx/ e recriado do zero (DS-158).
+copy_hooks_tree() {
+  local root="$1" rel
+  run "mkdir -p '$root/.claude/hooks'"
+  run "rm -rf '$root/.claude/hooks/sprintx'"
+  while IFS= read -r rel; do
+    rel="${rel#./}"
+    run "mkdir -p '$root/.claude/hooks/$(dirname "$rel")'"
+    run "cp '$HOOKS_SRC/$rel' '$root/.claude/hooks/$rel'"
+    case "$rel" in *.sh) run "chmod +x '$root/.claude/hooks/$rel'" ;; esac
+  done <<EOF
+$(cd "$HOOKS_SRC" && find . -type f | LC_ALL=C sort)
+EOF
+  # Legado: ate a DS-158 a sprintx publicava comum/git-perigoso.sh. Sai so o arquivo DELA,
+  # reconhecido pelo conteudo — o da mergex, no mesmo caminho, fica onde esta.
+  if [ -f "$root/.claude/hooks/comum/git-perigoso.sh" ] \
+     && grep -q 'sprintx/git-perigoso: comando barrado' "$root/.claude/hooks/comum/git-perigoso.sh"; then
+    run "rm -f '$root/.claude/hooks/comum/git-perigoso.sh'"
+  fi
+}
+
 copy_hooks_claude() {
   local root="$1" cfg="$1/.claude/settings.json"
   run "mkdir -p '$root/.claude'"
-  run "rm -rf '$root/.claude/hooks' '$root/.claude/agents'"
-  run "cp -R '$HOOKS_SRC' '$root/.claude/hooks'"
+  run "rm -rf '$root/.claude/agents'"
+  copy_hooks_tree "$root"
   run "cp -R '$AGENTS_SRC' '$root/.claude/agents'"
-  run "chmod +x '$root/.claude/hooks'/*/*.sh"
-  say "hooks    -> $root/.claude/hooks/"
+  say "hooks    -> $root/.claude/hooks/ (sprintx/ e os arquivos da sprintx em comum/)"
   say "agentes  -> $root/.claude/agents/"
 
   # .expx/hooks.json guarda o modo de cada hook. Nunca sobrescreve: o modo
@@ -95,6 +118,13 @@ copy_hooks_claude() {
     say "settings -> $cfg JA TEM bloco 'hooks': nao foi tocado."
     say "            Para ativar, mescle a mao o bloco de:"
     say "            $SRC/.claude/settings.json"
+    # Registro de antes da DS-158 (ou de outra skill): sem a linha do caminho novo, o
+    # git-perigoso da sprintx nao roda — e o comum/git-perigoso.sh antigo dela ja saiu.
+    if ! grep -q 'hooks/sprintx/git-perigoso.sh' "$cfg" 2>/dev/null; then
+      say "ATENCAO:   $cfg nao registra .claude/hooks/sprintx/git-perigoso.sh."
+      say "            O git-perigoso da sprintx mudou de comum/ para sprintx/ (DS-158):"
+      say "            registre o caminho novo, ou ele nao roda."
+    fi
   else
     say "settings -> $cfg existe sem bloco 'hooks'."
     say "            Para ativar, acrescente o bloco de:"
@@ -110,11 +140,11 @@ copy_hooks_opencode() {
   say "plugin   -> $root/.opencode/plugin/sprintx.ts (auto-carregado)"
   say "agentes  -> $root/.opencode/agent/"
   # O plugin invoca os scripts de .claude/hooks/. Em instalacao so-OpenCode
-  # eles precisam existir mesmo assim.
-  if [ ! -d "$root/.claude/hooks" ]; then
+  # eles precisam existir mesmo assim — inclusive quando outra skill ja criou a
+  # pasta: a presenca de .claude/hooks/ nao diz que os da sprintx estao la.
+  if [ ! -f "$root/.claude/hooks/sprintx/escopo-da-task.sh" ]; then
     run "mkdir -p '$root/.claude'"
-    run "cp -R '$HOOKS_SRC' '$root/.claude/hooks'"
-    run "chmod +x '$root/.claude/hooks'/*/*.sh"
+    copy_hooks_tree "$root"
     say "hooks    -> $root/.claude/hooks/ (usados pelo plugin do OpenCode)"
   fi
 }

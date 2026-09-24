@@ -50,7 +50,7 @@ function raizDoRepo(inicio: string): string {
  * cancelado nao bloqueia nada —, entao estes tres ganham margem; a garantia primaria
  * e eles nao criarem processo. Os demais seguem em 10 s.
  */
-const CRITICOS = new Set(["sprintx/escopo-da-task.sh", "comum/segredo.sh", "comum/git-perigoso.sh"])
+const CRITICOS = new Set(["sprintx/escopo-da-task.sh", "comum/segredo.sh", "sprintx/git-perigoso.sh"])
 
 /**
  * Roda um hook e devolve o que ele decidiu.
@@ -140,7 +140,7 @@ export default async ({ directory }: { directory?: string }) => {
           "sprintx/task-reivindicada.sh",
         )
       } else if (tool === "bash") {
-        hooks.push("comum/git-perigoso.sh", "sprintx/arvore-limpa-antes-da-suite.sh")
+        hooks.push("sprintx/git-perigoso.sh", "sprintx/arvore-limpa-antes-da-suite.sh")
       }
 
       for (const h of hooks) {

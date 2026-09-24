@@ -144,7 +144,7 @@ Hooks e agentes **não criam regra nova** — eles garantem regras que já exist
 | `sem-placeholder-no-plano` | após escrever o plano | aviso | Nenhum `{{marcador}}` de template sobrando |
 | `tdd-teste-antes` | após escrever código | aviso | Teste antes da implementação |
 | `segredo` | antes de escrever | **bloqueio** | Segredo não vai para arquivo versionado |
-| `git-perigoso` | antes de rodar Bash | **bloqueio** | Nada irreversível durante a execução autônoma |
+| `sprintx/git-perigoso` | antes de rodar Bash | **bloqueio** | Nada irreversível durante a execução autônoma |
 
 **Todo hook de método nasce em `aviso`.** Hook que dá falso positivo é desinstalado, e junto com ele vão os que funcionavam — então a promoção a `bloqueio` só acontece depois de evidência de uso real:
 
@@ -409,8 +409,8 @@ Os kinds `orquestrador`, `sprint`, `fases`, `tasks`, `bloqueios` e `base_indice`
     sprintx*.md                 atalhos de comando para cada fase
   hooks/
     doctor.sh                   modo de cada hook e violações acumuladas
-    comum/                      rastro, segredo, git — não específicos da sprintx
-    sprintx/                    escopo-da-task, task-so-fecha-verde, tdd, placeholder
+    comum/                      rastro e segredo — não específicos da sprintx
+    sprintx/                    escopo-da-task, git-perigoso, task-so-fecha-verde, tdd, placeholder
   agents/
     auditor-plano.md            F5 em contexto separado, somente leitura
     revisor-testes.md           o teste passaria com a implementação errada?

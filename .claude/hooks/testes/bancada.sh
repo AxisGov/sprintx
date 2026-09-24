@@ -3607,7 +3607,7 @@ q_timeouts() {
 }
 # q_criticos <raiz-hooks> <settings> <plugin> <git-perigoso> — a solucao inteira: timeout como margem E custo baixo.
 q_criticos() { q_timeouts "$2" "$3" && q_orcamento "$1" "$4"; }
-QGP=comum/git-perigoso.sh
+QGP=sprintx/git-perigoso.sh
 q_orcamento "$H" "$QGP"; afirma "q1-orcamento-de-processos-dos-criticos" $? "externos por execucao:$Q_CUSTO"
 q_timeouts "$H/../settings.json" "$H/../../.opencode/plugin/sprintx.ts"; afirma "q2-timeout-30s-so-nos-tres-criticos" $? "settings.json e plugin do OpenCode"
 tem "$SKILLMD" 'timeout do runner é falha aberta' && tem "$SKILLMD" 'primeira barreira' && tem "$SKILLMD" 'E1 da `mergex`' \
@@ -3671,6 +3671,104 @@ QMU="$(q_copia m5)"; muta_lit "$QMU/hooks/sprintx/escopo-da-task.sh" "$QMU/e.m" 
   '  FNR > 1 && FM && $0 == "---" { FORA = 0 }' && mv "$QMU/e.m" "$QMU/hooks/sprintx/escopo-da-task.sh"
 q_mutante "qm-mutante-5-prosa-volta-a-declarar-ownership" $? l_prosa "$QMU/hooks/sprintx/escopo-da-task.sh"
 rm -rf "$Q" "$C2"
+
+echo "== R. git-perigoso com o namespace da skill, em qualquer ordem de instalacao (P0.2-C7-B S3-C) =="
+# A mergex publica um git-perigoso proprio em comum/, com regras dela. O da sprintx mora em
+# sprintx/, com o id sprintx/git-perigoso no .expx/hooks.json: nenhum sobrescreve o outro, e o
+# modo de um nao liga nem desliga o outro. Cada caso recebe a raiz de uma arvore de fonte da
+# sprintx (a do repositorio, ou a copia de um mutante).
+R="$(mktemp -d)"
+r_fonte() { # r_fonte <nome> — copia o que o install.sh publica
+  local d="$R/fonte-$1"; rm -rf "$d"; mkdir -p "$d"
+  cp -R "$RAIZ_SRC/.claude" "$RAIZ_SRC/.opencode" "$RAIZ_SRC/.expx" "$RAIZ_SRC/install.sh" "$d/"
+  printf '%s' "$d"
+}
+# R1. O arquivo, o registro nos dois harnesses e o id do modo carregam o namespace.
+r_caminhos() {
+  local f="$1"
+  [ -f "$f/.claude/hooks/sprintx/git-perigoso.sh" ] && [ ! -e "$f/.claude/hooks/comum/git-perigoso.sh" ] \
+    && [ "$(grep -cF '/.claude/hooks/sprintx/git-perigoso.sh"' "$f/.claude/settings.json")" -eq 1 ] \
+    && [ "$(grep -cF 'comum/git-perigoso' "$f/.claude/settings.json")" -eq 0 ] \
+    && [ "$(grep -cF '"sprintx/git-perigoso.sh"' "$f/.opencode/plugin/sprintx.ts")" -eq 2 ] \
+    && [ "$(grep -cF 'comum/git-perigoso' "$f/.opencode/plugin/sprintx.ts")" -eq 0 ] \
+    && [ "$(grep -cF '"sprintx/git-perigoso": {' "$f/.expx/hooks.json")" -eq 1 ] \
+    && [ "$(grep -cF '"git-perigoso":' "$f/.expx/hooks.json")" -eq 0 ] \
+    && [ "$(grep -cF 'sprintx/git-perigoso' "$f/.claude/hooks/doctor.sh")" -ge 1 ]
+}
+# R2. O modo sai do id com namespace: o git-perigoso de outra skill desligado nao desliga este.
+r_modo() {
+  local f="$1" d="$R/modo" pl cmd="git push"" --force origin main"
+  rm -rf "$d"; mkdir -p "$d/.git" "$d/.expx"
+  pl="$(printf '{"cwd":"%s","tool_name":"Bash","tool_input":{"command":"%s"}}' "$d" "$cmd")"
+  r_hook() { printf '%s' "$pl" | (cd "$d" && EXPX_SESSAO=r@1 bash "$f/.claude/hooks/sprintx/git-perigoso.sh") >/dev/null 2>&1; }
+  printf '{"hooks":{"git-perigoso":{"modo":"desligado"}}}' > "$d/.expx/hooks.json"; r_hook; [ $? -eq 2 ] || return 1
+  printf '{"hooks":{"sprintx/git-perigoso":{"modo":"desligado"}}}' > "$d/.expx/hooks.json"; r_hook; [ $? -eq 0 ] || return 1
+  printf '{\n  "hooks": {\n    "sprintx/git-perigoso": { "modo": "bloqueio" }\n  }\n}\n' > "$d/.expx/hooks.json"; r_hook; [ $? -eq 2 ] || return 1
+  rm -f "$d/.expx/hooks.json"; r_hook; [ $? -eq 2 ]
+}
+# R3. Instalacao nas duas ordens, e o legado: o hook da mergex nunca e apagado nem sobrescrito,
+# o da sprintx sempre chega, e o comum/git-perigoso.sh antigo DA SPRINTX sai.
+r_mergex() { # r_mergex <projeto> — uma instalacao sintetica da mergex (copia de arvore, como ela faz)
+  mkdir -p "$1/.claude/hooks/comum" "$1/.claude/hooks/mergex"
+  printf '#!/usr/bin/env bash\n# git-perigoso da mergex: outras regras\nexit 0\n' > "$1/.claude/hooks/comum/git-perigoso.sh"
+  printf '#!/usr/bin/env bash\n# base da mergex\n' > "$1/.claude/hooks/comum/base.sh"
+  printf '#!/usr/bin/env bash\n# commit por task\n' > "$1/.claude/hooks/mergex/commit-por-task.sh"
+}
+r_ck_mergex() { cat "$1/.claude/hooks/comum/git-perigoso.sh" "$1/.claude/hooks/comum/base.sh" "$1/.claude/hooks/mergex/commit-por-task.sh" 2>/dev/null | cksum; }
+r_instala() {
+  local f="$1" p ck
+  # mergex primeiro, sprintx depois
+  p="$R/p1"; rm -rf "$p"; mkdir -p "$p"; r_mergex "$p"; ck="$(r_ck_mergex "$p")"
+  bash "$f/install.sh" --claude "$p" >/dev/null 2>&1 || return 1
+  [ "$(r_ck_mergex "$p")" = "$ck" ] && cmp -s "$p/.claude/hooks/sprintx/git-perigoso.sh" "$f/.claude/hooks/sprintx/git-perigoso.sh" || return 1
+  # sprintx primeiro, mergex depois
+  p="$R/p2"; rm -rf "$p"; mkdir -p "$p"
+  bash "$f/install.sh" --claude "$p" >/dev/null 2>&1 || return 1
+  r_mergex "$p"
+  cmp -s "$p/.claude/hooks/sprintx/git-perigoso.sh" "$f/.claude/hooks/sprintx/git-perigoso.sh" \
+    && [ "$(grep -cF '/.claude/hooks/sprintx/git-perigoso.sh"' "$p/.claude/settings.json")" -eq 1 ] || return 1
+  # reinstalar a sprintx por cima das duas nao muda nada da mergex
+  ck="$(r_ck_mergex "$p")"; bash "$f/install.sh" --claude "$p" >/dev/null 2>&1 || return 1
+  [ "$(r_ck_mergex "$p")" = "$ck" ] || return 1
+  # so-OpenCode num projeto em que a mergex ja criou .claude/hooks/: os da sprintx chegam
+  p="$R/p3"; rm -rf "$p"; mkdir -p "$p"; r_mergex "$p"; ck="$(r_ck_mergex "$p")"
+  bash "$f/install.sh" --opencode "$p" >/dev/null 2>&1 || return 1
+  [ -f "$p/.claude/hooks/sprintx/git-perigoso.sh" ] && [ -f "$p/.claude/hooks/sprintx/escopo-da-task.sh" ] && [ "$(r_ck_mergex "$p")" = "$ck" ] || return 1
+  # legado: o comum/git-perigoso.sh que a propria sprintx instalava sai; o resto fica
+  p="$R/p4"; rm -rf "$p"; mkdir -p "$p/.claude/hooks/comum"
+  printf '#!/usr/bin/env bash\nrastro_bloqueia "sprintx/git-perigoso: comando barrado — x"\n' > "$p/.claude/hooks/comum/git-perigoso.sh"
+  bash "$f/install.sh" --claude "$p" >/dev/null 2>&1 || return 1
+  [ ! -e "$p/.claude/hooks/comum/git-perigoso.sh" ] && [ -f "$p/.claude/hooks/sprintx/git-perigoso.sh" ]
+}
+RF="$(r_fonte repo)"
+r_caminhos "$RF"; afirma "r1-git-perigoso-com-namespace" $? "sprintx/git-perigoso.sh e id sprintx/git-perigoso em settings, plugin, doctor e .expx/hooks.json"
+r_modo "$RF"; afirma "r2-modo-pelo-id-com-namespace" $? "git-perigoso da mergex desligado nao desliga o da sprintx"
+r_instala "$RF"; afirma "r3-instalacao-sem-ordem-e-sem-apagar-a-mergex" $? "mergex antes, depois, reinstalacao, so-OpenCode e legado"
+tem "$SKILLMD" '`sprintx/git-perigoso`' && [ "$(grep -c '^| DS-158 |' "$SK/DECISOES-DA-SKILL.md")" -eq 1 ]
+afirma "r4-contrato-do-namespace" $? "SKILL.md e DS-158"
+
+# Mutantes do S3-C, em copia da fonte. O controle, copia sem mutacao, passa nos tres casos.
+RC="$(r_fonte controle)"; r_caminhos "$RC" && r_modo "$RC" && r_instala "$RC"
+afirma "rm-controle-copia-intacta-sobrevive" $? "caminhos, modo e instalacao na copia sem mutacao"
+r_mutante() { # r_mutante <nome> <rc geracao> <fonte> <caso que TEM de matar>...
+  local nome="$1" rc="$2" f="$3" c vivos=""; shift 3
+  if [ "$rc" -eq 0 ]; then for c in "$@"; do "$c" "$f" && vivos="$vivos$c "; done; fi
+  [ "$rc" -eq 0 ] && [ -z "$vivos" ]; afirma "$nome" $? "morto por: $* ${vivos:+— SOBREVIVEU a: $vivos}(rc geracao=$rc)"
+}
+# 1. O caminho volta ao comum/ compartilhado com a mergex.
+RM="$(r_fonte m1)"
+mv "$RM/.claude/hooks/sprintx/git-perigoso.sh" "$RM/.claude/hooks/comum/git-perigoso.sh" \
+  && muta_lit "$RM/.claude/hooks/comum/git-perigoso.sh" "$RM/g.m" '. "$DIR/../comum/rastro.sh"' '. "$DIR/rastro.sh"' && mv "$RM/g.m" "$RM/.claude/hooks/comum/git-perigoso.sh" \
+  && muta_lit "$RM/.claude/settings.json" "$RM/s.m" '/.claude/hooks/sprintx/git-perigoso.sh"' '/.claude/hooks/comum/git-perigoso.sh"' && mv "$RM/s.m" "$RM/.claude/settings.json" \
+  && muta_lit "$RM/.opencode/plugin/sprintx.ts" "$RM/p.m" '"sprintx/git-perigoso.sh"' '"comum/git-perigoso.sh"' && mv "$RM/p.m" "$RM/.opencode/plugin/sprintx.ts"
+r_mutante "rm-mutante-1-caminho-volta-ao-comum" $? "$RM" r_caminhos r_instala
+# 2. O manifesto e o hook voltam ao id sem namespace.
+RM="$(r_fonte m2)"
+muta_lit "$RM/.claude/hooks/sprintx/git-perigoso.sh" "$RM/g.m" 'rastro_modo_em MODO "$RAIZ" sprintx/git-perigoso seguranca' 'rastro_modo_em MODO "$RAIZ" git-perigoso seguranca' \
+  && mv "$RM/g.m" "$RM/.claude/hooks/sprintx/git-perigoso.sh" \
+  && muta_lit "$RM/.expx/hooks.json" "$RM/h.m" '"sprintx/git-perigoso": {' '"git-perigoso": {' && mv "$RM/h.m" "$RM/.expx/hooks.json"
+r_mutante "rm-mutante-2-manifesto-com-id-sem-namespace" $? "$RM" r_caminhos r_modo
+rm -rf "$R"
 
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"

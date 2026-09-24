@@ -191,7 +191,7 @@ Toda regra inviolável desta skill é, sozinha, uma instrução que o modelo pod
 
 Todo hook de método **nasce em modo `aviso`** e só é promovido a `bloqueio` depois de rodar sem falso positivo — guiado pela lista de `regra_violada` que o painel acumulou. A razão é prática: hook que dá falso positivo é desinstalado, e junto com ele vão os que funcionavam. Os hooks de segurança são a exceção e nascem em `bloqueio`.
 
-O modo de cada hook vive em `.expx/hooks.json`, e é lá que se promove.
+O modo de cada hook vive em `.expx/hooks.json`, e é lá que se promove. O id é o nome do hook; o que pode colidir com o de outra skill leva o namespace (`sprintx/git-perigoso`).
 
 | Hook | Evento | Modo inicial | O que faz |
 |---|---|---|---|
@@ -200,7 +200,7 @@ O modo de cada hook vive em `.expx/hooks.json`, e é lá que se promove.
 | `sem-placeholder-no-plano` | `PostToolUse` (plano) | `aviso` | Acha marcador `{{...}}` de template não substituído |
 | `tdd-teste-antes` | `PostToolUse` (escrita) | `aviso` | Avisa quando a implementação nasce antes do teste. **Inativo sem `CONVENCOES.md`** — não chuta onde o teste deveria estar |
 | `segredo` | `PreToolUse` (escrita) | `bloqueio` | Barra segredo com forma reconhecível indo para arquivo versionado |
-| `git-perigoso` | `PreToolUse` (Bash) | `bloqueio` | Barra operação de versionamento irreversível durante a execução autônoma |
+| `sprintx/git-perigoso` | `PreToolUse` (Bash) | `bloqueio` | Barra operação de versionamento irreversível durante a execução autônoma. Caminho e id com o namespace da skill — `.claude/hooks/sprintx/git-perigoso.sh`, modo sob `sprintx/git-perigoso` —, porque a `mergex` publica um `git-perigoso` próprio em `comum/`: nenhum sobrescreve o outro, em qualquer ordem de instalação (DS-158) |
 | `task-reivindicada` | `PreToolUse` (`tasks.md`) | `aviso` | Avisa ao marcar `em_andamento` uma task que o rastro mostra aberta por outra sessão (regras 6 e 8) |
 | `arvore-limpa-antes-da-suite` | `PreToolUse` (Bash) | `aviso` | Avisa, antes de rodar a suíte, se há arquivo sujo fora do escopo declarado ou task de outra sessão em andamento |
 

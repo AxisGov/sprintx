@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # git-perigoso — PreToolUse em Bash. NASCE EM BLOQUEIO.
 #
+# Caminho e id com o namespace da skill (DS-158): `.claude/hooks/sprintx/git-perigoso.sh`,
+# modo em `.expx/hooks.json` sob `sprintx/git-perigoso`. A mergex publica um hook de mesmo
+# nome, com regras proprias, em `comum/`: nenhum dos dois sobrescreve o outro, em qualquer
+# ordem de instalacao, e o modo de um nunca desliga o outro.
+#
 # Barra operacao de versionamento destrutiva e irreversivel durante uma
 # execucao autonoma. A F6 roda sem supervisao: um `push --force` ali apaga
 # trabalho de outra pessoa sem ninguem ver acontecer.
@@ -14,8 +19,8 @@
 set -uo pipefail
 
 case "${BASH_SOURCE[0]}" in */*) DIR="${BASH_SOURCE[0]%/*}" ;; *) DIR=. ;; esac
-# shellcheck source=./rastro.sh
-. "$DIR/rastro.sh"
+# shellcheck source=../comum/rastro.sh
+. "$DIR/../comum/rastro.sh"
 
 rastro_le_entrada_em ENTRADA
 rastro_json_campo_em CWD "$ENTRADA" cwd
@@ -45,7 +50,7 @@ esac
 
 # Hook de seguranca: o padrao e bloqueio e ausencia de configuracao NAO rebaixa.
 # So um "desligado" explicito desliga.
-rastro_modo_em MODO "$RAIZ" git-perigoso seguranca
+rastro_modo_em MODO "$RAIZ" sprintx/git-perigoso seguranca
 [ "$MODO" = "desligado" ] && exit 0
 
 rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "git perigoso: $MOTIVO" '[]'
