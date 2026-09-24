@@ -632,6 +632,7 @@ replanejamentos_f6: 0
 bloqueios_replanejamento_f6: []
 tasks_congeladas: []
 assinatura_congeladas: null
+parciais_replanejamento_f6: []
 atualizado_em: 2026-08-29
 historico:
   - rodada: 1
@@ -693,6 +694,39 @@ não é o `replanejar` da F5 e não mexe no orçamento dela.
   os ids e a assinatura (`cksum`) do item de cada uma no frontmatter do `tasks.md` e do seu bloco
   na prosa. `[]`/`null` sem rodada ativa. Todo portão da rodada (`avanca f3`, `f4`, `f5` e o
   fechamento) recalcula e recusa com código `4` qualquer diferença.
+- `parciais_replanejamento_f6` é o **trabalho parcial preservado** da rodada ativa (DS-156): o que a
+  task bloqueada deixou na árvore e que se atribui inequivocamente a ela — tipicamente o teste que
+  ela escreveu primeiro, pela ordem TDD da F6, antes de barrar num arquivo da irmã. `[]` sem rodada
+  ativa, ou numa rodada que entrou com a árvore limpa de produto; senão, um item por caminho, em
+  ordem de byte do caminho:
+
+  ```yaml
+  parciais_replanejamento_f6:
+    - path: "tests/menu/perfil.test.ts"
+      task: T-04.03
+      estado: novo
+      hash: 3b18e512dba79e4c8300dd08aeb37f8e728b8dad
+  ```
+
+  `path` é relativo à raiz da `sprintx`, sempre entre aspas; `task` é a task bloqueada que o declara;
+  `estado` é o estado Git do caminho — `novo` (não rastreado), `modificado` ou `removido`, nunca
+  staged —; `hash` é o id do blob do conteúdo exato em disco (`git hash-object --no-filters`), ou
+  `null` para `removido`. **Um caminho só é preservável** se estiver declarado em `arquivos` da task
+  bloqueada e de **nenhuma** outra task do plano (irmã, concluída ou compartilhado), não estiver
+  staged, tiver um desses três estados num arquivo regular e não for `.env` nem casar com os padrões
+  do hook `segredo`. Qualquer outra sujeira de produto fora dos artefatos de método — que incluem o
+  rastro (`docs/eventos/`), telemetria local — recusa a entrada (`fronteira_insegura`). O script
+  nunca toca nesses arquivos: nada de commit parcial, `stash`, `reset` ou descarte.
+  **Todo portão da rodada** (`replanejar-execucao` de retomada, `avanca f3`, `f4`, `f5` e o
+  fechamento) confere que a árvore continua exatamente assim — os mesmos caminhos sujos de produto,
+  no mesmo estado e com o mesmo hash, nenhum a mais — e que o plano de agora ainda dá cada caminho à
+  mesma task, e só a ela. Árvore diferente: código `2`, `parcial_divergente`; nenhum dos caminhos na
+  árvore: código `2`, `parcial_perdido` — a worktree da execução se perdeu, e o conteúdo parcial não
+  se reconstrói do estado versionado. `fase` diagnostica o mesmo (`fase=PARAR`,
+  `trabalho_parcial=perdido|divergente`), sem gravar. Plano que tira o caminho da task: código `4`.
+  Nenhum dos três grava nada. Ao fechar a rodada a lista volta a `[]` e o trabalho parcial fica na
+  árvore, com a task reaberta: o E1 dela o leva. Chave **aditiva** do eixo F6: ausente num arquivo
+  gravado antes dela vale `[]`; num planejamento legado (sem o eixo) não existe.
 - `replanejar_execucao` só existe com rodada ativa e a última rodada da F5 `sim`; os estados do laço
   que a rodada percorre (`aguardando_f4`, `aguardando_f5`, `replanejar`, `orcamento_esgotado`)
   aceitam a lista preenchida. `replanejamento_execucao_esgotado` só existe sem rodada ativa e com
@@ -716,8 +750,9 @@ não é o `replanejar` da F5 e não mexe no orçamento dela.
   motivo é lido do arquivo commitado, nunca do rastro nem da árvore de trabalho. Chamar
   `replanejar-execucao` de novo devolve o mesmo terminal e o mesmo motivo sem gravar, commitar ou
   registrar nada. **Erro de contrato nunca vira esta recusa**: `estado` (fora da F6),
-  `sem_bloqueio_aberto`, `sem_defeito_de_plano`, `fronteira_insegura`, registro ou schema inválido e
-  task concluída alterada continuam sem gravar nada, com o código de sempre.
+  `sem_bloqueio_aberto`, `sem_defeito_de_plano`, `fronteira_insegura`, `parcial_divergente`,
+  `parcial_perdido`, registro ou schema inválido e task concluída alterada continuam sem gravar
+  nada, com o código de sempre.
 - No `historico`, uma rodada depois de um `sim` só existe quando um replanejamento da execução a
   abriu: no máximo uma sequência assim por unidade de `replanejamentos_f6`.
 - **Legado.** `00-PLANEJAMENTO.md` gravado antes deste eixo não tem as cinco chaves: continua

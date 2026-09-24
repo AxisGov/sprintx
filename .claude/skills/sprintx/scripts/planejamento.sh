@@ -32,13 +32,17 @@
 #   0  ok — inclusive no-op idempotente, retomada da mesma rodada e checkpoint
 #      ignorado com aviso (sem Git, branch que nao e feature/<slug>, pasta ignorada)
 #   2  checkpoint recusado: ha path staged fora de docs/sprintx/features/<slug>/;
-#      ou fronteira insegura: produto sujo na arvore ao entrar em replanejar_execucao
+#      ou fronteira insegura: ao entrar em replanejar_execucao, sujeira na arvore que
+#      nao se atribui inequivocamente a task bloqueada (DS-156);
+#      ou trabalho parcial divergente/perdido: durante a rodada, a arvore ja nao e a
+#      que o replanejamento preservou em parciais_replanejamento_f6
 #   3  persistencia_falhou: o commit do checkpoint foi rejeitado (hook do projeto);
 #      ou persistencia pendente: em feature/<slug>, o estado do disco ainda nao
 #      esta no HEAD — `fase` responde CHECKPOINT e `avanca` recusa ate `checkpoint`;
 #      ou fechamento pendente: rodada de replanejamento aprovada e ainda nao fechada
 #   4  contrato invalido (orcamento, arquivo, auditoria, linha do revisor, task
-#      concluida alterada durante o replanejamento da execucao)
+#      concluida alterada durante o replanejamento da execucao, plano replanejado
+#      que tira de sua task um path do trabalho parcial preservado)
 #   5  transicao invalida para o estado atual (inclui estado terminal, replanejamento
 #      recusado pela classe dos bloqueios ou pela falta de orcamento da F6, e
 #      resolucao de defeito_de_plano fora de uma rodada aprovada). A recusa
@@ -91,7 +95,7 @@ contexto() { # contexto <slug>
   ARQ="$PASTA/00-PLANEJAMENTO.md"
   AUD="$PASTA/00-AUDITORIA.md"
   # Sem 00-PLANEJAMENTO.md nao ha eixo F6: le_planejamento sobrescreve.
-  P_F6=legado; P_MAX6=null; P_N6=0; P_BLQ=""; P_CONG=""; P_ASS=null; P_RECUSA=""
+  P_F6=legado; P_MAX6=null; P_N6=0; P_BLQ=""; P_CONG=""; P_ASS=null; P_RECUSA=""; P_PARC=""; W6_PARC=""
 }
 
 hoje() { date +%Y-%m-%d; }
@@ -215,12 +219,13 @@ em_lista() { case " $2 " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 # (planejamento anterior a este contrato: legado — nunca ganha orcamento retroativo).
 CHAVES_F6="max_replanejamentos_f6 replanejamentos_f6 bloqueios_replanejamento_f6 tasks_congeladas assinatura_congeladas"
 
-# le_f6 — P_F6 (presente|legado), P_MAX6, P_N6, P_BLQ, P_CONG, P_ASS.
+# le_f6 — P_F6 (presente|legado), P_MAX6, P_N6, P_BLQ, P_CONG, P_ASS, P_PARC.
 le_f6() {
   local k tem=0 falta=0 x ant=0 n
   for k in $CHAVES_F6; do if fm_presente "$k"; then tem=$((tem + 1)); else falta=$((falta + 1)); fi; done
   if [ "$tem" -eq 0 ]; then
-    P_F6=legado; P_MAX6=null; P_N6=0; P_BLQ=""; P_CONG=""; P_ASS=null
+    P_F6=legado; P_MAX6=null; P_N6=0; P_BLQ=""; P_CONG=""; P_ASS=null; P_PARC=""
+    fm_presente parciais_replanejamento_f6 && falha "$E_CONTRATO" "parciais_replanejamento_f6 sem o eixo F6"
     return 0
   fi
   [ "$falta" -eq 0 ] || falha "$E_CONTRATO" "eixo F6 incompleto: as chaves $CHAVES_F6 existem todas ou nenhuma"
@@ -257,6 +262,63 @@ le_f6() {
   else
     [ -z "$P_CONG" ] && [ "$P_ASS" = null ] || falha "$E_CONTRATO" "tasks_congeladas/assinatura_congeladas preenchidas sem rodada ativa"
   fi
+  le_parciais
+}
+
+# le_parciais — P_PARC: o trabalho parcial preservado pela rodada ativa (DS-156), uma linha
+# `path TAB task TAB estado TAB hash` por path, em ordem de byte do path. Chave aditiva do
+# eixo F6: ausente (arquivo gravado antes dela) vale `[]`.
+le_parciais() {
+  local bruto p t e h
+  P_PARC=""
+  fm_presente parciais_replanejamento_f6 || return 0
+  fm_em bruto parciais_replanejamento_f6
+  case "$bruto" in
+    "[]") return 0 ;;
+    "") P_PARC="$(parciais_tsv "$ARQ")" ;;
+    *) falha "$E_CONTRATO" "parciais_replanejamento_f6 fora da forma: [] ou lista de {path, task, estado, hash}" ;;
+  esac
+  [ -n "$P_PARC" ] || falha "$E_CONTRATO" "parciais_replanejamento_f6 em bloco sem item: use []"
+  while IFS="$TAB" read -r p t e h; do
+    [ "$p" != LIXO ] || falha "$E_CONTRATO" "parciais_replanejamento_f6 invalido: $t"
+    id_task "$t" || falha "$E_CONTRATO" "parciais_replanejamento_f6: task invalida '$t' em $p"
+    case "$e:$h" in
+      removido:null) ;;
+      novo:*|modificado:*) hash_git "$h" || falha "$E_CONTRATO" "parciais_replanejamento_f6: hash invalido '$h' em $p" ;;
+      *) falha "$E_CONTRATO" "parciais_replanejamento_f6: estado/hash invalido '$e/$h' em $p" ;;
+    esac
+  done <<EOF
+$P_PARC
+EOF
+  [ -n "$P_BLQ" ] || falha "$E_CONTRATO" "parciais_replanejamento_f6 preenchido sem rodada ativa"
+}
+
+# hash_git <h> — id de objeto do Git: 40 (sha1) ou 64 (sha256) hexadecimais minusculos.
+hash_git() { case "$1" in *[!0-9a-f]*|"") return 1 ;; esac; [ "${#1}" -eq 40 ] || [ "${#1}" -eq 64 ]; }
+
+# parciais_tsv <arquivo> — os itens do bloco parciais_replanejamento_f6, na forma gravada
+# por `escreve`. Linha fora da forma, item incompleto ou path fora da ordem estrita: LIXO.
+parciais_tsv() {
+  tr -d '\r' < "$1" | LC_ALL=C awk '
+    function sai() {
+      if (n) {
+        if (p == "" || t == "" || e == "" || h == "") print "LIXO\titem incompleto: " p
+        else { if (ant != "" && !(p > ant)) print "LIXO\tfora da ordem de path: " p; print p "\t" t "\t" e "\t" h; ant = p }
+      }
+      n = 0; p = t = e = h = ""
+    }
+    NR == 1 { next }
+    fim { next }
+    $0 == "---" { fim = 1; next }
+    /^parciais_replanejamento_f6:[ \t]*$/ { b = 1; next }
+    b && /^[^ ]/ { sai(); b = 0 }
+    !b { next }
+    /^  - path: "[^"\t]+"$/ { sai(); n = 1; p = substr($0, 12, length($0) - 12); next }
+    n && /^    task: [^ ]+$/ { t = substr($0, 11); next }
+    n && /^    estado: [^ ]+$/ { e = substr($0, 13); next }
+    n && /^    hash: [^ ]+$/ { h = substr($0, 11); next }
+    { print "LIXO\t" $0 }
+    END { sai() }'
 }
 
 # ------------------------------------------------------------------ tasks do plano
@@ -424,31 +486,277 @@ task_do_bloqueio() { le_bloqueios; campo_bloqueio "$1" 2; }
 
 # ------------------------------------------------------------------ fronteira segura
 
-# fronteira_segura — ao entrar em replanejar_execucao nao pode haver produto sujo
-# na arvore (editado, novo ou staged): so artefatos de metodo. Nunca limpa,
-# stasha nem descarta: recusa e lista.
-fronteira_segura() {
-  # Sem Git nao ha produto versionado a proteger: a fronteira nao e verificavel.
-  git -C "$RAIZ" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
-  local pre p sujos=""
+# Os padroes de comum/segredo.sh, na mesma ordem — a bancada confere que as duas listas sao
+# iguais. A skill roda sem os hooks instalados: a lista e copiada, nao importada.
+SEGREDO_PADROES='-----BEGIN ([A-Z ]+ )?PRIVATE KEY-----
+AKIA[0-9A-Z]{16}
+sk-[A-Za-z0-9]{20,}
+sk-ant-[A-Za-z0-9_-]{20,}
+gh[pousr]_[A-Za-z0-9]{30,}
+xox[baprs]-[A-Za-z0-9-]{10,}
+AIza[0-9A-Za-z_-]{35}
+://[A-Za-z0-9_.-]+:[^@/[:space:]]{8,}@'
+
+# sujos_produto — S_SUJOS: `XY TAB caminho` por path sujo (editado, novo ou staged) fora dos
+# artefatos de metodo, com o caminho relativo a raiz da sprintx. Caminho que o porcelain
+# precisa citar, ou fora da raiz, sai com XY `!?`: nao se identifica mecanicamente. O rastro
+# (docs/eventos/) e telemetria de metodo, local por contrato (08-rastro.md), nunca produto: o
+# proprio script grava nele, e num clone novo — sem o info/exclude da F1 — ele apareceria
+# como sujeira a cada chamada.
+sujos_produto() {
+  local pre l xy p q
+  S_SUJOS=""
   pre="$(git -C "$RAIZ" rev-parse --show-prefix 2>/dev/null)"
-  while IFS= read -r p; do
-    [ -n "$p" ] || continue
-    p="${p#???}"; case "$p" in *" -> "*) p="${p##* -> }" ;; esac
-    p="${p#\"}"; p="${p%\"}"
-    case "$p" in
-      "${pre}docs/sprintx/features/$SLUG/"*|"${pre}docs/sprintx/estimativas/HISTORICO.md"|"${pre}docs/entregas/$SLUG/"*) ;;
-      *) sujos="$sujos $p" ;;
+  while IFS= read -r l; do
+    [ -n "$l" ] || continue
+    xy="${l%"${l#??}"}"; p="${l#???}"
+    case "$p" in *" -> "*) p="${p##* -> }" ;; esac
+    q="${p#\"}"; q="${q%\"}"
+    case "$q" in
+      "${pre}docs/sprintx/features/$SLUG/"*|"${pre}docs/sprintx/estimativas/HISTORICO.md"|"${pre}docs/entregas/$SLUG/"*) continue ;;
+      "${pre}docs/eventos/"*) continue ;;
     esac
+    case "$p" in
+      \"*) xy='!?' ;;
+      "$pre"*) p="${p#"$pre"}" ;;
+      *) xy='!?' ;;
+    esac
+    S_SUJOS="$S_SUJOS$xy$TAB$p
+"
   done <<EOF
 $(git -C "$RAIZ" -c core.quotepath=false -c status.relativePaths=false status --porcelain --untracked-files=all 2>/dev/null)
 EOF
+}
+
+# retrato — R_TSV: `path TAB estado TAB hash` de cada path de S_SUJOS, em ordem de byte do
+# path. Estado mecanico e so um de tres: `novo` (??), `modificado` ( M) e `removido` ( D);
+# staged, conflito, mudanca de tipo e caminho nao identificavel saem como `outro:XY`. O hash
+# e o do conteudo exato em disco (`git hash-object --no-filters`), so de arquivo regular.
+retrato() {
+  local xy p e h lst="" hs="" out="" arqs=()
+  R_TSV=""
+  [ -n "$S_SUJOS" ] || return 0
+  while IFS="$TAB" read -r xy p; do
+    [ -n "$p" ] || continue
+    case "$xy" in "??") e=novo ;; " M") e=modificado ;; " D") e=removido ;; *) e="outro:$xy" ;; esac
+    case "$e" in
+      novo|modificado) if [ -f "$RAIZ/$p" ] && [ ! -L "$RAIZ/$p" ]; then arqs+=("$p"); else e="outro:$xy"; fi ;;
+    esac
+    lst="$lst$p$TAB$e
+"
+  done <<EOF
+$S_SUJOS
+EOF
+  if [ "${#arqs[@]}" -gt 0 ]; then
+    hs="$(git -C "$RAIZ" hash-object --no-filters -- "${arqs[@]}" 2>/dev/null)" || hs=""
+  fi
+  while IFS="$TAB" read -r p e; do
+    [ -n "$p" ] || continue
+    h=null
+    case "$e" in
+      novo|modificado) IFS= read -r h <&3 || h=""; hash_git "$h" || h=- ;;
+      outro:*) h=- ;;
+    esac
+    out="$out$p$TAB$e$TAB$h
+"
+  done <<EOF 3<<EOF3
+$lst
+EOF
+$hs
+EOF3
+  R_TSV="$(printf '%s' "$out" | LC_ALL=C sort -t "$TAB" -k1,1)"
+}
+
+# donos_de — para cada path de SX_PATHS (no ambiente, um por linha, na ordem): `path TAB
+# task:status[ task:status...]` com toda task que o declara em `arquivos` (cria/altera, mapa
+# ou lista) no FRONTMATTER de um sprint-NN/tasks.md. A prosa repete os blocos ```yaml das
+# tasks e nunca declara ownership.
+donos_de() {
+  local rel arqs=()
+  while IFS= read -r rel; do [ -n "$rel" ] && arqs+=("$PASTA/$rel"); done <<EOF
+$(arquivos_tasks)
+EOF
+  [ "${#arqs[@]}" -gt 0 ] || arqs=(/dev/null)
+  LC_ALL=C awk '
+    function item(c) { gsub(/^[ \t]+|[ \t]+$/, "", c); gsub(/^["'\'']|["'\'']$/, "", c); if (c != "") it[++ni] = c }
+    function emitir(linha,   ini, fim, corpo, q, n, i) {
+      while (match(linha, /\[[^]]*\]/)) {
+        ini = RSTART; fim = RLENGTH
+        corpo = substr(linha, ini + 1, fim - 2)
+        n = split(corpo, q, ",")
+        for (i = 1; i <= n; i++) item(q[i])
+        linha = substr(linha, ini + fim)
+      }
+    }
+    function fecha(   i, f) {
+      if (id != "") for (i = 1; i <= ni; i++) {
+        f = it[i]
+        if ((f in quer) && !((f SUBSEP id) in visto)) { visto[f SUBSEP id] = 1; dono[f] = dono[f] (dono[f] == "" ? "" : " ") id ":" st }
+      }
+      id = ""; st = ""; ni = 0; em = 0
+    }
+    BEGIN { n = split(ENVIRON["SX_PATHS"], ps, "\n"); for (i = 1; i <= n; i++) if (ps[i] != "") { quer[ps[i]] = 1; ordem[++no] = ps[i] } }
+    { sub(/\r$/, "") }
+    FNR == 1 { fecha(); fm = ($0 == "---"); t = 0; next }
+    !fm { next }
+    $0 == "---" { fecha(); fm = 0; next }
+    /^tasks:/ { t = 1; next }
+    t && /^[^ ]/ { fecha(); t = 0 }
+    !t { next }
+    /^  - id:/ { fecha(); id = $3; next }
+    id == "" { next }
+    /^    status:/ { st = $2 }
+    /cria:|altera:/ { emitir($0); em = 0; next }
+    /^[ \t]*arquivos:[ \t]*\[/ { emitir($0); em = 0; next }
+    /^[ \t]*arquivos:[ \t]*$/ { em = 1; next }
+    em && /^[ \t]*-[ \t]+/ { l = $0; sub(/^[ \t]*-[ \t]+/, "", l); item(l); next }
+    em { em = 0 }
+    END { fecha(); for (i = 1; i <= no; i++) print ordem[i] "\t" dono[ordem[i]] }' "${arqs[@]}"
+}
+
+# fronteira_segura — ao entrar em replanejar_execucao (DS-145, ampliada pela DS-156): toda
+# sujeira de produto na arvore tem de se atribuir inequivocamente a task bloqueada da rodada.
+# Um path e preservavel so quando: esta declarado numa task de BLOQ_TASKS e em nenhuma outra
+# task do plano (irma, concluida, compartilhado); nao esta staged; o estado e novo, modificado
+# ou removido de arquivo regular; nao e .env nem casa com padrao de segredo. O conjunto sai em
+# F_PARC (`path TAB task TAB estado TAB hash`), que a rodada grava. Qualquer path fora disso:
+# recusa e lista, e nada e gravado. Nunca limpa, stasha nem descarta.
+fronteira_segura() {
+  F_PARC=""
+  # Sem Git nao ha produto versionado a proteger: a fronteira nao e verificavel.
+  git -C "$RAIZ" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+  sujos_produto
+  [ -n "$S_SUJOS" ] || return 0
+  retrato
+  local p e h dp donos d tasks n cand="" arqs=() sujos="" veredito xy pad padroes=() seg rc paths
+  paths="$(printf '%s\n' "$R_TSV" | cut -f1)"
+  while IFS="$TAB" read -r p e h && IFS="$TAB" read -r dp donos <&3; do
+    [ -n "$p" ] || continue
+    veredito=""; tasks=""
+    if [ "$p" != "$dp" ]; then veredito=nao_identificavel
+    else
+      case "$e" in
+        outro:*)
+          xy="${e#outro:}"
+          case "$xy" in '!?') veredito=nao_identificavel ;; [!\ ?]?) veredito=staged ;; *) veredito=estado_nao_mecanico ;; esac ;;
+        *)
+          n=0
+          for d in $donos; do
+            n=$((n + 1)); tasks="$tasks${tasks:+,}${d%%:*}"
+            case "$d" in *:concluida) veredito=task_concluida ;; esac
+          done
+          if [ "$n" -eq 0 ]; then veredito=nao_declarado
+          elif [ -n "$veredito" ]; then veredito="task_concluida:$tasks"
+          elif [ "$n" -gt 1 ]; then veredito="compartilhado:$tasks"
+          elif ! em_lista "$tasks" "$BLOQ_TASKS"; then veredito="task_irma:$tasks"
+          else
+            case "$p" in .env|.env.*|*/.env|*/.env.*) veredito=segredo ;; esac
+          fi ;;
+      esac
+    fi
+    if [ -n "$veredito" ]; then sujos="$sujos $p($veredito)"; continue; fi
+    cand="$cand$p$TAB$tasks$TAB$e$TAB$h
+"
+    [ "$e" = removido ] || arqs+=("$RAIZ/$p")
+  done <<EOF 3<<EOF3
+$R_TSV
+EOF
+$(SX_PATHS="$paths" donos_de)
+EOF3
+  # Segredo no conteudo: os mesmos padroes do hook `segredo`, numa passada. Erro de leitura
+  # (codigo 2) nao se decide: nenhum candidato e preservado.
+  if [ -z "$sujos" ] && [ "${#arqs[@]}" -gt 0 ]; then
+    while IFS= read -r pad; do [ -n "$pad" ] && padroes+=(-e "$pad"); done <<EOF
+$SEGREDO_PADROES
+EOF
+    seg="$(grep -lE "${padroes[@]}" -- "${arqs[@]}" 2>/dev/null)"; rc=$?
+    if [ "$rc" -gt 1 ]; then
+      sujos=" $(printf '%s' "$cand" | awk -F'\t' 'NF { printf "%s%s(nao_identificavel)", (NR > 1 ? " " : ""), $1 }')"
+    else
+      while IFS= read -r p; do [ -n "$p" ] && sujos="$sujos ${p#"$RAIZ/"}(segredo)"; done <<EOF
+$seg
+EOF
+    fi
+  fi
   if [ -n "$sujos" ]; then
-    printf 'replanejamento=recusado\nmotivo=fronteira_insegura\nestado=%s\n' "$P_ESTADO"
+    printf 'replanejamento=recusado\nmotivo=fronteira_insegura\nestado=%s\nnao_preservaveis=%s\n' "$P_ESTADO" "$(printf '%s' "${sujos# }" | tr ' ' ',')"
     evento replanejamento_execucao_recusado f6 - bloqueado "fronteira insegura: produto sujo na arvore:$sujos"
-    printf 'planejamento: replanejamento da execucao recusado — fronteira insegura, ha produto sujo na arvore:%s. Nada foi limpo, stashado, descartado nem gravado. PARE.\n' "$sujos" >&2
+    printf 'planejamento: replanejamento da execucao recusado — fronteira insegura, ha sujeira na arvore que nao se atribui inequivocamente a task bloqueada:%s. So o trabalho parcial da propria task bloqueada (declarado so nela, nao staged, de estado mecanico) e preservado. Nada foi limpo, stashado, descartado nem gravado. PARE.\n' "$sujos" >&2
     exit "$E_RECUSADO"
   fi
+  F_PARC="$(printf '%s' "$cand" | LC_ALL=C sort -t "$TAB" -k1,1)"
+}
+
+# diagnostica_parciais — D_PARC: integro | divergente | perdido, e D_DET, o que divergiu.
+# `integro` e a arvore exatamente como a rodada a preservou: os mesmos paths sujos de
+# produto, no mesmo estado e com o mesmo hash — nenhum a mais, nenhum a menos. `perdido` e
+# nenhuma sujeira de produto onde a rodada preservou alguma: a arvore de execucao nao e esta
+# (worktree perdida, clone novo). O resto e `divergente`.
+diagnostica_parciais() {
+  local p t e h esperado=""
+  D_PARC=integro; D_DET=""
+  if ! git -C "$RAIZ" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    [ -z "$P_PARC" ] || { D_PARC=perdido; D_DET=" (sem Git nesta arvore)"; }
+    return 0
+  fi
+  sujos_produto
+  if [ -z "$S_SUJOS" ]; then
+    [ -z "$P_PARC" ] || { D_PARC=perdido; D_DET=" $(printf '%s\n' "$P_PARC" | cut -f1 | tr '\n' ' ')"; }
+    return 0
+  fi
+  retrato
+  while IFS="$TAB" read -r p t e h; do
+    [ -n "$p" ] && esperado="$esperado$p$TAB$e$TAB$h
+"
+  done <<EOF
+$P_PARC
+EOF
+  esperado="$(printf '%s' "$esperado")"
+  [ "$R_TSV" = "$esperado" ] && return 0
+  D_PARC=divergente
+  D_DET="$(SX_A="$esperado" SX_B="$R_TSV" awk 'BEGIN {
+    n = split(ENVIRON["SX_A"], a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") { split(a[i], c, "\t"); ea[c[1]] = c[2] "/" substr(c[3], 1, 12) }
+    n = split(ENVIRON["SX_B"], b, "\n"); for (i = 1; i <= n; i++) if (b[i] != "") { split(b[i], c, "\t"); eb[c[1]] = c[2] "/" substr(c[3], 1, 12) }
+    for (k in ea) if (!(k in eb)) printf " %s(preservado %s, agora limpo)", k, ea[k]; else if (ea[k] != eb[k]) printf " %s(preservado %s, agora %s)", k, ea[k], eb[k]
+    for (k in eb) if (!(k in ea)) printf " %s(nao preservado, agora %s)", k, eb[k]
+  }')"
+}
+
+# confere_parciais <fase> — rodada ativa, em todo portao (avanca f3/f4/f5, retomada e
+# fechamento): (1) a arvore e a que a rodada preservou (diagnostica_parciais); (2) o plano de
+# agora ainda da cada path preservado a mesma task, e so a ela. Arvore diferente: codigo 2,
+# nada gravado — o conteudo parcial nao se reconstroi do estado versionado. Plano que tira o
+# path da task: codigo 4, como tocar numa task congelada.
+confere_parciais() {
+  diagnostica_parciais
+  case "$D_PARC" in
+    perdido)
+      printf 'trabalho_parcial=perdido\nmotivo=parcial_perdido\nestado=%s\nproxima=PARAR\n' "$P_ESTADO"
+      evento replanejamento_execucao_recusado "$1" - bloqueado "trabalho parcial perdido: a arvore nao tem o que a rodada preservou:$D_DET"
+      falha "$E_RECUSADO" "trabalho parcial perdido — a rodada preservou$D_DET e esta arvore nao tem nenhum deles (worktree perdida ou outro clone). O conteudo parcial nao e reconstruivel pelo estado versionado: nada foi reconstruido, limpo nem gravado. E perda de estado de execucao, nao decisao de produto. PARE e relate." ;;
+    divergente)
+      printf 'trabalho_parcial=divergente\nmotivo=parcial_divergente\nestado=%s\nproxima=PARAR\n' "$P_ESTADO"
+      evento replanejamento_execucao_recusado "$1" - bloqueado "trabalho parcial divergente:$D_DET"
+      falha "$E_RECUSADO" "trabalho parcial divergente — a arvore mudou desde que a rodada a preservou:$D_DET. Nada foi limpo, stashado, descartado nem gravado. PARE e relate." ;;
+  esac
+  [ -n "$P_PARC" ] || return 0
+  local p t e h dp donos ruins="" paths=""
+  while IFS="$TAB" read -r p t e h; do [ -n "$p" ] && paths="$paths$p
+"; done <<EOF
+$P_PARC
+EOF
+  while IFS="$TAB" read -r p t e h && IFS="$TAB" read -r dp donos <&3; do
+    [ -n "$p" ] || continue
+    case "$donos" in "$t:bloqueada"|"$t:pendente") [ "$p" = "$dp" ] && continue ;; esac
+    ruins="$ruins $p($t -> ${donos:-nenhuma task})"
+  done <<EOF 3<<EOF3
+$P_PARC
+EOF
+$(SX_PATHS="$paths" donos_de)
+EOF3
+  [ -z "$ruins" ] && return 0
+  evento replanejamento_execucao_recusado "$1" - bloqueado "plano replanejado tira da task o trabalho parcial preservado:$ruins"
+  falha "$E_CONTRATO" "o plano replanejado nao da mais o trabalho parcial preservado a sua task, e so a ela:$ruins. O parcial fica com a task bloqueada que o escreveu: nao mova para irma, nao atribua a concluida, nao torne ambiguo. Nada foi registrado. PARE."
 }
 
 # le_planejamento — carrega e valida o arquivo inteiro. Arquivo que nao passa
@@ -553,8 +861,20 @@ valida_recusa() {
 # ------------------------------------------------------------------ escrita
 
 # f6_herda — o eixo F6 a gravar (W6_*) comeca igual ao lido (P_*).
-f6_herda() { W6="$P_F6"; W6_MAX="$P_MAX6"; W6_N="$P_N6"; W6_BLQ="$P_BLQ"; W6_CONG="$P_CONG"; W6_ASS="$P_ASS"; W_RECUSA="$P_RECUSA"; }
-f6_novo() { W6=presente; W6_MAX="$1"; W6_N=0; W6_BLQ=""; W6_CONG=""; W6_ASS=null; W_RECUSA=""; }
+f6_herda() { W6="$P_F6"; W6_MAX="$P_MAX6"; W6_N="$P_N6"; W6_BLQ="$P_BLQ"; W6_CONG="$P_CONG"; W6_ASS="$P_ASS"; W6_PARC="$P_PARC"; W_RECUSA="$P_RECUSA"; }
+f6_novo() { W6=presente; W6_MAX="$1"; W6_N=0; W6_BLQ=""; W6_CONG=""; W6_ASS=null; W6_PARC=""; W_RECUSA=""; }
+
+# parciais_yaml — o bloco parciais_replanejamento_f6 de W6_PARC, na forma que parciais_tsv le.
+parciais_yaml() {
+  local p t e h
+  if [ -z "$W6_PARC" ]; then printf 'parciais_replanejamento_f6: []\n'; return 0; fi
+  printf 'parciais_replanejamento_f6:\n'
+  while IFS="$TAB" read -r p t e h; do
+    printf '  - path: "%s"\n    task: %s\n    estado: %s\n    hash: %s\n' "$p" "$t" "$e" "$h"
+  done <<EOF
+$W6_PARC
+EOF
+}
 lista_yaml() { if [ -z "$1" ]; then printf '[]'; else printf '[%s]' "$(printf '%s' "$1" | sed 's/ /, /g')"; fi; }
 
 # escreve <max> <por> <estado> <reprovacoes> <historico_tsv> — o arquivo inteiro,
@@ -603,6 +923,7 @@ EOF
     [ -n "$W6_BLQ" ] && rodada6="
 
 Rodada de replanejamento da execução ativa, aberta por: $(printf '%s' "$W6_BLQ" | sed 's/ /, /g'). Tasks concluídas congeladas: $(printf '%s' "$W6_CONG" | sed 's/ /, /g')."
+    [ -n "$W6_PARC" ] && rodada6="$rodada6 Trabalho parcial preservado na árvore: $(printf '%s\n' "$W6_PARC" | awk -F'\t' '{ printf "%s`%s` (%s, %s)", (NR > 1 ? ", " : ""), $1, $2, $3 }')."
   fi
 
   mkdir -p "$PASTA" || falha "$E_CONTRATO" "nao foi possivel criar $PREFIXO"
@@ -612,8 +933,10 @@ Rodada de replanejamento da execução ativa, aberta por: $(printf '%s' "$W6_BLQ
     if [ "$W6" = presente ]; then
       printf 'max_reprovacoes_f5: %s\nmax_replanejamentos_f6: %s\norcamento_declarado_por: %s\nestado: %s\n%sreprovacoes: %s\n' \
         "$max" "$W6_MAX" "$por" "$estado" "$rec" "$reprov"
-      printf 'replanejamentos_f6: %s\nbloqueios_replanejamento_f6: %s\ntasks_congeladas: %s\nassinatura_congeladas: %s\natualizado_em: %s\n' \
-        "$W6_N" "$(lista_yaml "$W6_BLQ")" "$(lista_yaml "$W6_CONG")" "$W6_ASS" "$data"
+      printf 'replanejamentos_f6: %s\nbloqueios_replanejamento_f6: %s\ntasks_congeladas: %s\nassinatura_congeladas: %s\n' \
+        "$W6_N" "$(lista_yaml "$W6_BLQ")" "$(lista_yaml "$W6_CONG")" "$W6_ASS"
+      parciais_yaml
+      printf 'atualizado_em: %s\n' "$data"
     else
       printf 'max_reprovacoes_f5: %s\norcamento_declarado_por: %s\nestado: %s\n%sreprovacoes: %s\natualizado_em: %s\n' \
         "$max" "$por" "$estado" "$rec" "$reprov" "$data"
@@ -629,7 +952,10 @@ $prosa" awk '
       /^<!-- sprintx:estado -->$/ { print; print ENVIRON["SX_BLOCO"]; pula = 1; next }
       /^<!-- \/sprintx:estado -->$/ { pula = 0; print; next }
       pula { next }
-      /^<!--$/ { exit }
+      # Consome a entrada ate o fim em vez de `exit`: sair cedo mata o `tr` do pipe com
+      # SIGPIPE e, com pipefail, a gravacao inteira falha (awk/tr do busybox).
+      /^<!--$/ { doc = 1 }
+      doc { next }
       { gsub(/\{\{slug-da-feature\}\}/, ENVIRON["SX_SLUG"]); print }'
   } > "$tmp" || { rm -f "$tmp"; falha "$E_CONTRATO" "falha ao gravar ${PREFIXO}00-PLANEJAMENTO.md"; }
   # O comentario final do template e so documentacao da forma: fora do arquivo gerado.
@@ -1002,8 +1328,9 @@ cmd_avanca() {
   fi
   f6_herda
   # Rodada de replanejamento da execucao ativa: cada portao confere que as tasks
-  # concluidas continuam congeladas, antes de gravar qualquer coisa.
-  if [ -n "$P_BLQ" ]; then confere_congeladas "$alvo"; fi
+  # concluidas continuam congeladas e que o trabalho parcial preservado continua na
+  # arvore e na sua task, antes de gravar qualquer coisa.
+  if [ -n "$P_BLQ" ]; then confere_congeladas "$alvo"; confere_parciais "$alvo"; fi
 
   if [ "$alvo" = f5 ]; then
     valida_auditoria
@@ -1037,8 +1364,9 @@ saida_f6() {
   if [ "$P_F6" = legado ]; then printf 'orcamento_f6=legado\n'; return 0; fi
   printf 'replanejamentos_f6=%s\nmax_replanejamentos_f6=%s\n' "$P_N6" "$P_MAX6"
   if [ -n "$P_BLQ" ]; then
-    printf 'replanejamento_execucao=ativo\nbloqueios_replanejamento_f6=%s\ntasks_congeladas=%s\n' \
-      "$(printf '%s' "$P_BLQ" | tr ' ' ',')" "$(printf '%s' "$P_CONG" | tr ' ' ',')"
+    printf 'replanejamento_execucao=ativo\nbloqueios_replanejamento_f6=%s\ntasks_congeladas=%s\nparciais_replanejamento_f6=%s\n' \
+      "$(printf '%s' "$P_BLQ" | tr ' ' ',')" "$(printf '%s' "$P_CONG" | tr ' ' ',')" \
+      "$(printf '%s\n' "$P_PARC" | awk -F'\t' 'NF { printf "%s%s", (n++ ? "," : ""), $1 }')"
   fi
   return 0
 }
@@ -1074,8 +1402,10 @@ valida_rodada() {
 # Task concluida nunca e tocada. Idempotente: B-NN ja resolvido e task ja pendente
 # sao pulados.
 fecha_rodada() {
-  local b t blq="$P_BLQ"
+  local b t blq="$P_BLQ" parc
   confere_congeladas f5
+  confere_parciais f5
+  parc="$(printf '%s\n' "$P_PARC" | awk -F'\t' 'NF { printf "%s%s", (n++ ? "," : ""), $1 }')"
   valida_rodada
   for b in $blq; do
     if [ "$(estado_do_bloqueio "$b")" = aberto ]; then
@@ -1087,9 +1417,11 @@ fecha_rodada() {
     t="$(task_do_bloqueio "$b")"
     case "$t" in null|-|"") ;; *) reabre_task "$t" ;; esac
   done
-  f6_herda; W6_BLQ=""; W6_CONG=""; W6_ASS=null
+  # O trabalho parcial preservado nao e tocado: fica na arvore, com a task reaberta, e vai
+  # no E1 dela. A lista so descreve a rodada — fechada a rodada, ela se esvazia.
+  f6_herda; W6_BLQ=""; W6_CONG=""; W6_ASS=null; W6_PARC=""
   escreve "$P_MAX" "$P_POR" "$P_ESTADO" "$P_REPROV" "$P_HIST"
-  evento replanejamento_execucao_aprovado f5 - ok "replanejamento da execucao $P_N6 aprovado na F5 rodada $P_RODADAS: $(printf '%s' "$blq" | tr ' ' ',') resolvido(s); tasks concluidas intactas"
+  evento replanejamento_execucao_aprovado f5 - ok "replanejamento da execucao $P_N6 aprovado na F5 rodada $P_RODADAS: $(printf '%s' "$blq" | tr ' ' ',') resolvido(s); tasks concluidas intactas${parc:+; trabalho parcial preservado na arvore: $parc}"
 }
 
 # replanejar-execucao — a F6 registrou defeito_de_plano: volta ao planejamento
@@ -1114,8 +1446,10 @@ cmd_replanejar_execucao() {
   fi
   fechamento_pendente replanejar-execucao
 
-  # Mesma rodada: retomar nunca consome orcamento de novo.
+  # Mesma rodada: retomar nunca consome orcamento de novo. A arvore tem de ser a que a
+  # rodada preservou: o trabalho parcial nao se reconstroi do estado versionado.
   if [ -n "$P_BLQ" ]; then
+    confere_parciais f6
     printf 'replanejamento=retomada\nestado=%s\nreprovacoes=%s\nmax_reprovacoes_f5=%s\nproxima=%s\n' \
       "$P_ESTADO" "$P_REPROV" "$P_MAX" "$(fase_do_estado "$P_ESTADO")"
     saida_f6
@@ -1190,18 +1524,20 @@ EOF
 
   # A task de cada bloqueio ja tem de estar gravada como bloqueada.
   local st
+  BLOQ_TASKS=""
   for b in $defeitos; do
     t="$(task_do_bloqueio "$b")"
     case "$t" in null|-|"") continue ;; esac
     st="$(status_da_task "$t" | cut -f2)"
     [ "$st" = bloqueada ] || falha "$E_CONTRATO" "$b aponta $t, que esta '${st:-fora do plano}' em tasks.md: grave a task como bloqueada antes de replanejar"
+    BLOQ_TASKS="$BLOQ_TASKS $t"
   done
   fronteira_segura
 
   calcula_congeladas
-  W6_N=$((P_N6 + 1)); W6_BLQ="$defeitos"; W6_CONG="$C_IDS"; W6_ASS="$C_ASS"
+  W6_N=$((P_N6 + 1)); W6_BLQ="$defeitos"; W6_CONG="$C_IDS"; W6_ASS="$C_ASS"; W6_PARC="$F_PARC"
   escreve "$P_MAX" "$P_POR" replanejar_execucao "$P_REPROV" "$P_HIST"
-  evento replanejamento_execucao_iniciado f6 - ok "replanejamento da execucao $W6_N de $P_MAX6 aberto por [$defeitos]; reprovacoes da F5 continuam em $P_REPROV; congeladas [$W6_CONG]"
+  evento replanejamento_execucao_iniciado f6 - ok "replanejamento da execucao $W6_N de $P_MAX6 aberto por [$defeitos]; reprovacoes da F5 continuam em $P_REPROV; congeladas [$W6_CONG]; trabalho parcial preservado [$(printf '%s\n' "$F_PARC" | awk -F'\t' 'NF { printf "%s%s", (n++ ? "," : ""), $1 }')]"
   checkpoint
   le_planejamento
   printf 'replanejamento=iniciado\nestado=%s\nreprovacoes=%s\nmax_reprovacoes_f5=%s\nproxima=%s\n' \
@@ -1272,6 +1608,15 @@ cmd_fase() {
   if [ "$E_ESTADO" = aprovado ] && [ -n "$P_BLQ" ]; then
     printf 'fase=CHECKPOINT\nestado=aprovado\nfonte=%s\nfechamento=pendente\n' "$E_FONTE"
     falha "$E_PERSISTENCIA" "o replanejamento da execucao foi aprovado e o fechamento da rodada nao terminou: execute \`planejamento.sh checkpoint $SLUG\`"
+  fi
+  # Rodada ativa: a sessao que retoma descobre ja aqui se a arvore ainda e a que a rodada
+  # preservou. So diagnostica — `fase` nunca grava.
+  if [ -n "$P_BLQ" ]; then
+    diagnostica_parciais
+    if [ "$D_PARC" != integro ]; then
+      printf 'fase=PARAR\nestado=%s\nfonte=%s\ntrabalho_parcial=%s\nmotivo=parcial_%s\n' "$E_ESTADO" "$E_FONTE" "$D_PARC" "$D_PARC"
+      falha "$E_RECUSADO" "trabalho parcial $D_PARC:$D_DET. A rodada de replanejamento preservou trabalho parcial da task bloqueada que esta arvore nao tem como estava; o conteudo nao se reconstroi do estado versionado. PARE e relate."
+    fi
   fi
   printf 'fase=%s\nestado=%s\nfonte=%s\npersistencia=%s\n' "$(fase_do_estado "$E_ESTADO")" "$E_ESTADO" "$E_FONTE" "$PERSIST"
   saida_f6

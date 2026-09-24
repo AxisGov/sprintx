@@ -1590,7 +1590,7 @@ FXN="$K/fx-f6-null"; k_variante "$FXN" 's/^max_replanejamentos_f6: 1$/max_replan
 FXL="$K/fx-f6-legado"; cp -R "$FXP" "$FXL"
 # Planejamento anterior a este contrato: exatamente as chaves que o P0.1 gravava.
 sed -e '/^max_replanejamentos_f6:/d' -e '/^replanejamentos_f6:/d' -e '/^bloqueios_replanejamento_f6:/d' -e '/^tasks_congeladas:/d' \
-  -e '/^assinatura_congeladas:/d' -e 's/ · replanejamentos da execução (F6): [^·]*//' "$(kf "$FXL")/00-PLANEJAMENTO.md" > "$K/pl.tmp" \
+  -e '/^assinatura_congeladas:/d' -e '/^parciais_replanejamento_f6:/d' -e 's/ · replanejamentos da execução (F6): [^·]*//' "$(kf "$FXL")/00-PLANEJAMENTO.md" > "$K/pl.tmp" \
   && mv "$K/pl.tmp" "$(kf "$FXL")/00-PLANEJAMENTO.md" && git -C "$FXL" commit -q -m legado -- docs/sprintx/features/menu/00-PLANEJAMENTO.md
 [ "$(tr -d '\r' < "$(kf "$FXL")/00-PLANEJAMENTO.md" | awk 'NR==1{next} $0=="---"{exit} /^[a-z0-9_]+:/{sub(/:.*/,""); printf "%s ", $0}')" \
   = "expx_schema expx_tool kind trabalho_id max_reprovacoes_f5 orcamento_declarado_por estado reprovacoes atualizado_em historico " ] \
@@ -3255,6 +3255,272 @@ DSF5="$SK/DECISOES-DA-SKILL.md"
 afirma "o-ds155-registrada" $? "DECISOES-DA-SKILL.md e 08-rastro.md"
 
 rm -rf "$OF_DIR"
+
+echo "== P. TDD-first: o replanejamento preserva o trabalho parcial seguro da task bloqueada (P0.2-C7-B S3-A) =="
+# O diagnostico B1.5, literal: a task escreve o proprio teste (declarado nela), prova o
+# vermelho, tenta o arquivo X que o plano da so a uma irma, o escopo barra, B-NN
+# defeito_de_plano — e o replanejamento recusava a fronteira porque o teste estava sujo,
+# contra a ordem TDD da propria F6. Agora o teste da task bloqueada e preservado (path, estado
+# e hash no 00-PLANEJAMENTO.md commitado), o plano ganha X, a F5 aprova, a task volta, X e
+# implementado, verde, e o E1 leva o teste. Cada caso e <planejamento.sh> <dir>, como na K,
+# para os mutantes rodarem exatamente a mesma bateria.
+P="$(mktemp -d)"
+PH="$H/sprintx/escopo-da-task.sh"
+PT=tests/menu/perfil.test.sh; PX=src/menu/visibilidade.sh; PI=src/menu/perfil.sh
+p_plano() { # p_plano <dir> <status T-04.03> <altera T-04.03> [altera T-04.04] [cria T-04.03] [cria T-04.04]
+  k_sprint "$(kf "$1")/sprint-04/tasks.md" 04 plano \
+    "T-04.01|concluida|src/menu/organizacao.sh||" \
+    "T-04.02|concluida|$PX, tests/menu/visibilidade.test.sh||T-04.01" \
+    "T-04.03|$2|${5-$PI, $PT}|$3|T-04.02" \
+    "T-04.04|pendente|${6:-src/menu/rotas.sh}|${4:-}|T-04.03" \
+    "T-04.05|pendente|src/menu/icones.sh||"
+}
+# p_fx <dir> — o piloto aprovado, em F6: T-04.01 e T-04.02 concluidas com o produto
+# commitado pelo E1 (X = src/menu/visibilidade.sh e so da T-04.02); T-04.03 em andamento pela
+# sessao teste@eu. Arvore limpa.
+p_fx() {
+  local d="$1"
+  k_fx "$d" 0 3 buildx 1 || return 1
+  mkdir -p "$d/src/menu" "$d/tests/menu"
+  printf 'organizacao() { :; }\n' > "$d/src/menu/organizacao.sh"
+  printf 'visivel() { printf "menu-%%s" "$1"; }\n' > "$d/$PX"
+  printf '#!/bin/sh\n. ./%s && [ "$(visivel admin)" = menu-admin ]\n' "$PX" > "$d/tests/menu/visibilidade.test.sh"
+  p_plano "$d" em_andamento ""
+  git -C "$d" add -A && git -C "$d" commit -q -m "feat(menu): T-04.01 e T-04.02 (E1)" || return 1
+  grava_evento_menu "$d" task_iniciada T-04.03 teste@eu
+  [ -z "$(git -C "$d" status --porcelain)" ]
+}
+P_RC=0; P_SAIDA=""; P_H0=""
+p_hook() { P_SAIDA="$(roda_hook_menu "$1" "$PH" "$2" teste@eu)"; P_RC=$?; }
+p_parc() { tr -d '\r' | awk 'NR==1{next} $0=="---"{exit} /^parciais_replanejamento_f6:/{if ($0 ~ /\[\]/) {print "[]"; exit} b=1; next} b&&/^[^ ]/{exit} b&&/^  - path: /{p=$3; gsub(/"/,"",p)} b&&/^    task: /{t=$2} b&&/^    estado: /{e=$2} b&&/^    hash: /{print p "|" t "|" e "|" $2}'; }
+p_hash() { git -C "$1" hash-object --no-filters -- "$2" 2>/dev/null; }
+# p_ate_bloqueio <script> <dir> — passos 1 a 6 do B1.5: teste permitido, vermelho, X barrado, B-01, bloqueada.
+p_ate_bloqueio() {
+  local s="$1" d="$2"
+  p_hook "$d" "$PT"; [ "$P_RC" -eq 0 ] || return 1
+  printf '#!/bin/sh\n. ./%s && . ./%s && [ "$(perfil_visivel admin)" = menu-admin-completo ]\n' "$PX" "$PI" > "$d/$PT"
+  (cd "$d" && sh "$PT") >/dev/null 2>&1 && return 1
+  p_hook "$d" "$PX"
+  [ "$P_RC" -eq 2 ] && printf '%s' "$P_SAIDA" | grep -qF arquivo_de_task_irma || return 1
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano "arquivo_de_task_irma: $PX e da T-04.02" "acrescentar $PX a T-04.03" >/dev/null || return 1
+  p_plano "$d" bloqueada ""
+  grava_evento_menu "$d" task_bloqueada T-04.03 teste@eu
+  P_H0="$(p_hash "$d" "$PT")"; [ -n "$P_H0" ]
+}
+# p_so_metodo <dir> <base> — entre <base> e HEAD, nenhum commit tecnico parcial: so checkpoints da pasta da feature.
+p_so_metodo() {
+  local c p
+  for c in $(git -C "$1" rev-list "$2..HEAD"); do
+    for p in $(git -C "$1" show --name-only --format= "$c"); do case "$p" in docs/sprintx/features/menu/*) ;; *) return 1 ;; esac; done
+  done
+}
+# P1. O cenario inteiro, sem decisao humana no meio.
+p_central() {
+  local s="$1" d="$2" f out base e1; f="$(kf "$d")"
+  p_ate_bloqueio "$s" "$d" || return 1
+  base="$(git -C "$d" rev-parse HEAD)"
+  out="$(kpl "$s" "$d" replanejar-execucao menu)" || return 1
+  [ "$(kv "$out" replanejamento)" = iniciado ] && [ "$(kv "$out" estado)" = replanejar_execucao ] \
+    && [ "$(kv "$out" parciais_replanejamento_f6)" = "$PT" ] \
+    && [ "$(git -C "$d" show "HEAD:docs/sprintx/features/menu/00-PLANEJAMENTO.md" | p_parc)" = "$PT|T-04.03|novo|$P_H0" ] \
+    && [ "$(p_hash "$d" "$PT")" = "$P_H0" ] && [ "$(git -C "$d" status --porcelain -- "$PT")" = "?? $PT" ] || return 1
+  # Retomada com a arvore intacta: mesma rodada, nada consumido.
+  out="$(kpl "$s" "$d" replanejar-execucao menu)" || return 1
+  [ "$(kv "$out" replanejamento)" = retomada ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" replanejamentos_f6)" = 1 ] || return 1
+  # F3: X entra em `altera` da T-04.03; o parcial continua so dela.
+  p_plano "$d" bloqueada "$PX"
+  kpl "$s" "$d" avanca menu f3 >/dev/null && kpl "$s" "$d" avanca menu f4 >/dev/null || return 1
+  k_aud "$d" 2 SIM; out="$(kpl "$s" "$d" avanca menu f5)" || return 1
+  [ "$(kv "$out" estado)" = aprovado ] && [ "$(kv "$out" proxima)" = F6 ] && [ "$(kbloq "$d" B-01)" = "defeito_de_plano|resolvido" ] \
+    && [ "$(kst "$d" T-04.03)" = pendente ] && [ "$(p_parc < "$f/00-PLANEJAMENTO.md")" = "[]" ] \
+    && [ "$(p_hash "$d" "$PT")" = "$P_H0" ] && p_so_metodo "$d" "$base" && [ -z "$(git -C "$d" stash list)" ] || return 1
+  # A F6 retoma a T-04.03: X agora e dela. Implementa; verde.
+  p_plano "$d" em_andamento "$PX"; grava_evento_menu "$d" task_iniciada T-04.03 teste@eu
+  p_hook "$d" "$PX"; [ "$P_RC" -eq 0 ] || return 1
+  p_hook "$d" "$PI"; [ "$P_RC" -eq 0 ] || return 1
+  printf 'perfil_visivel() { printf "%%s-completo" "$(visivel "$1")"; }\n' > "$d/$PI"
+  printf 'visivel() { printf "menu-%%s" "$1"; }\nvisivel_de() { visivel "$1"; }\n' > "$d/$PX"
+  (cd "$d" && sh "$PT") >/dev/null 2>&1 || return 1
+  # E1, como a mergex o faz: os arquivos de produto declarados da task mais a pasta da feature.
+  p_plano "$d" concluida "$PX"; grava_evento_menu "$d" task_concluida T-04.03 teste@eu
+  git -C "$d" add -- "$PI" "$PT" "$PX" docs/sprintx/features/menu && git -C "$d" commit -q -m "feat(menu): T-04.03 (E1)" || return 1
+  e1="$(git -C "$d" show --name-only --format= HEAD | grep -v '^docs/sprintx/features/menu/' | LC_ALL=C sort | tr '\n' ' ')"
+  [ "$e1" = "$PI $PX $PT " ] && [ "$(git -C "$d" rev-parse "HEAD:$PT")" = "$P_H0" ] \
+    && [ -z "$(git -C "$d" status --porcelain)" ] && [ "$(kv "$(kpl "$s" "$d" fase menu)" fase)" = F6 ] \
+    && (cd "$d" && sh "$PT") >/dev/null 2>&1
+}
+# p_recusa <script> <dir> <item esperado em nao_preservaveis> [teste-preservavel:1|0] — codigo 2,
+# fronteira_insegura, nada gravado, nada limpo; por padrao o teste da propria task nao aparece
+# entre os nao preservaveis (a recusa e pelo OUTRO path).
+p_recusa() {
+  local s="$1" d="$2" f ck h st out rc np; f="$(kf "$d")"
+  ck="$(cksum < "$f/00-PLANEJAMENTO.md")"; h="$(git -C "$d" rev-parse HEAD)"; st="$(git -C "$d" status --porcelain | cksum)"
+  out="$(kpl "$s" "$d" replanejar-execucao menu)"; rc=$?
+  np=",$(kv "$out" nao_preservaveis),"
+  [ "$rc" -eq 2 ] && [ "$(kv "$out" motivo)" = fronteira_insegura ] \
+    && case "$np" in *",$3,"*) true ;; *) false ;; esac && { [ "${4:-1}" = 0 ] || case "$np" in *",$PT("*) false ;; *) true ;; esac; } \
+    && [ "$(cksum < "$f/00-PLANEJAMENTO.md")" = "$ck" ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] \
+    && [ "$(git -C "$d" status --porcelain | cksum)" = "$st" ] && [ -z "$(git -C "$d" stash list)" ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" estado)" = aprovado ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" replanejamentos_f6)" = 0 ] \
+    && [ "$(p_hash "$d" "$PT")" = "$P_H0" ]
+}
+# P2. Dirty da propria task + dirty de irma.
+p_irma() {
+  p_ate_bloqueio "$1" "$2" || return 1
+  printf 'rotas() { :; }\n' > "$2/src/menu/rotas.sh"
+  p_recusa "$1" "$2" "src/menu/rotas.sh(task_irma:T-04.04)"
+}
+# P3. Dirty da propria task + stage (outro arquivo da propria task no indice).
+p_stage() {
+  p_ate_bloqueio "$1" "$2" || return 1
+  printf 'perfil_visivel() { :; }\n' > "$2/$PI"; git -C "$2" add -- "$PI"
+  p_recusa "$1" "$2" "$PI(staged)"
+}
+# P4. O mesmo teste declarado na corrente E numa irma: nao se atribui a uma task so.
+p_compartilhado() {
+  p_ate_bloqueio "$1" "$2" || return 1
+  p_plano "$2" bloqueada "" "$PT"
+  p_recusa "$1" "$2" "$PT(compartilhado:T-04.03,T-04.04)" 0 && [ "$(kst "$2" T-04.03)" = bloqueada ]
+}
+# P5. Arquivo de task concluida sujo na arvore.
+p_concluida() {
+  p_ate_bloqueio "$1" "$2" || return 1
+  printf 'organizacao() { echo mexido; }\n' > "$2/src/menu/organizacao.sh"
+  p_recusa "$1" "$2" "src/menu/organizacao.sh(task_concluida:T-04.01)"
+}
+# P6. O hash muda durante o replanejamento: todo portao para (codigo 2), nada gravado; com o
+# conteudo de volta, byte a byte, a rodada segue — a prova e o hash, nao a data.
+p_hash_muda() {
+  local s="$1" d="$2" f ck h out rc orig; f="$(kf "$d")"
+  p_ate_bloqueio "$s" "$d" || return 1
+  kpl "$s" "$d" replanejar-execucao menu >/dev/null || return 1
+  p_plano "$d" bloqueada "$PX"; orig="$(cat "$d/$PT")"
+  printf '# ajuste feito durante o replanejamento\n' >> "$d/$PT"
+  ck="$(cksum < "$f/00-PLANEJAMENTO.md")"; h="$(git -C "$d" rev-parse HEAD)"
+  out="$(kpl "$s" "$d" avanca menu f3)"; rc=$?
+  [ "$rc" -eq 2 ] && [ "$(kv "$out" motivo)" = parcial_divergente ] && [ "$(kv "$out" trabalho_parcial)" = divergente ] \
+    && [ "$(cksum < "$f/00-PLANEJAMENTO.md")" = "$ck" ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" estado)" = replanejar_execucao ] || return 1
+  out="$(kpl "$s" "$d" replanejar-execucao menu)"; rc=$?
+  [ "$rc" -eq 2 ] && [ "$(kv "$out" motivo)" = parcial_divergente ] || return 1
+  out="$(kpl "$s" "$d" fase menu)"; rc=$?
+  [ "$rc" -eq 2 ] && [ "$(kv "$out" fase)" = PARAR ] && [ "$(kv "$out" trabalho_parcial)" = divergente ] \
+    && [ "$(cksum < "$f/00-PLANEJAMENTO.md")" = "$ck" ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] || return 1
+  printf '%s\n' "$orig" > "$d/$PT"; [ "$(p_hash "$d" "$PT")" = "$P_H0" ] || return 1
+  kpl "$s" "$d" avanca menu f3 >/dev/null && [ "$(fmv "$f/00-PLANEJAMENTO.md" estado)" = aguardando_f4 ]
+}
+# P7. O plano novo tira o parcial da task bloqueada: move para irma, remove de todas, torna
+# ambiguo, atribui a concluida. Codigo 4 em cada portao, nada registrado; o plano certo passa.
+p_ownership() {
+  local s="$1" d="$2" f ck rc m out; f="$(kf "$d")"
+  p_ate_bloqueio "$s" "$d" || return 1
+  kpl "$s" "$d" replanejar-execucao menu >/dev/null || return 1
+  ck="$(cksum < "$f/00-PLANEJAMENTO.md")"
+  for m in irma nenhuma ambiguo; do
+    case "$m" in
+      irma) p_plano "$d" bloqueada "$PX" "" "$PI" "src/menu/rotas.sh, $PT" ;;
+      nenhuma) p_plano "$d" bloqueada "$PX" "" "$PI" ;;
+      ambiguo) p_plano "$d" bloqueada "$PX" "$PT" ;;
+    esac
+    out="$(kpl "$s" "$d" avanca menu f3)"; rc=$?
+    [ "$rc" -eq 4 ] && [ "$(printf '%s' "$out" | grep -cF 'trabalho parcial preservado')" -ge 1 ] \
+      && [ "$(cksum < "$f/00-PLANEJAMENTO.md")" = "$ck" ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" estado)" = replanejar_execucao ] || return 1
+  done
+  # Concluida: a T-04.02 congelada ganharia o teste — o congelamento ja barra (codigo 4).
+  k_sprint "$f/sprint-04/tasks.md" 04 plano "T-04.01|concluida|src/menu/organizacao.sh||" \
+    "T-04.02|concluida|$PX, tests/menu/visibilidade.test.sh, $PT||T-04.01" "T-04.03|bloqueada|$PI|$PX|T-04.02" \
+    "T-04.04|pendente|src/menu/rotas.sh||T-04.03" "T-04.05|pendente|src/menu/icones.sh||"
+  kpl "$s" "$d" avanca menu f3 >/dev/null; rc=$?
+  [ "$rc" -eq 4 ] && [ "$(cksum < "$f/00-PLANEJAMENTO.md")" = "$ck" ] || return 1
+  p_plano "$d" bloqueada "$PX"
+  kpl "$s" "$d" avanca menu f3 >/dev/null && [ "$(fmv "$f/00-PLANEJAMENTO.md" estado)" = aguardando_f4 ]
+}
+# P8. Worktree perdida: um clone da branch tem o estado versionado, e nao o conteudo parcial.
+# Nada e reconstruido: fase, retomada e portao param com `parcial_perdido`, sem gravar nada.
+p_perdido() {
+  local s="$1" d="$2" c out rc h ck
+  p_ate_bloqueio "$s" "$d" || return 1
+  kpl "$s" "$d" replanejar-execucao menu >/dev/null || return 1
+  c="$(mktemp -d "$P/clone.XXXXXX")"; rm -rf "$c"
+  git clone -q -c core.autocrlf=false -b feature/menu "$d" "$c" || return 1
+  rm -rf "$d"; [ ! -e "$d" ] && [ ! -e "$c/$PT" ] || return 1
+  h="$(git -C "$c" rev-parse HEAD)"; ck="$(cksum < "$(kf "$c")/00-PLANEJAMENTO.md")"
+  [ "$(p_parc < "$(kf "$c")/00-PLANEJAMENTO.md")" = "$PT|T-04.03|novo|$P_H0" ] || return 1
+  out="$(kpl "$s" "$c" fase menu)"; rc=$?
+  [ "$rc" -eq 2 ] && [ "$(kv "$out" fase)" = PARAR ] && [ "$(kv "$out" trabalho_parcial)" = perdido ] || return 1
+  out="$(kpl "$s" "$c" replanejar-execucao menu)"; rc=$?
+  [ "$rc" -eq 2 ] && [ "$(kv "$out" motivo)" = parcial_perdido ] && [ "$(kv "$out" proxima)" = PARAR ] || return 1
+  p_plano "$c" bloqueada "$PX"
+  out="$(kpl "$s" "$c" avanca menu f3)"; rc=$?
+  [ "$rc" -eq 2 ] && [ "$(kv "$out" motivo)" = parcial_perdido ] || return 1
+  out="$(kpl "$s" "$c" fase menu)"; rc=$?
+  [ "$rc" -eq 2 ] && [ "$(kv "$out" trabalho_parcial)" = perdido ] \
+    && [ "$(git -C "$c" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$(kf "$c")/00-PLANEJAMENTO.md")" = "$ck" ] \
+    && [ ! -e "$c/$PT" ] && [ -z "$(git -C "$c" status --porcelain -- src tests)" ] \
+    && [ "$(fmv "$(kf "$c")/00-PLANEJAMENTO.md" estado)" = replanejar_execucao ]
+}
+# P9. O mesmo ciclo numa worktree vinculada (`.git` e arquivo), com a principal em outra branch.
+p_central_worktree() {
+  local s="$1" d="$2" w="$2--wt"
+  git -C "$d" switch -q main 2>/dev/null || git -C "$d" checkout -q main || return 1
+  git -C "$d" worktree add -q "$w" feature/menu || return 1
+  [ -f "$w/.git" ] || return 1
+  grava_evento_menu "$w" task_iniciada T-04.03 teste@eu
+  p_central "$s" "$w"
+}
+FXPP="$P/fx"; p_fx "$FXPP"; afirma "p0-fixture-tdd-first" $? "F6 aprovada, T-04.02 concluida com X commitado, T-04.03 em andamento pela sessao"
+pcopia() { local d; d="$(mktemp -d "$P/c.XXXXXX")"; rm -rf "$d"; cp -R "$FXPP" "$d"; printf '%s' "$d"; }
+roda_p() { "$1" "$2" "$(pcopia)"; }
+for par in p_central:p1-tdd-first-teste-preservado-ate-o-e1 p_irma:p2-propria-mais-irma-para \
+  p_stage:p3-propria-mais-stage-para p_compartilhado:p4-compartilhado-current-irma-nao-preservavel \
+  p_concluida:p5-task-concluida-suja-para p_hash_muda:p6-hash-muda-no-replanejamento-para \
+  p_ownership:p7-plano-novo-tira-o-parcial-da-task-para p_perdido:p8-worktree-perdida-fail-closed \
+  p_central_worktree:p9-tdd-first-em-worktree-vinculada; do
+  roda_p "${par%%:*}" "$PL"; afirma "${par#*:}" $? "${par%%:*}"
+done
+
+# Contrato nos documentos e a lista de segredo sem deriva.
+SCHP="$SK/references/00-schema.md"
+tem "$SCHP" '`parciais_replanejamento_f6`' && tem "$SCHP" 'parcial_perdido' && tem "$EXEC" 'parciais_replanejamento_f6' \
+  && tem "$EXEC" '`motivo=parcial_perdido`' && tem "$SK/references/03-plano.md" 'trabalho parcial preservado' \
+  && tem "$SK/assets/TEMPLATE-PLANEJAMENTO.md" 'parciais_replanejamento_f6: []' \
+  && [ "$(grep -c '^| DS-156 |' "$SK/DECISOES-DA-SKILL.md")" -eq 1 ]
+afirma "p10-contrato-do-trabalho-parcial" $? "schema, 06-execucao, 03-plano, template e DS-156"
+seg_hook="$(sed -n "/^PADROES_SEGREDO=\\|^done <<'PADROES'\$/,/^PADROES\$/p" "$H/comum/segredo.sh" | grep '|' | sed 's/^[^|]*|//')"
+seg_pl="$(sed -n "/^SEGREDO_PADROES='/,/'\$/p" "$PL" | sed "s/^SEGREDO_PADROES='//; s/'\$//")"
+[ -n "$seg_pl" ] && [ "$seg_hook" = "$seg_pl" ]
+afirma "p11-segredo-mesma-lista-do-hook" $? "planejamento.sh e comum/segredo.sh"
+
+# Mutantes do S3-A, em copia da skill (como na K). Cada um morre pelo caso designado; o
+# controle, copia sem mutacao, sobrevive a todos.
+MP="$P/mut"
+copia_skill_p() { mkdir -p "$MP/$1/scripts" "$MP/$1/assets"; cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$MP/$1/assets/"; cp "$BL" "$SK/scripts/caminho-git.sh" "$MP/$1/scripts/"; printf '%s/%s/scripts/planejamento.sh' "$MP" "$1"; }
+mutante_p() { # mutante_p <nome> <rc da geracao> <script> <caso que TEM de matar>...
+  local nome="$1" rc="$2" s="$3" c vivos=""; shift 3
+  if [ "$rc" -eq 0 ]; then for c in "$@"; do roda_p "$c" "$s" && vivos="$vivos$c "; done; fi
+  [ "$rc" -eq 0 ] && [ -z "$vivos" ]; afirma "$nome" $? "morto por: $* ${vivos:+— SOBREVIVEU a: $vivos}(rc geracao=$rc)"
+}
+CTLP="$(copia_skill_p controle)"; cp "$PL" "$CTLP"; vivosp=""
+for c in p_central p_irma p_stage p_compartilhado p_concluida p_hash_muda p_ownership p_perdido; do roda_p "$c" "$CTLP" || vivosp="$vivosp$c "; done
+[ -z "$vivosp" ]; afirma "pm-controle-copia-intacta-sobrevive" $? "${vivosp:-nenhum caso designado reprova a copia sem mutacao}"
+M="$(copia_skill_p a)"; muta_lit "$PL" "$M" '    cand="$cand$p$TAB$tasks$TAB$e$TAB$h' '    sujos="$sujos $p(sujo)"; continue; cand="$cand$p$TAB$tasks$TAB$e$TAB$h'
+mutante_p "pm-mutante-1-todo-dirty-da-corrente-rejeitado" $? "$M" p_central
+M="$(copia_skill_p b)"; muta_lit "$PL" "$M" '          elif ! em_lista "$tasks" "$BLOQ_TASKS"; then veredito="task_irma:$tasks"' '          elif false; then veredito="task_irma:$tasks"'
+mutante_p "pm-mutante-2-dirty-de-irma-preservado" $? "$M" p_irma
+M="$(copia_skill_p c)"; muta_lit "$PL" "$M" '          elif [ "$n" -gt 1 ]; then veredito="compartilhado:$tasks"' '          elif [ "$n" -gt 1 ]; then tasks="${tasks%%,*}"'
+mutante_p "pm-mutante-3-dirty-compartilhado-preservado" $? "$M" p_compartilhado
+M="$(copia_skill_p d)"; muta_lit "$PL" "$M" '  [ "$R_TSV" = "$esperado" ] && return 0' \
+  '  [ "$(printf '"'"'%s\n'"'"' "$R_TSV" | cut -f1,2)" = "$(printf '"'"'%s\n'"'"' "$esperado" | cut -f1,2)" ] && return 0'
+mutante_p "pm-mutante-4-hash-nao-verificado" $? "$M" p_hash_muda
+M="$(copia_skill_p e)"; muta_lit "$PL" "$M" '    [ -z "$P_PARC" ] || { D_PARC=perdido; D_DET=" $(printf '"'"'%s\n'"'"' "$P_PARC" | cut -f1 | tr '"'"'\n'"'"' '"'"' '"'"')"; }' '    :'
+mutante_p "pm-mutante-5-worktree-perdida-segue-integra" $? "$M" p_perdido
+M="$(copia_skill_p f)"; muta_lit "$PL" "$M" '  [ -z "$ruins" ] && return 0' '  return 0'
+mutante_p "pm-mutante-6-plano-novo-move-o-parcial" $? "$M" p_ownership
+M="$(copia_skill_p g)"; muta_lit "$PL" "$M" '  f6_herda; W6_BLQ=""; W6_CONG=""; W6_ASS=null; W6_PARC=""' \
+  '  printf '"'"'%s\n'"'"' "$P_PARC" | while IFS="$TAB" read -r p t e h; do [ -n "$p" ] && rm -f "$RAIZ/$p"; done; f6_herda; W6_BLQ=""; W6_CONG=""; W6_ASS=null; W6_PARC=""'
+mutante_p "pm-mutante-7-e1-sem-o-teste-preservado" $? "$M" p_central
+
+rm -rf "$P"
 
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"

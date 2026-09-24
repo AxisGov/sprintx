@@ -12,6 +12,7 @@ replanejamentos_f6: {{inteiro-maior-ou-igual-a-zero}}
 bloqueios_replanejamento_f6: []
 tasks_congeladas: []
 assinatura_congeladas: null
+parciais_replanejamento_f6: []
 atualizado_em: {{AAAA-MM-DD}}
 historico: []
 ---
@@ -44,8 +45,18 @@ historico:
 
 Durante uma rodada de replanejamento da execução (retorno da F6), o script preenche
 `bloqueios_replanejamento_f6` com os B-NN `defeito_de_plano` que a abriram, em ordem de id,
-e congela as tasks concluídas em `tasks_congeladas` + `assinatura_congeladas`. Ao fechar a
-rodada as três voltam a `[]`, `[]` e `null`.
+e congela as tasks concluídas em `tasks_congeladas` + `assinatura_congeladas`. O trabalho
+parcial da task bloqueada que ficou na árvore vai para `parciais_replanejamento_f6`, um item
+por caminho, em ordem de byte do caminho:
+
+parciais_replanejamento_f6:
+  - path: "tests/menu/perfil.test.ts"
+    task: T-04.03
+    estado: novo
+    hash: {{id-do-blob-git}}
+
+Ao fechar a rodada as quatro voltam a `[]`, `[]`, `null` e `[]` — o trabalho parcial continua
+na árvore, com a task reaberta.
 
 Quando o retorno da F6 é recusado por motivo operacional, o script grava o estado terminal
 `replanejamento_execucao_recusado` e, logo depois de `estado`, a chave
