@@ -46,6 +46,13 @@ function raizDoRepo(inicio: string): string {
 }
 
 /**
+ * Os hooks de que a seguranca depende (DS-157). O timeout e falha ABERTA — o hook
+ * cancelado nao bloqueia nada —, entao estes tres ganham margem; a garantia primaria
+ * e eles nao criarem processo. Os demais seguem em 10 s.
+ */
+const CRITICOS = new Set(["sprintx/escopo-da-task.sh", "comum/segredo.sh", "comum/git-perigoso.sh"])
+
+/**
  * Roda um hook e devolve o que ele decidiu.
  * exit 2  => bloqueia (mensagem no stderr)
  * stdout com additionalContext => aviso
@@ -61,7 +68,7 @@ function rodaHook(
   const r = spawnSync("bash", [hook], {
     input: JSON.stringify(payload),
     encoding: "utf8",
-    timeout: 10_000,
+    timeout: CRITICOS.has(caminhoRelativo) ? 30_000 : 10_000,
   })
 
   if (r.status === 2) {

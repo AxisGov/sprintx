@@ -206,6 +206,8 @@ O modo de cada hook vive em `.expx/hooks.json`, e é lá que se promove.
 
 Hook de método falha **aberta**: se ele quebra, o trabalho segue. Hook de segurança falha **fechada**.
 
+**O timeout do runner é falha aberta.** O Claude Code — e o plugin do OpenCode — cancela o hook que passa do `timeout` e deixa a ferramenta executar, sem aviso ao modelo: um hook lento demais é um hook desligado. Por isso os três hooks de que a segurança depende — `escopo-da-task`, `segredo` e `git-perigoso` — são escritos para quase não criar processo (no Git Bash, cada processo novo custa de 0,5 a 2 s): o caminho comum decide com um processo externo, ou nenhum, e o bloqueio com até três (DS-157). Só esses três têm `timeout` de 30 s; os outros continuam em 10 s. O timeout maior é **margem, não a garantia**. E nenhum hook sozinho garante segurança absoluta: o hook de pré-escrita é a **primeira barreira**; a barreira posterior, que falha fechada, é o E1 da `mergex`, que commita só o que o plano dá à task.
+
 ### Os agentes
 
 Os agentes de veredito têm **acesso somente de leitura**. É isso que transforma "aponta, não corrige" de instrução em impossibilidade técnica.

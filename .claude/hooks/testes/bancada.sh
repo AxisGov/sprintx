@@ -2301,8 +2301,9 @@ done
 l_k "$LM/sprintx/controle.sh" || vivosl="${vivosl}l_k "
 [ -z "$vivosl" ]; afirma "lm-controle-copia-intacta-sobrevive" $? "${vivosl:-nenhum caso designado reprova a copia sem mutacao}"
 
+# Os literais seguem a reescrita de custo do hook (DS-157); a intencao de cada mutante e a de sempre.
 muta_lit "$H/sprintx/escopo-da-task.sh" "$LM/sprintx/m1.sh" \
-  'if [ -n "$TASKS_IRMAS" ]; then' 'if [ -n "$TASKS_IRMAS" ] && false; then'
+  'if [ "$DECL" = irma ]; then' 'if [ "$DECL" = irma ] && false; then'
 l_mutante "lm-mutante-1-uniao-vence-escopo-unitario" $? "$LM/sprintx/m1.sh" l_c l_d
 
 muta_lit "$H/sprintx/escopo-da-task.sh" "$LM/sprintx/m2.sh" \
@@ -2314,8 +2315,7 @@ muta_lit "$H/sprintx/escopo-da-task.sh" "$LM/sprintx/m3.sh" \
 l_mutante "lm-mutante-3-arquivo-de-nenhuma-vira-defeito_de_plano" $? "$LM/sprintx/m3.sh" l_e
 
 muta_lit "$H/sprintx/escopo-da-task.sh" "$LM/sprintx/m4.sh" \
-  'if printf '"'"'%s\n'"'"' "$CURRENT_DECLARADOS" | grep -qxF "$REL"; then' \
-  'if printf '"'"'%s\n'"'"' "$CURRENT_DECLARADOS" | grep -qxF "$REL" && false; then'
+  '    if (corrente) { print "D corrente"; exit }' '    if (corrente && 0) { print "D corrente"; exit }'
 l_mutante "lm-mutante-4-atual-mais-irma-bloqueado-incorretamente" $? "$LM/sprintx/m4.sh" l_b
 l_mutante "lm-mutante-7-depois-do-replanejamento-ainda-bloqueia" $? "$LM/sprintx/m4.sh" l_k
 
@@ -2325,16 +2325,16 @@ l_mutante "lm-mutante-7-depois-do-replanejamento-ainda-bloqueia" $? "$LM/sprintx
 LM5="$K/c2mut5"; mkdir -p "$LM5/sprintx" "$LM5/comum"
 cp "$H/sprintx/escopo-da-task.sh" "$LM5/sprintx/m5.sh"
 muta_lit "$H/comum/rastro.sh" "$LM5/comum/rastro.sh" \
-  'if (dono[k] == "" || dono[k] != ses) continue' 'if (dono[k] == "") continue'
+  'if (_rv_dono[k] == "" || _rv_dono[k] != ses) continue' 'if (_rv_dono[k] == "") continue'
 l_mutante "lm-mutante-5-seleciona-a-primeira-nao-a-da-sessao" $? "$LM5/sprintx/m5.sh" l_h
 
 muta_lit "$H/sprintx/escopo-da-task.sh" "$LM/sprintx/m6.sh" \
-  "grep -q 'status: em_andamento' \"\$f\" 2>/dev/null && ANY_EM_ANDAMENTO=1" \
-  "grep -qE 'status: (em_andamento|bloqueada)' \"\$f\" 2>/dev/null && ANY_EM_ANDAMENTO=1"
+  '  PORT && index($0, "status: em_andamento") { G = 1 }' \
+  '  PORT && (index($0, "status: em_andamento") || index($0, "status: bloqueada")) { G = 1 }'
 l_mutante "lm-mutante-6-depois-do-bloqueio-continua-abrindo-task" $? "$LM/sprintx/m6.sh" l_j
 
 muta_lit "$H/sprintx/escopo-da-task.sh" "$LM/sprintx/m8.sh" \
-  '[ -n "$ANY_EM_ANDAMENTO" ] || exit 0' '[ -n "$ANY_EM_ANDAMENTO" ] || true'
+  '[ "$G" = 1 ] || exit 0' '[ "$G" = 1 ] || true'
 l_mutante "lm-mutante-8-cria-b-nn-duplicado-numa-repeticao" $? "$LM/sprintx/m8.sh" l_j
 
 # Decisao registrada e hook documentado como excecao normativa mesmo em aviso.
@@ -2941,9 +2941,11 @@ NMC="$(n_copia controle)"; vivosn=""
 for c in $CASOS_N; do "$c" "$NMC" || vivosn="$vivosn$c "; done
 [ -z "$vivosn" ]; afirma "nm-controle-copia-intacta-sobrevive" $? "${vivosn:-nenhum caso reprova a copia sem mutacao}"
 
-L_CANON='TASKS_CANON="$(find "$RAIZ/docs/sprintx/features/$TRABALHO" -maxdepth 3 -name tasks.md -type f 2>/dev/null | LC_ALL=C sort)"'
-L_LEGADO='TASKS_LEGADO="$(find "$RAIZ/docs/$TRABALHO" -maxdepth 3 -name tasks.md -type f 2>/dev/null | LC_ALL=C sort)"'
-L_GLOBAL='TASKS_CANON="$(find "$RAIZ/docs" -maxdepth 5 -name tasks.md -type f 2>/dev/null | LC_ALL=C sort)"'
+# Os literais seguem a reescrita de custo do hook (DS-157): o plano do trabalho e escolhido
+# no END do awk (do_trabalho/PTR). A intencao de cada mutante e a de sempre.
+L_CANON='    if (index(f, CAN) == 1 && barras(substr(f, length(CAN) + 1)) <= 2) return 1'
+L_LEGADO='    if (index(f, LEG) == 1 && barras(substr(f, length(LEG) + 1)) <= 2) return 2'
+L_GLOBAL='    if (index(f, raiz "/docs/") == 1) return 1'
 
 NMUT="$(n_copia m1)"; n_muta "$NMUT" "$L_CANON" "$L_GLOBAL"
 n_mutante "nm-mutante-1-volta-ao-find-global" $? "$NMUT" n_d n_h
@@ -2952,44 +2954,47 @@ n_mutante "nm-mutante-1-volta-ao-find-global" $? "$NMUT" n_d n_h
 # vence em n_d depende da ordem que o find devolve — e ordem nao e prova. Em
 # n_h a irma historica tem id proprio (T-01.09) e aparece na lista em qualquer
 # filesystem.
-NMUT="$(n_copia m2)"; n_muta "$NMUT" '$TASKS_TRABALHO' '$TASKS_MD'
+NMUT="$(n_copia m2)"; n_muta "$NMUT" 'PTR[i] = do_trabalho(PARQ[i]); if (PTR[i]) npt++' 'PTR[i] = 1; if (PTR[i]) npt++'
 n_mutante "nm-mutante-2-primeiro-plano-com-o-mesmo-id" $? "$NMUT" n_h
 
-NMUT="$(n_copia m3)"; n_muta "$NMUT" 'TASKS_TRABALHO="$TASKS_CANON"' 'TASKS_TRABALHO="$TASKS_MD"'
+NMUT="$(n_copia m3)"; n_muta "$NMUT" '    if (!TEMCAN && !TEMLEG) { print "P ausente"; exit }' \
+  '    if (!TEMCAN && !TEMLEG) { SEMPLANO = 1 }' \
+  && n_muta "$NMUT" '    npt = 0; for (i = 1; i <= NP; i++) { PTR[i] = do_trabalho(PARQ[i]); if (PTR[i]) npt++ }' \
+  '    npt = 0; for (i = 1; i <= NP; i++) { PTR[i] = SEMPLANO ? 1 : do_trabalho(PARQ[i]); if (PTR[i]) npt++ }'
 n_mutante "nm-mutante-3-plano-historico-como-fallback" $? "$NMUT" n_l n_o
 
-NMUT="$(n_copia m4)"; n_muta "$NMUT" \
-  'CURRENT_TASKS_MD="$(printf '"'"'%s\n'"'"' "$PARES" | awk -F'"'"'\t'"'"' -v id="$CURRENT_ID" '"'"'$1 == id { print $2; exit }'"'"')"' \
-  'CURRENT_TASKS_MD="$(grep -l "id: $CURRENT_ID" $TASKS_MD 2>/dev/null | LC_ALL=C sort | head -1)"'
+NMUT="$(n_copia m4)"; n_muta "$NMUT" 'if (PID[i] == ID && PTR[i] && (cur == ""' 'if (PID[i] == ID && (cur == ""'
 n_mutante "nm-mutante-4-uniao-de-todas-as-features-como-others" $? "$NMUT" n_a n_i
 
-NMUT="$(n_copia m5)"; n_muta "$NMUT" 'TRABALHO="$(printf '"'"'%s'"'"' "$PAR_SESSAO" | cut -f1)"' \
-  'TRABALHO="$(git -C "$RAIZ" symbolic-ref --short HEAD 2>/dev/null | sed '"'"'s|.*/||'"'"')"'
+NMUT="$(n_copia m5)"; n_muta "$NMUT" 'if (N == 1) { split(RV_L[1], p, "\t"); T = p[1]; ID = p[2]; COER = p[3] }' \
+  'if (N == 1) { split(RV_L[1], p, "\t"); ID = p[2]; COER = p[3]; c = "git -C \"" raiz "\" symbolic-ref --short HEAD 2>/dev/null"; c | getline T; close(c); sub(/.*\//, "", T) }'
 n_mutante "nm-mutante-5-trabalho-pelo-nome-da-branch" $? "$NMUT" n_a n_d
 
-NMUT="$(n_copia m6)"; n_muta "$NMUT" 'MINHAS="$(rastro_reivindicacoes_da_sessao "$RAIZ" "$MINHA_SESSAO")"' \
-  'MINHAS="$(printf '"'"'%s\n'"'"' "$TASKS_MD" | while IFS= read -r a; do [ -f "$a" ] && awk -v A="$a" '"'"'/^  - id:/{id=$3} /status: em_andamento/{n=split(A,p,"/"); print p[n-2] "\t" id "\tok"; exit}'"'"' "$a"; done)"'
+# A reivindicacao deixa de ser DA SESSAO: toda task aberta no rastro conta como desta sessao.
+NMUT="$(n_copia m6)"; n_muta "$NMUT" '    _rv_fim(ses); N = RV_N' \
+  '    for (k in _rv_dono) if (_rv_dono[k] != "") _rv_dono[k] = ses; _rv_fim(ses); N = RV_N'
 n_mutante "nm-mutante-6-primeira-task-em-andamento" $? "$NMUT" n_t n_u
 
 NMUT="$(n_copia m7)"; n_muta "$NMUT" 'if [ "$COERENCIA" != "ok" ]; then' 'if false; then'
 n_mutante "nm-mutante-7-ignora-trabalho-divergente" $? "$NMUT" n_div
 
-NMUT="$(n_copia m8)"; n_muta "$NMUT" 'if [ -n "$TASKS_IRMAS" ]; then' \
-  'if [ -n "$TASKS_IRMAS" ] || grep -l "$REL" $TASKS_MD >/dev/null 2>&1; then'
+NMUT="$(n_copia m8)"; n_muta "$NMUT" 'if [ "$DECL" = irma ]; then' \
+  'if [ "$DECL" = irma ] || grep -qsF -- "$REL" "$RAIZ"/docs/sprintx/features/*/sprint-*/tasks.md "$RAIZ"/docs/*/sprint-*/tasks.md >/dev/null 2>&1; then'
 n_mutante "nm-mutante-8-irma-historica-vira-irma-da-corrente" $? "$NMUT" n_d
 
-NMUT="$(n_copia m9)"; n_muta "$NMUT" 'CURRENT_DECLARADOS="$(_arquivos_da_task "$CURRENT_ID" "$CURRENT_TASKS_MD")"' \
-  'CURRENT_DECLARADOS="$(for a in $TASKS_MD; do _arquivos_da_task "$CURRENT_ID" "$a"; done)"'
+# Os arquivos da task corrente viram a uniao de TODA task com o mesmo id, de qualquer feature.
+NMUT="$(n_copia m9)"; n_muta "$NMUT" '    k = cur SUBSEP ID; lista = ""; corrente = 0' \
+  '    k = cur SUBSEP ID; lista = ""; corrente = 0; for (i = 1; i <= NP; i++) if (PID[i] == ID && PARQ[i] != cur) for (j = 1; j <= NAN[PARQ[i] SUBSEP ID]; j++) NA[k, ++NAN[k]] = NA[PARQ[i] SUBSEP ID, j]'
 n_mutante "nm-mutante-9-task-homonima-historica-autoriza" $? "$NMUT" n_e n_p
 
 NMUT="$(n_copia m10)"; n_muta "$NMUT" "$L_LEGADO" \
-  'TASKS_LEGADO="$(find "$RAIZ/docs" -maxdepth 3 -name tasks.md -type f 2>/dev/null | LC_ALL=C sort)"'
+  '    if (index(f, raiz "/docs/") == 1 && barras(substr(f, length(raiz "/docs/") + 1)) <= 2) return 2'
 n_mutante "nm-mutante-10-legado-de-outro-trabalho-como-fallback" $? "$NMUT" n_o
 
 # Mutante do helper: sem o filtro de sessao, o par volta a ser "o primeiro que
 # aparece no rastro" — a regressao que a DS-150 proibiu.
 NMUT="$(n_copia m11)"; n_muta "$NM/m11/comum/rastro.sh" \
-  'if (dono[k] == "" || dono[k] != ses) continue' 'if (dono[k] == "") continue'
+  'if (_rv_dono[k] == "" || _rv_dono[k] != ses) continue' 'if (_rv_dono[k] == "") continue'
 n_mutante "nm-mutante-11-helper-ignora-a-sessao" $? "$NMUT" n_t n_u
 
 DSF4="$SK/DECISOES-DA-SKILL.md"
@@ -3225,10 +3230,12 @@ OMC="$(o_copia controle)"; vivoso=""
 for c in $CASOS_O; do "$c" "$OMC" || vivoso="$vivoso$c "; done
 [ -z "$vivoso" ]; afirma "om-controle-copia-intacta-sobrevive" $? "${vivoso:-nenhum caso reprova a copia sem mutacao}"
 
-L_SESSAO='  local raiz="$1" ses="${2:-}"'
-L_MTIME='  local raiz="$1" ses="${2:-}"; local f mais_novo=""; for f in "$raiz"/docs/sprintx/features/*/; do [ -d "$f" ] || continue; if [ -z "$mais_novo" ] || [ "$f" -nt "$mais_novo" ]; then mais_novo="$f"; fi; done; [ -n "$mais_novo" ] && basename "${mais_novo%/}"; return 0'
+L_SESSAO='  local _raiz="$2" _ses="${3:-}" _tid _coer'
+L_MTIME='  local _raiz="$2" _ses="${3:-}" _tid _coer; local f mais_novo=""; for f in "$_raiz"/docs/sprintx/features/*/; do [ -d "$f" ] || continue; if [ -z "$mais_novo" ] || [ "$f" -nt "$mais_novo" ]; then mais_novo="$f"; fi; done; mais_novo="${mais_novo%/}"; printf -v "$1" "%s" "${mais_novo##*/}"; return 0'
 OMUT="$(o_copia m1)"; o_muta "$OM/m1/comum/rastro.sh" "$L_SESSAO" "$L_MTIME"
-o_mutante "om-mutante-1-destino-por-mtime" $? "$OMUT" o_a o_d o_i o_j
+# O escopo-da-task entrega ao rastro.sh o trabalho que ja resolveu (DS-157): o helper decide o
+# destino dos outros hooks (o_i, o_j); o mesmo defeito no escopo e o om-mutante-6.
+o_mutante "om-mutante-1-destino-por-mtime" $? "$OMUT" o_i o_j
 
 OMUT="$(o_copia m2)"; o_muta "$OM/m2/comum/rastro.sh" \
   '  local raiz="$1" pedido="$2" evento="$3"' '  local raiz="$1" pedido="-" evento="$3"'
@@ -3245,8 +3252,13 @@ o_mutante "om-mutante-4-aceita-trabalho-divergente" $? "$OMUT" o_e
 # Sem o filtro de sessao no helper, as duas sessoes passam a enxergar as duas
 # reivindicacoes — e e assim que dois trabalhos cruzariam o mesmo arquivo.
 OMUT="$(o_copia m5)"; o_muta "$OM/m5/comum/rastro.sh" \
-  'if (dono[k] == "" || dono[k] != ses) continue' 'if (dono[k] == "") continue'
+  'if (_rv_dono[k] == "" || _rv_dono[k] != ses) continue' 'if (_rv_dono[k] == "") continue'
 o_mutante "om-mutante-5-sessoes-cruzam-arquivos" $? "$OMUT" o_a o_d o_f o_j
+
+# O trabalho que o escopo-da-task entrega ao rastro.sh volta a sair do mtime.
+OMUT="$(o_copia m6)"; o_muta "$OM/m6/sprintx/escopo-da-task.sh" '  RASTRO_TRABALHO_DA_SESSAO="$TRABALHO"' \
+  '  RASTRO_TRABALHO_DA_SESSAO="$(ls -t "$RAIZ/docs/sprintx/features" 2>/dev/null | head -1)"'
+o_mutante "om-mutante-6-escopo-destino-por-mtime" $? "$OMUT" o_a o_d
 
 DSF5="$SK/DECISOES-DA-SKILL.md"
 [ "$(grep -c '^| DS-155 |' "$DSF5")" -eq 1 ] && tem "$DSF5" 'rastro_grava_trabalho' \
@@ -3521,6 +3533,144 @@ M="$(copia_skill_p g)"; muta_lit "$PL" "$M" '  f6_herda; W6_BLQ=""; W6_CONG=""; 
 mutante_p "pm-mutante-7-e1-sem-o-teste-preservado" $? "$M" p_central
 
 rm -rf "$P"
+
+echo "== Q. custo dos hooks criticos: poucos processos, timeout como margem (P0.2-C7-B S3-B) =="
+# O runner cancela o hook que estoura o timeout e deixa a ferramenta EXECUTAR: timeout e
+# falha aberta. A garantia primaria e o hook nao criar processo (no Git Bash cada um custa de
+# 0,5 a 2 s); o timeout maior dos tres criticos e so margem. Os processos externos sao
+# contados por shims no PATH — o mesmo em Linux e no Git Bash; builtin do bash nao passa por eles.
+Q="$(mktemp -d)"; mkdir -p "$Q/shim"
+for c in awk jq grep sed cut tr wc sort head tail find cat date mkdir dirname basename xargs ps mv git ls uniq env python3 od; do
+  r="$(command -v "$c" 2>/dev/null)"; case "$r" in */*) ;; *) continue ;; esac
+  printf '#!/bin/sh\nprintf "%%s\\n" "%s" >> "$Q_LOG"\nexec "%s" "$@"\n' "$c" "$r" > "$Q/shim/$c"; chmod +x "$Q/shim/$c"
+done
+q_fx() { # q_fx <dir> — 4 sprints x 6 tasks no formato do template (frontmatter + prosa), rastro com a reivindicacao
+  local d="$1" F s t st; rm -rf "$d"; mkdir -p "$d/.git" "$d/docs/eventos"; F="$d/docs/sprintx/features/menu"
+  for s in 01 02 03 04; do
+    mkdir -p "$F/sprint-$s"
+    {
+      printf -- '---\nexpx_schema: 1\nkind: tasks\ntrabalho_id: menu\nsprint_id: sprint-%s\ntasks:\n' "$s"
+      for t in 01 02 03 04 05 06; do
+        st=concluida; [ "$s" = 04 ] && st=pendente; [ "$s$t" = 0403 ] && st=em_andamento
+        printf '  - id: T-%s.%s\n    status: %s\n    arquivos:\n      cria: [src/m%s/t%s.ts, tests/m%s/t%s.test.ts]\n      altera: []\n' "$s" "$t" "$st" "$s" "$t" "$s" "$t"
+      done
+      printf -- '---\n\n'
+      for t in 01 02 03 04 05 06; do printf -- '```yaml\nid: T-%s.%s\narquivos:\n  cria: [src/m%s/t%s.ts]\n  altera: []\n```\n\n' "$s" "$t" "$s" "$t"; done
+    } > "$F/sprint-$s/tasks.md"
+  done
+  printf '{"trabalho_id":"menu","evento":"task_iniciada","task":"T-04.03","sessao":"q@1"}\n' > "$d/docs/eventos/menu.jsonl"
+  printf '{"trabalho_id":"historica","evento":"task_iniciada","task":"T-04.03","sessao":"q@9"}\n' > "$d/docs/eventos/historica.jsonl"
+}
+Q_N=0; Q_RC=0
+q_roda() { # q_roda <raiz-hooks> <hook> <payload> — processos externos em Q_N, rc em Q_RC
+  local d="$Q/r"; q_fx "$d"; : > "$Q/log"
+  printf '%s' "$(printf '%s' "$3" | sed "s#@D@#$d#g")" | (cd "$d" && PATH="$Q/shim:$PATH" Q_LOG="$Q/log" EXPX_SESSAO=q@1 CLAUDECODE=1 bash "$1/$2") >/dev/null 2>&1
+  Q_RC=$?; Q_N="$(grep -c '' "$Q/log")"
+}
+qw() { printf '{"cwd":"@D@","tool_name":"Write","tool_input":{"file_path":"@D@/%s","content":"%s"}}' "$1" "${2:-x = 1}"; }
+qb() { printf '{"cwd":"@D@","tool_name":"Bash","tool_input":{"command":"%s"}}' "$1"; }
+Q_AWS="AKIA""ABCDEFGHIJKLMNOP"; Q_GF="git push"" --force origin main"
+# Sem `mapfile -d` (bash < 4.4, macOS) a leitura do payload custa um `cat`: um processo a mais permitido.
+Q_FOLGA=0; { [ "${BASH_VERSINFO[0]}" -gt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -ge 4 ]; }; } || Q_FOLGA=1
+# q_orcamento <raiz-hooks> <rotulo-git-perigoso> — cada cenario decide certo (rc) e cabe no orcamento:
+# caminho comum ate 2 processos externos, bloqueio ate 3. Imprime o que custou cada um.
+Q_CUSTO=""
+q_orcamento() {
+  local H2="$1" GP="$2" c nome hook pl rc max ruim=""
+  Q_CUSTO=""
+  while IFS='|' read -r nome hook rc max pl; do
+    [ -n "$nome" ] || continue
+    q_roda "$H2" "$hook" "$(eval "printf '%s' \"$pl\"")"
+    Q_CUSTO="$Q_CUSTO $nome=$Q_N"
+    [ "$Q_RC" -eq "$rc" ] && [ "$Q_N" -le $((max + Q_FOLGA)) ] || ruim="$ruim $nome(rc=$Q_RC,proc=$Q_N)"
+  done <<EOF
+escopo-corrente|sprintx/escopo-da-task.sh|0|2|\$(qw src/m04/t03.ts)
+escopo-irma|sprintx/escopo-da-task.sh|2|3|\$(qw src/m04/t04.ts)
+escopo-concluida|sprintx/escopo-da-task.sh|2|3|\$(qw src/m01/t01.ts)
+escopo-fora|sprintx/escopo-da-task.sh|0|3|\$(qw src/outro.ts)
+segredo-limpo|comum/segredo.sh|0|2|\$(qw src/a.ts)
+segredo-achado|comum/segredo.sh|2|3|\$(qw src/a.ts \$Q_AWS)
+git-inocuo|$GP|0|2|\$(qb 'git status')
+git-perigoso|$GP|2|3|\$(qb "\$Q_GF")
+EOF
+  [ -z "$ruim" ] || { Q_CUSTO="$Q_CUSTO — FORA:$ruim"; return 1; }
+}
+# q_timeouts <settings.json> <plugin.ts> — os tres criticos com 30 s, todo o resto com 10 s, nos dois harnesses.
+q_timeouts() {
+  tr -d '\r' < "$1" | awk '
+    /"command":/ { c = $0; next }
+    /"timeout":/ { t = $0; gsub(/[^0-9]/, "", t); crit = (c ~ /escopo-da-task\.sh|segredo\.sh|git-perigoso\.sh/)
+                   if (crit) { nc++; if (t != 30) ruim = 1 } else if (t != 10) ruim = 1 }
+    END { exit (ruim || nc != 3) }' \
+  && [ "$(tr -d '\r' < "$2" | grep -cF 'timeout: CRITICOS.has(caminhoRelativo) ? 30_000 : 10_000')" -eq 1 ] \
+  && [ "$(tr -d '\r' < "$2" | grep -c 'const CRITICOS = new Set(\[.*"sprintx/escopo-da-task.sh".*"comum/segredo.sh".*git-perigoso.sh"\])')" -eq 1 ]
+}
+# q_criticos <raiz-hooks> <settings> <plugin> <git-perigoso> — a solucao inteira: timeout como margem E custo baixo.
+q_criticos() { q_timeouts "$2" "$3" && q_orcamento "$1" "$4"; }
+QGP=comum/git-perigoso.sh
+q_orcamento "$H" "$QGP"; afirma "q1-orcamento-de-processos-dos-criticos" $? "externos por execucao:$Q_CUSTO"
+q_timeouts "$H/../settings.json" "$H/../../.opencode/plugin/sprintx.ts"; afirma "q2-timeout-30s-so-nos-tres-criticos" $? "settings.json e plugin do OpenCode"
+tem "$SKILLMD" 'timeout do runner é falha aberta' && tem "$SKILLMD" 'primeira barreira' && tem "$SKILLMD" 'E1 da `mergex`' \
+  && [ "$(grep -c '^| DS-157 |' "$SK/DECISOES-DA-SKILL.md")" -eq 1 ]
+afirma "q3-contrato-fail-open-e-backstop" $? "SKILL.md e DS-157"
+
+# L-prosa. A prosa repete o bloco ```yaml de cada task; a task corrente e a ULTIMA do
+# frontmatter; o arquivo e so de uma irma. Tem de bloquear (lia-se a prosa como da ultima task).
+l_prosa() {
+  l_fixture
+  c2_abre 04 "$C2OC/sprint-04/tasks.md"
+  c2_tarefa "$C2OC/sprint-04/tasks.md" T-04.01 pendente "src/menu/irma.ts" ""
+  c2_tarefa "$C2OC/sprint-04/tasks.md" T-04.03 em_andamento "" "src/ui/cabecalho-topo.tsx"
+  c2_fecha "$C2OC/sprint-04/tasks.md"
+  printf '\n```yaml\nid: T-04.01\narquivos:\n  cria: [src/menu/irma.ts]\n  altera: []\n```\n\n```yaml\nid: T-04.03\narquivos:\n  cria: []\n  altera: [src/ui/cabecalho-topo.tsx]\n```\n' >> "$C2OC/sprint-04/tasks.md"
+  c2_hook "$1" "src/menu/irma.ts" teste@eu
+  [ $? -eq 2 ] && printf '%s' "$C2_SAIDA" | grep -qF "arquivo_de_task_irma" && printf '%s' "$C2_SAIDA" | grep -qF "(T-04.01)"
+}
+C2="$(mktemp -d)"
+git -C "$C2" init -q -b main; C2OC="$C2/docs/sprintx/features/c2-escopo-irma"
+mkdir -p "$C2OC/sprint-03" "$C2OC/sprint-04"; C2RASTRO="$C2/docs/eventos/c2-escopo-irma.jsonl"; mkdir -p "$(dirname "$C2RASTRO")"
+l_prosa "$H/sprintx/escopo-da-task.sh"; afirma "q4-prosa-nao-declara-ownership" $? "corrente e a ultima task do frontmatter; o arquivo da irma na prosa continua da irma"
+
+# Mutantes do S3-B. Copia da arvore de hooks (sprintx/ + comum/), da configuracao e do plugin.
+QM="$Q/mut"
+q_copia() { # q_copia <nome> — devolve a raiz de hooks copiada, com settings.json e plugin ao lado
+  local d="$QM/$1"; rm -rf "$d"; mkdir -p "$d/hooks" "$d/plugin"
+  cp -R "$H/sprintx" "$H/comum" "$d/hooks/"; cp "$H/../settings.json" "$d/settings.json"; cp "$H/../../.opencode/plugin/sprintx.ts" "$d/plugin/sprintx.ts"
+  printf '%s' "$d"
+}
+q_mutante() { # q_mutante <nome> <rc geracao> <condicao que TEM de falhar...>
+  local nome="$1" rc="$2"; shift 2
+  if [ "$rc" -eq 0 ] && ! "$@"; then afirma "$nome" 0 "morto por: $1"; else afirma "$nome" 1 "SOBREVIVEU a: $1 (rc geracao=$rc)"; fi
+}
+q_controle() { # a copia sem mutacao passa em tudo que os mutantes precisam reprovar
+  local c
+  q_criticos "$1/hooks" "$1/settings.json" "$1/plugin/sprintx.ts" "$QGP" && l_prosa "$1/hooks/sprintx/escopo-da-task.sh" || return 1
+  for c in l_a l_b l_c l_d l_e l_j; do "$c" "$1/hooks/sprintx/escopo-da-task.sh" || return 1; done
+}
+QC="$(q_copia controle)"; q_controle "$QC"
+afirma "qm-controle-copia-intacta-sobrevive" $? "orcamento, timeouts, prosa e C2 na copia sem mutacao"
+# 1. Volta ao desenho fork-heavy: find + grep por tasks.md + pipelines, como antes da DS-157.
+QMU="$(q_copia m1)"; muta_lit "$QMU/hooks/sprintx/escopo-da-task.sh" "$QMU/e.m" 'rastro_raiz_em RAIZ "$CWD"' \
+  'RAIZ="$(rastro_raiz "$CWD")"; for f in $(find "$RAIZ/docs" -maxdepth 5 -name tasks.md -type f 2>/dev/null); do grep -q "status: em_andamento" "$f" 2>/dev/null; done; N_X="$(printf "%s\n" x | awk NF | wc -l | tr -d " ")"' \
+  && mv "$QMU/e.m" "$QMU/hooks/sprintx/escopo-da-task.sh"
+q_mutante "qm-mutante-1-volta-ao-fork-heavy" $? q_orcamento "$QMU/hooks" "$QGP"
+# 2. O timeout critico volta a 10 s.
+QMU="$(q_copia m2)"; awk '/escopo-da-task\.sh/ { e = 1 } e && /"timeout": 30/ { sub(/30/, "10"); e = 0 } { print }' "$QMU/settings.json" > "$QMU/s.m" && ! cmp -s "$QMU/s.m" "$QMU/settings.json" && mv "$QMU/s.m" "$QMU/settings.json"
+q_mutante "qm-mutante-2-timeout-critico-volta-a-10" $? q_timeouts "$QMU/settings.json" "$QMU/plugin/sprintx.ts"
+# 3. Timeout aumentado SEM a otimizacao: o hook fork-heavy com 30 s nao e solucao suficiente.
+QMU="$(q_copia m3)"; muta_lit "$QMU/hooks/comum/rastro.sh" "$QMU/r.m" 'rastro_le_entrada_em() {' \
+  'rastro_le_entrada_em() { local _i; for _i in 1 2 3 4 5 6; do date >/dev/null; done; printf -v "$1" "%s" "$(cat)"; return 0' \
+  && mv "$QMU/r.m" "$QMU/hooks/comum/rastro.sh"
+q_mutante "qm-mutante-3-timeout-maior-sem-otimizacao" $? q_criticos "$QMU/hooks" "$QMU/settings.json" "$QMU/plugin/sprintx.ts" "$QGP"
+# 4. O atalho do caminho comum muda a semantica C2: arquivo so de irma passa como da corrente.
+QMU="$(q_copia m4)"; muta_lit "$QMU/hooks/sprintx/escopo-da-task.sh" "$QMU/e.m" '  case "$DECL" in corrente|vazio) exit 0 ;; esac' \
+  '  case "$DECL" in corrente|vazio|irma) exit 0 ;; esac' && mv "$QMU/e.m" "$QMU/hooks/sprintx/escopo-da-task.sh"
+q_mutante "qm-mutante-4-escopo-muda-semantica-irma-corrente" $? l_c "$QMU/hooks/sprintx/escopo-da-task.sh"
+# 5. A prosa volta a declarar ownership (a leitura de antes).
+QMU="$(q_copia m5)"; muta_lit "$QMU/hooks/sprintx/escopo-da-task.sh" "$QMU/e.m" '  FNR > 1 && FM && $0 == "---" { FORA = 1; AT = "" }' \
+  '  FNR > 1 && FM && $0 == "---" { FORA = 0 }' && mv "$QMU/e.m" "$QMU/hooks/sprintx/escopo-da-task.sh"
+q_mutante "qm-mutante-5-prosa-volta-a-declarar-ownership" $? l_prosa "$QMU/hooks/sprintx/escopo-da-task.sh"
+rm -rf "$Q" "$C2"
 
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"

@@ -5,20 +5,38 @@
 #
 # Este e um hook de SEGURANCA: falha FECHADA. Se ele nao consegue decidir,
 # ele barra. E o oposto dos hooks de metodo.
+#
+# Custo (DS-157): o runner cancela o hook que estoura o timeout e deixa a escrita
+# acontecer — timeout e falha ABERTA. O caminho comum e um processo so: o jq le o
+# payload direto do stdin e entrega cwd, caminho e conteudo; os padroes sao casados
+# pelo proprio bash. O hook e a primeira barreira; a posterior, fail-closed, e o E1
+# da mergex.
 set -uo pipefail
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+case "${BASH_SOURCE[0]}" in */*) DIR="${BASH_SOURCE[0]%/*}" ;; *) DIR=. ;; esac
 # shellcheck source=./rastro.sh
 . "$DIR/rastro.sh"
 
-ENTRADA="$(cat)"
-CWD="$(rastro_json_get "$ENTRADA" cwd)"
+# cwd, file_path e o conteudo (content, ou new_string quando content e vazio), separados
+# por NUL. O conteudo pode ter centenas de KB: quem o decodifica e o jq, nunca uma regex
+# do bash, e o NUL de dentro dele cai (como caia no `$(...)` de antes).
+CAMPOS=()
+if command -v jq >/dev/null 2>&1 && { [ "${BASH_VERSINFO[0]:-0}" -gt 4 ] || { [ "${BASH_VERSINFO[0]:-0}" -eq 4 ] && [ "${BASH_VERSINFO[1]:-0}" -ge 4 ]; }; }; then
+  mapfile -d '' CAMPOS < <(jq -j '
+    (.cwd // "" | tostring), "\u0000",
+    (.tool_input.file_path // "" | tostring), "\u0000",
+    ((if ((.tool_input.content // "") | tostring) != "" then .tool_input.content else (.tool_input.new_string // "") end)
+      | tostring | gsub("\u0000"; "")), "\u0000"' 2>/dev/null)
+  CWD="${CAMPOS[0]-}"; ALVO="${CAMPOS[1]-}"; CONTEUDO="${CAMPOS[2]-}"
+else
+  rastro_le_entrada_em ENTRADA
+  rastro_json_campo_em CWD "$ENTRADA" cwd
+  rastro_json_campo_em ALVO "$ENTRADA" file_path
+  rastro_json_campo_em CONTEUDO "$ENTRADA" content
+  [ -n "$CONTEUDO" ] || rastro_json_campo_em CONTEUDO "$ENTRADA" new_string
+fi
 [ -n "$CWD" ] || CWD="$PWD"
-RAIZ="$(rastro_raiz "$CWD")"
-
-ALVO="$(rastro_tool_input_get "$ENTRADA" file_path)"
-CONTEUDO="$(rastro_tool_input_get "$ENTRADA" content)"
-[ -n "$CONTEUDO" ] || CONTEUDO="$(rastro_tool_input_get "$ENTRADA" new_string)"
+rastro_raiz_em RAIZ "$CWD"
 [ -n "$CONTEUDO" ] || exit 0
 
 REL="${ALVO#"$RAIZ"/}"
@@ -27,19 +45,22 @@ REL="${ALVO#"$RAIZ"/}"
 # ja estao ignorados pelo versionador.
 case "$REL" in
   .env|.env.*|*/.env|*/.env.*)
-    if [ -f "$RAIZ/.gitignore" ] && grep -qE '^\.env' "$RAIZ/.gitignore" 2>/dev/null; then
-      exit 0
+    if [ -f "$RAIZ/.gitignore" ]; then
+      while IFS= read -r l || [ -n "$l" ]; do
+        case "$l" in .env*) exit 0 ;; esac
+      done < "$RAIZ/.gitignore"
     fi
     ;;
 esac
 
 # Padroes de segredo com forma reconheciveis. Deliberadamente conservador:
 # prefixos de provedor e chave privada, que quase nao dao falso positivo.
+# Casados pelo bash (ERE, como o grep -E de antes), na ordem: o primeiro nomeia o achado.
+# Nenhuma classe atravessa quebra de linha, entao casar o texto inteiro e casar linha a linha.
 ACHADO=""
 while IFS='|' read -r nome padrao; do
   [ -n "$padrao" ] || continue
-  # -e e obrigatorio: padroes que comecam com "-" (PEM) viram flag sem ele.
-  if printf '%s' "$CONTEUDO" | grep -qE -e "$padrao"; then ACHADO="$nome"; break; fi
+  if [[ $CONTEUDO =~ $padrao ]]; then ACHADO="$nome"; break; fi
 done <<'PADROES'
 chave privada PEM|-----BEGIN ([A-Z ]+ )?PRIVATE KEY-----
 token da AWS|AKIA[0-9A-Z]{16}
@@ -55,7 +76,9 @@ PADROES
 
 # Hook de seguranca: o padrao e bloqueio e ausencia de configuracao NAO rebaixa.
 # So um "desligado" explicito desliga.
-[ "$(rastro_modo "$RAIZ" segredo seguranca)" = "desligado" ] && exit 0
+rastro_modo_em MODO "$RAIZ" segredo seguranca
+[ "$MODO" = "desligado" ] && exit 0
 
-rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "segredo detectado ($ACHADO) em $REL" "[\"$(rastro_json_escape "$REL")\"]"
+rastro_json_escape_em REL_E "$REL"
+rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "segredo detectado ($ACHADO) em $REL" "[\"$REL_E\"]"
 rastro_bloqueia "sprintx/segredo: isso parece $ACHADO sendo gravado em $REL. Segredo em arquivo versionado nao tem volta. Use variavel de ambiente e referencie por nome, ou grave em um .env ja ignorado pelo versionador. Se for um exemplo/fixture, use um valor claramente falso que nao case com o formato real."

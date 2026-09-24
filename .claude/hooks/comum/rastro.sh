@@ -11,6 +11,11 @@
 #   3. Falha aberta — toda funcao aqui retorna 0 mesmo quando nao consegue gravar.
 #   6. Sem estado proprio — tudo sai de arquivo que ja existe.
 #   7. Sempre grava no rastro, inclusive quando permite.
+#
+# Custo (DS-157): o runner do harness cancela o hook que passa do timeout e deixa a
+# ferramenta EXECUTAR — timeout e falha aberta. No Git Bash cada processo novo custa de
+# 0,5 a 2 s, e o que protege um hook critico e nao criar processo. As funcoes `*_em <var>`
+# devolvem numa variavel, sem `$(...)`; as de sempre continuam, para quem as usa.
 
 # ---------------------------------------------------------------- util basica
 
@@ -22,56 +27,109 @@
 # faz a busca pular a raiz do worktree e continuar subindo — de um subdiretorio
 # dele, isso devolve o subdiretorio errado em vez da raiz do worktree (regra 21,
 # "Sessoes paralelas", D-06).
-rastro_raiz() {
-  local d="${1:-$PWD}"
+#
+# O pai sai por expansao de parametro, nao por `dirname`: um processo por nivel.
+rastro_raiz_em() { # rastro_raiz_em <var> [dir]
+  local d="${2:-$PWD}" p
   while [ "$d" != "/" ]; do
-    [ -e "$d/.git" ] && { printf '%s' "$d"; return 0; }
-    d="$(dirname "$d")"
+    [ -e "$d/.git" ] && { printf -v "$1" '%s' "$d"; return 0; }
+    case "$d" in
+      */) p="${d%/}" ;;
+      */*) p="${d%/*}"; [ -n "$p" ] || p=/ ;;
+      *) p=. ;;
+    esac
+    # Sem pai diferente (".", caminho sem barra): acabou a subida.
+    [ "$p" = "$d" ] && break
+    d="$p"
   done
-  printf '%s' "${1:-$PWD}"
+  printf -v "$1" '%s' "${2:-$PWD}"
 }
+rastro_raiz() { local _r; rastro_raiz_em _r "$@"; printf '%s' "$_r"; }
 
 # ------------------------------------------------------------- identidade
 
 # Nome do harness: EXPX_HARNESS (a ponte OpenCode injeta isso) -> CLAUDECODE
 # (o Claude Code exporta essa variavel) -> nome do processo avo -> "desconhecido".
 # Nunca lanca excecao.
-rastro_harness() {
-  if [ -n "${EXPX_HARNESS:-}" ]; then printf '%s' "$EXPX_HARNESS"; return 0; fi
-  if [ -n "${CLAUDECODE:-}" ]; then printf 'claude-code'; return 0; fi
+rastro_harness_em() { # rastro_harness_em <var>
+  if [ -n "${EXPX_HARNESS:-}" ]; then printf -v "$1" '%s' "$EXPX_HARNESS"; return 0; fi
+  if [ -n "${CLAUDECODE:-}" ]; then printf -v "$1" 'claude-code'; return 0; fi
   local nome
-  nome="$(ps -o comm= -p "${PPID:-0}" 2>/dev/null | xargs -n1 basename 2>/dev/null)"
+  nome="$(ps -o comm= -p "${PPID:-0}" 2>/dev/null)"; nome="${nome##*/}"
   case "$nome" in
-    claude)   printf 'claude-code' ;;
-    opencode) printf 'opencode' ;;
-    mimo)     printf 'mimocode' ;;
-    *)        printf 'desconhecido' ;;
+    claude)   printf -v "$1" 'claude-code' ;;
+    opencode) printf -v "$1" 'opencode' ;;
+    mimo)     printf -v "$1" 'mimocode' ;;
+    *)        printf -v "$1" 'desconhecido' ;;
   esac
 }
+rastro_harness() { local _h; rastro_harness_em _h; printf '%s' "$_h"; }
 
 # Identidade da sessao: <harness>@<id>. Ordem: EXPX_SESSAO (a ponte injeta) ->
 # CLAUDE_CODE_SESSION_ID (com o harness na frente) -> <harness>@<ppid> ->
 # <harness>@sem-id. Nunca lanca excecao (regra 3 do contrato).
-rastro_sessao() {
-  if [ -n "${EXPX_SESSAO:-}" ]; then printf '%s' "$EXPX_SESSAO"; return 0; fi
-  local h; h="$(rastro_harness)"
+rastro_sessao_em() { # rastro_sessao_em <var>
+  if [ -n "${EXPX_SESSAO:-}" ]; then printf -v "$1" '%s' "$EXPX_SESSAO"; return 0; fi
+  local _h; rastro_harness_em _h
   if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
-    printf '%s@%s' "$h" "$CLAUDE_CODE_SESSION_ID"; return 0
+    printf -v "$1" '%s@%s' "$_h" "$CLAUDE_CODE_SESSION_ID"; return 0
   fi
-  if [ -n "${PPID:-}" ]; then printf '%s@%s' "$h" "$PPID"; return 0; fi
-  printf '%s@sem-id' "$h"
+  if [ -n "${PPID:-}" ]; then printf -v "$1" '%s@%s' "$_h" "$PPID"; return 0; fi
+  printf -v "$1" '%s@sem-id' "$_h"
 }
+rastro_sessao() { local _s; rastro_sessao_em _s; printf '%s' "$_s"; }
 
 # Escapa uma string para caber dentro de um JSON string literal.
 # Ordem importa: a barra invertida primeiro, senao escapamos o que ja escapamos.
-rastro_json_escape() {
-  local s="$1"
+rastro_json_escape_em() { # rastro_json_escape_em <var> <texto>
+  local s="$2"
   s="${s//\\/\\\\}"
   s="${s//\"/\\\"}"
   s="${s//	/\\t}"
   s="${s//$'\r'/\\r}"
   s="${s//$'\n'/\\n}"
-  printf '%s' "$s"
+  printf -v "$1" '%s' "$s"
+}
+rastro_json_escape() { local _e; rastro_json_escape_em _e "$1"; printf '%s' "$_e"; }
+
+# rastro_le_entrada_em <var> — o stdin inteiro do hook (o payload JSON). `mapfile -d ''`
+# (bash >= 4.4) le em blocos e sem processo; `read -d ''` leria um byte por chamada num
+# pipe, e `$(cat)` custa um processo. Bash mais antigo (macOS): `cat`, como sempre.
+rastro_le_entrada_em() {
+  if [ "${BASH_VERSINFO[0]:-0}" -gt 4 ] || { [ "${BASH_VERSINFO[0]:-0}" -eq 4 ] && [ "${BASH_VERSINFO[1]:-0}" -ge 4 ]; }; then
+    local _a=()
+    mapfile -d '' _a
+    printf -v "$1" '%s' "${_a[0]-}"
+  else
+    printf -v "$1" '%s' "$(cat)"
+  fi
+}
+
+# rastro_json_campo_em <var> <json> <chave>
+#
+# O valor string de "<chave>" no payload do hook, SEM processo: a primeira ocorrencia de
+# `"chave": "valor"` no texto — a mesma regra do fallback sem jq, que ja era contrato —, com
+# o valor inteiro (aspas escapadas incluidas) e os escapes de JSON decodificados como o jq
+# os decodifica. Dentro de uma string JSON toda aspa e `\"`, entao `"chave"` so casa com uma
+# chave de verdade. `\uXXXX` (so aparece para caractere de controle: o harness manda UTF-8
+# cru) vai para o jq quando ha jq. Chave ausente: vazio.
+rastro_json_campo_em() {
+  local _v="" _re
+  _re="\"$3\""'[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*)"'
+  [[ $2 =~ $_re ]] && _v="${BASH_REMATCH[1]}"
+  case "$_v" in
+    *\\u*)
+      if command -v jq >/dev/null 2>&1; then
+        _v="$(printf '"%s"' "$_v" | jq -r . 2>/dev/null)"
+      fi ;;
+    *\\*)
+      _v="${_v//\\\\/$'\001'}"
+      _v="${_v//\\\"/\"}"; _v="${_v//\\\//\/}"
+      _v="${_v//\\n/$'\n'}"; _v="${_v//\\t/	}"; _v="${_v//\\r/$'\r'}"
+      _v="${_v//\\b/$'\b'}"; _v="${_v//\\f/$'\f'}"
+      _v="${_v//$'\001'/\\}" ;;
+  esac
+  printf -v "$1" '%s' "$_v"
 }
 
 # Le uma chave de topo de um JSON simples vindo do stdin do hook.
@@ -125,20 +183,19 @@ rastro_trabalho_valido() {
 #
 # Nao ha mtime aqui, e e deliberado (DS-155): "que feature mexeu por ultimo no
 # disco" e outra pergunta, e a resposta dela nunca escolhe destino de rastro.
-rastro_trabalho_da_sessao() {
-  local raiz="$1" ses="${2:-}"
-  [ -n "$ses" ] || ses="$(rastro_sessao)"
-  local linhas
-  linhas="$(rastro_reivindicacoes_da_sessao "$raiz" "$ses" | awk 'NF')"
-  [ -n "$linhas" ] || return 0
-  [ "$(printf '%s\n' "$linhas" | wc -l | tr -d ' ')" -eq 1 ] || return 0
-  local tid coer
-  tid="$(printf '%s' "$linhas" | cut -f1)"
-  coer="$(printf '%s' "$linhas" | cut -f3)"
-  [ "$coer" = ok ] || return 0
-  rastro_trabalho_valido "$tid" || return 0
-  printf '%s' "$tid"
+rastro_trabalho_da_sessao_em() { # rastro_trabalho_da_sessao_em <var> <raiz> [sessao]
+  local _raiz="$2" _ses="${3:-}" _tid _coer
+  printf -v "$1" '%s' ""
+  [ -n "$_ses" ] || rastro_sessao_em _ses
+  _rastro_varre "$_raiz" "$_ses"
+  case "$RASTRO_REIV" in ""|*"
+"*) return 0 ;; esac
+  _tid="${RASTRO_REIV%%	*}"; _coer="${RASTRO_REIV##*	}"
+  [ "$_coer" = ok ] || return 0
+  rastro_trabalho_valido "$_tid" || return 0
+  printf -v "$1" '%s' "$_tid"
 }
+rastro_trabalho_da_sessao() { local _t; rastro_trabalho_da_sessao_em _t "$@"; printf '%s' "$_t"; }
 
 # rastro_trabalho_do_texto <texto>
 #
@@ -180,25 +237,34 @@ rastro_trabalho_do_arquivo() {
 # desliga um hook de seguranca.
 #
 # Uso: rastro_modo <raiz> <hook> [tipo]   — tipo: metodo (padrao) | seguranca
-rastro_modo() {
-  local raiz="$1" hook="$2" tipo="${3:-metodo}" cfg="$1/.expx/hooks.json"
-  local padrao='aviso'
-  [ "$tipo" = "seguranca" ] && padrao='bloqueio'
+#      rastro_modo_em <var> <raiz> <hook> [tipo] — o mesmo, numa variavel, sem subshell
+#
+# Com jq, o modo sai do JSON de verdade (um processo); sem jq, o texto do arquivo e lido
+# pelo proprio bash e casado com a mesma regra do fallback de sempre — nenhum processo.
+rastro_modo_em() {
+  local _raiz="$2" _hook="$3" _tipo="${4:-metodo}" _cfg="$2/.expx/hooks.json"
+  local _padrao='aviso' _m="" _txt="" _re
+  [ "$_tipo" = "seguranca" ] && _padrao='bloqueio'
 
-  [ -f "$cfg" ] || { printf '%s' "$padrao"; return 0; }
-  local m=""
-  if command -v jq >/dev/null 2>&1; then
-    m="$(jq -r --arg h "$hook" '.hooks[$h].modo // empty' "$cfg" 2>/dev/null)"
-  else
-    m="$(grep -o "\"$hook\"[[:space:]]*:[[:space:]]*{[^}]*}" "$cfg" 2>/dev/null \
-        | grep -o '"modo"[[:space:]]*:[[:space:]]*"[^"]*"' \
-        | head -1 | sed 's/.*:[[:space:]]*"//; s/"$//')"
+  if [ -f "$_cfg" ]; then
+    if command -v jq >/dev/null 2>&1; then
+      _m="$(jq -r --arg h "$_hook" '.hooks[$h].modo // empty' "$_cfg" 2>/dev/null)"
+    else
+      IFS= read -r -d '' _txt < "$_cfg"
+      _re="\"$_hook\""'[[:space:]]*:[[:space:]]*\{[^}]*\}'
+      if [[ $_txt =~ $_re ]]; then
+        _txt="${BASH_REMATCH[0]}"
+        _re='"modo"[[:space:]]*:[[:space:]]*"([^"]*)"'
+        [[ $_txt =~ $_re ]] && _m="${BASH_REMATCH[1]}"
+      fi
+    fi
   fi
-  case "$m" in
-    bloqueio|aviso|desligado) printf '%s' "$m" ;;
-    *)                       printf '%s' "$padrao" ;;
+  case "$_m" in
+    bloqueio|aviso|desligado) printf -v "$1" '%s' "$_m" ;;
+    *)                       printf -v "$1" '%s' "$_padrao" ;;
   esac
 }
+rastro_modo() { local _mo; rastro_modo_em _mo "$@"; printf '%s' "$_mo"; }
 
 # ---------------------------------------------------------------- gravacao
 
@@ -213,18 +279,34 @@ _rastro_linha() {
   local arquivos="$7" extras="$8"
 
   if [ -f "$arq" ]; then
+    # O tamanho ja lido pela varredura do rastro (RASTRO_TAMANHOS) evita um `wc`.
     local tam
-    tam=$(wc -c < "$arq" 2>/dev/null | tr -d ' ')
-    if [ -n "$tam" ] && [ "$tam" -gt 5242880 ] 2>/dev/null; then
+    case "${RASTRO_TAMANHOS:-}" in
+      *"
+$arq	"*) tam="${RASTRO_TAMANHOS#*"
+$arq	"}"; tam="${tam%%
+*}" ;;
+      *) tam=$(wc -c < "$arq" 2>/dev/null) ;;
+    esac
+    tam="${tam//[!0-9]/}"; [ -n "$tam" ] || tam=0
+    if [ "$tam" -gt 5242880 ] 2>/dev/null; then
       mv -f "$arq" "${arq%.jsonl}.1.jsonl" 2>/dev/null || true
     fi
   fi
 
-  local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  local linha
+  # Bash >= 4.2 formata a hora sem processo; o TZ vai como atribuicao do proprio
+  # comando (um `local TZ` nao reconfigura o fuso no Git Bash).
+  local ts
+  if [ "${BASH_VERSINFO[0]:-0}" -gt 4 ] || { [ "${BASH_VERSINFO[0]:-0}" -eq 4 ] && [ "${BASH_VERSINFO[1]:-0}" -ge 2 ]; }; then
+    TZ=UTC0 printf -v ts '%(%Y-%m-%dT%H:%M:%SZ)T' -1
+  else
+    ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  fi
+  local linha tid_e detalhe_e
+  rastro_json_escape_em tid_e "$tid"; rastro_json_escape_em detalhe_e "$detalhe"
   linha="{\"ts\":\"$ts\""
   linha="$linha,\"expx_eventos\":1"
-  linha="$linha,\"trabalho_id\":\"$(rastro_json_escape "$tid")\""
+  linha="$linha,\"trabalho_id\":\"$tid_e\""
   linha="$linha,\"ferramenta\":\"sprintx\""
   linha="$linha,\"origem\":\"$origem\""
   linha="$linha,\"evento\":\"$evento\""
@@ -232,7 +314,7 @@ _rastro_linha() {
   linha="$linha,\"task\":${RASTRO_TASK:-null}"
   linha="$linha,\"agente\":\"${RASTRO_AGENTE:-principal}\""
   linha="$linha,\"resultado\":\"$resultado\""
-  linha="$linha,\"detalhe\":\"$(rastro_json_escape "$detalhe")\""
+  linha="$linha,\"detalhe\":\"$detalhe_e\""
   linha="$linha,\"arquivos\":$arquivos"
   [ -n "$extras" ] && linha="$linha,$extras"
   linha="$linha}"
@@ -266,15 +348,16 @@ rastro_grava_trabalho() {
 
   {
     local dir="$raiz/docs/eventos"
-    mkdir -p "$dir" 2>/dev/null || return 0
+    [ -d "$dir" ] || mkdir -p "$dir" 2>/dev/null || return 0
 
     # O trabalho da sessao nao muda durante o processo do hook: resolve uma vez
-    # (varre docs/eventos/*.jsonl) e reusa.
+    # (varre docs/eventos/*.jsonl) e reusa. Sem subshell: a mesma varredura deixa
+    # em RASTRO_TAMANHOS o tamanho de cada arquivo, para a rotacao.
     local sessao_tid
     if [ -n "${RASTRO_TRABALHO_DA_SESSAO+x}" ]; then
       sessao_tid="$RASTRO_TRABALHO_DA_SESSAO"
     else
-      sessao_tid="$(rastro_trabalho_da_sessao "$raiz")"
+      rastro_trabalho_da_sessao_em sessao_tid "$raiz"
       RASTRO_TRABALHO_DA_SESSAO="$sessao_tid"
     fi
 
@@ -399,58 +482,76 @@ rastro_sessao_dona() {
 # (trabalho, task): vale o evento mais recente entre task_iniciada,
 # task_concluida e task_bloqueada; so task_iniciada deixa dono aberto.
 rastro_reivindicacoes_da_sessao() {
-  local raiz="$1" ses="$2"
-  # Declaracao separada: no bash 5.3 uma variavel do MESMO `local` ainda nao
-  # esta visivel para as seguintes, e `set -u` mataria o hook aqui.
-  local dir="$raiz/docs/eventos"
+  _rastro_varre "$1" "$2"
+  [ -z "$RASTRO_REIV" ] || printf '%s\n' "$RASTRO_REIV"
+}
+
+# _RASTRO_AWK_REIV — o miolo de rastro_reivindicacoes_da_sessao, em awk, para ser incluido
+# num programa maior (o escopo-da-task decide tudo numa passada so). Cada linha de um
+# docs/eventos/*.jsonl passa por `_rv_linha()`, em QUALQUER ordem de arquivo: o evento
+# mais recente de cada (trabalho, task) e o de menor sufixo de rotacao e, no mesmo arquivo,
+# o de linha maior — exatamente a ordem "rotacionado antes do corrente" de sempre, sem
+# ordenar os argumentos por fora. `_rv_fim(sessao)` deixa em RV_L[1..RV_N] as linhas
+# `trabalho TAB task TAB ok|divergente` da sessao, em ordem de byte, e RV_TAM[arquivo] o
+# tamanho em bytes lido (exige LC_ALL=C).
+_RASTRO_AWK_REIV='
+function _rv_tid(p,   b) {
+  b = p; sub(/.*\//, "", b); sub(/\.jsonl$/, "", b); _rv_rank = 0
+  if (match(b, /\.[0-9]+$/)) { _rv_rank = substr(b, RSTART + 1) + 0; b = substr(b, 1, RSTART - 1) }
+  return b
+}
+function _rv_linha(   task, k, s, d) {
+  if (FILENAME != _rv_arq) { _rv_arq = FILENAME; _rv_t = _rv_tid(FILENAME); _rv_r = _rv_rank }
+  RV_TAM[FILENAME] += length($0) + 1
+  if (!match($0, /"task":"[^"]*"/)) return
+  task = substr($0, RSTART + 8, RLENGTH - 9)
+  k = _rv_t SUBSEP task
+  if (index($0, "\"evento\":\"task_iniciada\"")) {
+    s = ""; if (match($0, /"sessao":"[^"]*"/)) s = substr($0, RSTART + 10, RLENGTH - 11)
+    d = ""; if (match($0, /"trabalho_id":"[^"]*"/)) d = substr($0, RSTART + 15, RLENGTH - 16)
+  } else if (index($0, "\"evento\":\"task_concluida\"") || index($0, "\"evento\":\"task_bloqueada\"")) {
+    s = ""; d = ""
+  } else return
+  if ((k in _rv_ri) && (_rv_r > _rv_ri[k] || (_rv_r == _rv_ri[k] && FNR < _rv_fi[k]))) return
+  _rv_ri[k] = _rv_r; _rv_fi[k] = FNR; _rv_dono[k] = s; _rv_campo[k] = d
+}
+function _rv_fim(ses,   k, p, i, j, x) {
+  RV_N = 0
+  for (k in _rv_dono) {
+    if (_rv_dono[k] == "" || _rv_dono[k] != ses) continue
+    split(k, p, SUBSEP)
+    RV_L[++RV_N] = p[1] "\t" p[2] "\t" ((_rv_campo[k] == "" || _rv_campo[k] == p[1]) ? "ok" : "divergente")
+  }
+  for (i = 2; i <= RV_N; i++) { x = RV_L[i]; for (j = i - 1; j >= 1 && RV_L[j] > x; j--) RV_L[j + 1] = RV_L[j]; RV_L[j + 1] = x }
+}
+'
+
+# _rastro_varre <raiz> <sessao> — UMA passada de awk por docs/eventos/*.jsonl: RASTRO_REIV
+# recebe as reivindicacoes ativas da sessao (o formato de rastro_reivindicacoes_da_sessao,
+# sem a quebra final) e RASTRO_TAMANHOS o tamanho de cada arquivo lido (`\n<arq>\t<bytes>`),
+# que _rastro_linha reaproveita. Sem subshell no chamador: os dois ficam no processo do hook.
+_rastro_varre() {
+  local raiz="$1" ses="$2" dir f l saida arqs=()
+  RASTRO_REIV=""; RASTRO_TAMANHOS=""
+  dir="$raiz/docs/eventos"
   [ -d "$dir" ] || return 0
-
-  local f base tid rank lista=""
-  for f in "$dir"/*.jsonl; do
-    [ -f "$f" ] || continue
-    base="${f##*/}"; tid="${base%.jsonl}"; rank=0
-    case "${tid##*.}" in
-      ''|*[!0-9]*) ;;
-      *) case "$tid" in *.*) rank="${tid##*.}"; tid="${tid%.*}" ;; esac ;;
-    esac
-    lista="$lista$tid	$rank	$f
-"
-  done
-  [ -n "$lista" ] || return 0
-
-  # Rotacionado (rank maior) antes do corrente: o awk decide pelo evento mais
-  # recente, e "mais recente" e a ordem de leitura.
-  local arqs=() linha
-  while IFS= read -r linha; do
-    [ -n "$linha" ] || continue
-    arqs+=("${linha#*	*	}")
-  done <<EOF
-$(printf '%s' "$lista" | awk 'NF' | LC_ALL=C sort -t'	' -k1,1 -k2,2nr)
-EOF
+  for f in "$dir"/*.jsonl; do [ -f "$f" ] && arqs+=("$f"); done
   [ "${#arqs[@]}" -gt 0 ] || return 0
-
-  awk -v ses="$ses" '
-    function tid_do_arquivo(p,   b) {
-      b = p; sub(/.*\//, "", b); sub(/\.jsonl$/, "", b); sub(/\.[0-9]+$/, "", b); return b
-    }
-    {
-      if (!match($0, /"task":"[^"]*"/)) next
-      task = substr($0, RSTART + 8, RLENGTH - 9)
-      k = tid_do_arquivo(FILENAME) SUBSEP task
-      if (index($0, "\"evento\":\"task_iniciada\"")) {
-        s = ""; if (match($0, /"sessao":"[^"]*"/)) s = substr($0, RSTART + 10, RLENGTH - 11)
-        d = ""; if (match($0, /"trabalho_id":"[^"]*"/)) d = substr($0, RSTART + 15, RLENGTH - 16)
-        dono[k] = s; campo[k] = d
-      } else if (index($0, "\"evento\":\"task_concluida\"") || index($0, "\"evento\":\"task_bloqueada\"")) {
-        dono[k] = ""
-      }
-    }
+  saida="$(LC_ALL=C awk -v ses="$ses" "$_RASTRO_AWK_REIV"'
+    { _rv_linha() }
     END {
-      for (k in dono) {
-        if (dono[k] == "" || dono[k] != ses) continue
-        split(k, p, SUBSEP)
-        print p[1] "\t" p[2] "\t" ((campo[k] == "" || campo[k] == p[1]) ? "ok" : "divergente")
-      }
-    }
-  ' "${arqs[@]}" 2>/dev/null | LC_ALL=C sort
+      _rv_fim(ses)
+      for (i = 1; i <= RV_N; i++) print "R\t" RV_L[i]
+      for (i = 1; i < ARGC; i++) print "T\t" ARGV[i] "\t" (RV_TAM[ARGV[i]] + 0)
+    }' "${arqs[@]}" 2>/dev/null)"
+  while IFS= read -r l; do
+    case "$l" in
+      "R	"*) RASTRO_REIV="$RASTRO_REIV${RASTRO_REIV:+
+}${l#R	}" ;;
+      "T	"*) RASTRO_TAMANHOS="$RASTRO_TAMANHOS
+${l#T	}" ;;
+    esac
+  done <<EOF
+$saida
+EOF
 }
