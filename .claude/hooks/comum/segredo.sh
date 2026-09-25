@@ -36,6 +36,9 @@ else
   [ -n "$CONTEUDO" ] || rastro_json_campo_em CONTEUDO "$ENTRADA" new_string
 fi
 [ -n "$CWD" ] || CWD="$PWD"
+# Caminho do payload (no Windows, C:\dir com caixa de drive variavel) sempre pelo helper.
+rastro_caminho_em CWD "$CWD"
+rastro_caminho_em ALVO "$ALVO"
 rastro_raiz_em RAIZ "$CWD"
 [ -n "$CONTEUDO" ] || exit 0
 

@@ -25,6 +25,8 @@ case "${BASH_SOURCE[0]}" in */*) DIR="${BASH_SOURCE[0]%/*}" ;; *) DIR=. ;; esac
 rastro_le_entrada_em ENTRADA
 rastro_json_campo_em CWD "$ENTRADA" cwd
 [ -n "$CWD" ] || CWD="$PWD"
+# Caminho do payload (no Windows, C:\dir com caixa de drive variavel) sempre pelo helper.
+rastro_caminho_em CWD "$CWD"
 rastro_raiz_em RAIZ "$CWD"
 
 rastro_json_campo_em CMD "$ENTRADA" command

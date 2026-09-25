@@ -54,6 +54,11 @@ rastro_raiz() { local _r; rastro_raiz_em _r "$@"; printf '%s' "$_r"; }
 # com `/`, que o shell tambem abre. Nenhum processo: quem converte com processo e so o
 # caminho-git.sh da skill (DS-152). Caminho POSIX fica intacto; relativo continua relativo,
 # so com `/`. Fora do Windows: no-op.
+#
+# Contrato: todo hook que le um pathname do payload (`cwd`, `tool_input.file_path`) passa-o
+# por aqui ANTES de achar a raiz, tirar o prefixo, casar com o plano, abrir o arquivo ou
+# gravar no rastro — e nenhum hook normaliza por conta propria (bancada, secao T). Comando,
+# conteudo, id e mensagem nao sao caminho: nao passam.
 rastro_caminho_em() {
   local _c="$2" _d _i _u=ABCDEFGHIJKLMNOPQRSTUVWXYZ _m=abcdefghijklmnopqrstuvwxyz
   case "${OSTYPE:-}" in msys*|cygwin*) ;; *) printf -v "$1" '%s' "$_c"; return 0 ;; esac

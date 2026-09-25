@@ -20,9 +20,12 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENTRADA="$(cat)"
 CWD="$(rastro_json_get "$ENTRADA" cwd)"
 [ -n "$CWD" ] || CWD="$PWD"
+# Caminho do payload (no Windows, C:\dir com caixa de drive variavel) sempre pelo helper.
+rastro_caminho_em CWD "$CWD"
 RAIZ="$(rastro_raiz "$CWD")"
 
 ALVO="$(rastro_tool_input_get "$ENTRADA" file_path)"
+rastro_caminho_em ALVO "$ALVO"
 case "$ALVO" in
   */tasks.md) ;;
   *) exit 0 ;;

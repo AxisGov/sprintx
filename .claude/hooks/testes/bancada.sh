@@ -3926,6 +3926,277 @@ if [ "$S_WIN" = 1 ]; then
 fi
 rm -rf "$S_DIR" ${S_DIR2:+"$S_DIR2"}
 
+
+echo "== T. todo caminho do payload passa pelo mesmo helper: C:\\, c:\\, C:/ e POSIX decidem igual (P0.2-C7-B S3-E) =="
+# A S3-D corrigiu so o escopo-da-task. Os outros hooks que leem `cwd` ou `tool_input.file_path`
+# tiravam a raiz com `/` e casavam `*/tasks.md` no caminho cru: com o payload real do Windows
+# (C:\dir\arq, caixa do drive variavel) o segredo perdia a isencao do .env ignorado, os hooks
+# de metodo ficavam mudos ou avisavam em falso, e o rastro gravava o caminho absoluto do
+# Windows como identificador logico. Contrato: todo pathname do payload passa por
+# rastro_caminho_em antes de qualquer uso, e nenhum hook normaliza por conta propria. A
+# decisao (rc, aviso/bloqueio/silencio) e os eventos gravados (onde, qual, com que arquivos)
+# tem de ser os mesmos em qualquer formato. Fora de MSYS/Cygwin so o formato POSIX existe.
+T_WIN=0; case "${OSTYPE:-}" in msys*|cygwin*) T_WIN=1 ;; esac
+T_DIR="$(mktemp -d)"
+T_AWS="AKIA""ABCDEFGHIJKLMNOP"; T_GF="git push"" --force origin main"
+T_FEAT="docs/sprintx/features/feat"
+T_TASKS="$T_FEAT/sprint-01/tasks.md"
+# O rastro de partida: T-01.01 e de outra sessao; T-01.02 e a desta (o trabalho corrente e feat).
+T_BASE='{"trabalho_id":"feat","evento":"task_iniciada","task":"T-01.01","sessao":"outra@9"}
+{"trabalho_id":"feat","evento":"task_iniciada","task":"T-01.02","sessao":"t3e@1"}'
+t_fx() { # t_fx <dir> — repositorio git real (a arvore-limpa roda git status), nomes com espaco
+  local d="$1"
+  rm -rf "$d"; mkdir -p "$d/src/com espaco" "$d/docs/eventos" "$d/$T_FEAT/sprint-01"
+  git -C "$d" init -q -b main >/dev/null 2>&1
+  printf '.env*\n' > "$d/.gitignore"
+  printf '# Convencoes\n\nO teste mora ao lado do arquivo: `a.test.ts`.\n' > "$d/CONVENCOES.md"
+  : > "$d/src/a.ts"; : > "$d/src/a.test.ts"; : > "$d/src/b.ts"
+  : > "$d/src/com espaco/c.ts"; : > "$d/src/com espaco/c.test.ts"
+  printf -- '---\nexpx_schema: 1\nkind: tasks\ntrabalho_id: feat\nsprint_id: sprint-01\ntasks:\n' > "$d/$T_TASKS"
+  printf '  - id: T-01.01\n    status: em_andamento\n    arquivos:\n      cria: []\n      altera: [src/a.ts]\n' >> "$d/$T_TASKS"
+  printf '  - id: T-01.02\n    status: em_andamento\n    arquivos:\n      cria: []\n      altera: [src/a.test.ts]\n---\n' >> "$d/$T_TASKS"
+  printf '# Plano\n\nAinda com {{marcador}}.\n' > "$d/$T_FEAT/plano.md"
+}
+t_esc() { local s="$1"; s="${s//\\/\\\\}"; s="${s//\"/\\\"}"; s="${s//$'\n'/\\n}"; printf '%s' "$s"; }
+t_conteudo() { # t_conteudo <tipo>
+  case "$1" in
+    inocente) printf 'x = 1' ;;
+    aws) printf 'chave = "%s"' "$T_AWS" ;;
+    fecha-ruim) printf -- '---\ntrabalho_id: feat\ntasks:\n  - id: T-01.02\n    status: concluida\n    suite: nao_executada\n    teste_integracao:\n    teste_funcional:\n---\n' ;;
+    fecha-ok) printf -- '---\ntrabalho_id: feat\ntasks:\n  - id: T-01.02\n    status: concluida\n    suite: verde\n    teste_integracao: chama a api\n    teste_funcional: dado x entao y\n---\n' ;;
+    reivindica) printf -- '---\ntrabalho_id: feat\ntasks:\n  - id: T-01.01\n    status: em_andamento\n---\n' ;;
+  esac
+}
+t_json() { # t_json <evento> <ferramenta> <cwd> <file_path> <conteudo> — como o runner manda
+  local ti
+  case "$2" in
+    Bash) ti="{\"command\":\"$(t_esc "$5")\"}" ;;
+    -) ti="" ;;
+    *) ti="{\"file_path\":\"$(t_esc "$4")\",\"content\":\"$(t_esc "$5")\"}" ;;
+  esac
+  printf '{"session_id":"x","cwd":"%s","hook_event_name":"%s"' "$(t_esc "$3")" "$1"
+  [ "$2" = - ] && { printf ',"agent_type":"qa"}'; return; }
+  printf ',"tool_name":"%s","tool_input":%s,"tool_response":{}}' "$2" "$ti"
+}
+T_SAIDA=""
+t_decide() { # t_decide <hook> <dir-posix> <sub> <evento> <ferramenta> <cwd> <file_path> <conteudo>
+  # — "rc/classe/eventos": eventos novos em QUALQUER *.jsonl da fixture, como <arquivo>:<evento>:<arquivos>
+  local o r cls ev="" f l e a
+  rm -rf "$2/src/docs"; find "$2/docs/eventos" -name '*.jsonl' -exec rm -f {} + 2>/dev/null
+  printf '%s\n' "$T_BASE" > "$2/docs/eventos/feat.jsonl"
+  o="$(t_json "$4" "$5" "$6" "$7" "$8" | (cd "$2${3:+/$3}" && EXPX_SESSAO=t3e@1 CLAUDECODE=1 bash "$1") 2>&1)"; r=$?
+  T_SAIDA="$o"
+  case "$o" in
+    "") cls=silencio ;;
+    *sprintx/*) if [ "$r" -eq 2 ]; then cls=bloqueio; else cls=aviso; fi ;;
+    *) cls=outro ;;
+  esac
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    while IFS= read -r l; do
+      case "$l" in *'"evento":"task_iniciada"'*|"") continue ;; esac
+      e="${l#*\"evento\":\"}"; e="${e%%\"*}"
+      a="${l#*\"arquivos\":}"; a="${a%%]*}]"
+      ev="$ev ${f#"$2"/}:$e:$a"
+    done < "$f"
+  done <<EOF
+$(find "$2" -name '*.jsonl' -path '*docs/eventos*' 2>/dev/null | sort)
+EOF
+  printf '%s/%s/%s' "$r" "$cls" "${ev# }"
+}
+# Os casos e o que cada um TEM de decidir. sub = subdiretorio do cwd (o processo roda la, como no
+# runner). EF = docs/eventos/feat.jsonl, o rastro do trabalho corrente da sessao.
+EF=docs/eventos/feat.jsonl
+T_CASOS="seg-inocente|comum/segredo.sh||PreToolUse|Write|src/a.ts|inocente|0/silencio/
+seg-aws|comum/segredo.sh||PreToolUse|Write|src/a.ts|aws|2/bloqueio/$EF:acao_bloqueada:[\"src/a.ts\"]
+seg-aws-espaco|comum/segredo.sh||PreToolUse|Write|src/com espaco/c.ts|aws|2/bloqueio/$EF:acao_bloqueada:[\"src/com espaco/c.ts\"]
+seg-env-ignorado|comum/segredo.sh||PreToolUse|Write|src/.env|aws|0/silencio/
+seg-cwd-sub|comum/segredo.sh|src|PreToolUse|Write|src/a.ts|aws|2/bloqueio/$EF:acao_bloqueada:[\"src/a.ts\"]
+tdd-com-teste|sprintx/tdd-teste-antes.sh||PostToolUse|Write|src/a.ts|inocente|0/silencio/
+tdd-sem-teste|sprintx/tdd-teste-antes.sh||PostToolUse|Write|src/b.ts|inocente|0/aviso/$EF:regra_violada:[\"src/b.ts\"]
+tdd-espaco-com-teste|sprintx/tdd-teste-antes.sh||PostToolUse|Write|src/com espaco/c.ts|inocente|0/silencio/
+tdd-artefato-da-skill|sprintx/tdd-teste-antes.sh||PostToolUse|Write|$T_FEAT/plano.md|inocente|0/silencio/
+verde-ruim|sprintx/task-so-fecha-verde.sh||PreToolUse|Write|$T_TASKS|fecha-ruim|0/aviso/$EF:regra_violada:[\"$T_TASKS\"]
+verde-ok|sprintx/task-so-fecha-verde.sh||PreToolUse|Write|$T_TASKS|fecha-ok|0/silencio/
+reivindicada|sprintx/task-reivindicada.sh||PreToolUse|Write|$T_TASKS|reivindica|0/aviso/$EF:regra_violada:[]
+placeholder|sprintx/sem-placeholder-no-plano.sh||PostToolUse|Write|$T_FEAT/plano.md|inocente|0/aviso/$EF:regra_violada:[\"$T_FEAT/plano.md\"]
+post-write|comum/rastro-post.sh||PostToolUse|Write|src/a.ts|inocente|0/silencio/$EF:arquivo_alterado:[\"src/a.ts\"]
+post-espaco|comum/rastro-post.sh||PostToolUse|Write|src/com espaco/c.ts|inocente|0/silencio/$EF:arquivo_alterado:[\"src/com espaco/c.ts\"]
+post-cwd-sub|comum/rastro-post.sh|src|PostToolUse|Write|src/a.ts|inocente|0/silencio/$EF:arquivo_alterado:[\"src/a.ts\"]
+git-cwd-sub|sprintx/git-perigoso.sh|src|PreToolUse|Bash||git-forcado|2/bloqueio/$EF:acao_bloqueada:[]
+arvore-cwd-sub|sprintx/arvore-limpa-antes-da-suite.sh|src|PreToolUse|Bash||npm test|0/aviso/$EF:regra_violada:[]
+subagente-cwd-sub|comum/rastro-subagente.sh|src|SubagentStop|-|||0/silencio/$EF:agente_concluido:[]"
+T_FALHA=""
+T_TODOS="posix win minuscula misto caixa-do-drive"
+# t_formatos <raiz-hooks> <dir-posix> <formatos> <casos> — falhas em T_FALHA
+t_formatos() {
+  local H2="$1" d="$2" w="" m="" wl="" n h sub ev fe r ct esp rw fn fc fa got cont sw
+  T_FALHA=""
+  [ -d "$d/.git" ] || t_fx "$d"
+  if [ "$T_WIN" = 1 ]; then
+    w="$(cygpath -w "$d")"; m="$(cygpath -m "$d")"
+    case "$w" in [A-Z]*) wl="$(printf '%s' "${w:0:1}" | tr A-Z a-z)${w:1}" ;; *) wl="$(printf '%s' "${w:0:1}" | tr a-z A-Z)${w:1}" ;; esac
+  fi
+  while IFS='|' read -r n h sub ev fe r ct esp; do
+    case " $4 " in *" $n "*|" todos ") ;; *) continue ;; esac
+    case "$ct" in git-forcado) cont="$T_GF" ;; "npm test") cont="npm test" ;; *) cont="$(t_conteudo "$ct")" ;; esac
+    rw="${r//\//\\}"; sw="${sub:+\\$sub}"
+    for fn in $3; do
+      fc=""
+      case "$fn" in
+        posix) fc="$d${sub:+/$sub}"; fa="$d/$r" ;;
+        win) [ -n "$w" ] && fc="$w$sw"; fa="$w\\$rw" ;;
+        minuscula) [ -n "$wl" ] && fc="$wl$sw"; fa="$wl\\$rw" ;;
+        misto) [ -n "$m" ] && fc="$m${sub:+/$sub}"; fa="$m/$r" ;;
+        caixa-do-drive) [ -n "$wl" ] && fc="$wl$sw"; fa="$w\\$rw" ;;
+      esac
+      [ -n "$fc" ] || continue
+      [ -n "$r" ] || fa=""
+      got="$(t_decide "$H2/$h" "$d" "$sub" "$ev" "$fe" "$fc" "$fa" "$cont")"
+      [ "$got" = "$esp" ] || T_FALHA="$T_FALHA
+    $n:$fn=$got (esperado $esp)"
+    done
+  done <<EOF
+$T_CASOS
+EOF
+  [ -z "$T_FALHA" ]
+}
+T_FMT=posix; [ "$T_WIN" = 1 ] && T_FMT="$T_TODOS"
+T_FX="$T_DIR/fx t 3e"
+t_formatos "$H" "$T_FX" "$T_FMT" todos
+afirma "t1-mesma-decisao-e-mesmo-rastro-em-todo-formato" $? "$(printf '%s\n' "$T_CASOS" | grep -c '') casos x $T_FMT${T_FALHA:+ — FORA:$T_FALHA}"
+
+# Nenhum evento carrega caminho absoluto do Windows (nem C:\ nem C:/) como identificador.
+T_ABS=""
+if [ "$T_WIN" = 1 ]; then
+  for c in post-write placeholder verde-ruim seg-aws tdd-sem-teste; do
+    n="$(printf '%s\n' "$T_CASOS" | grep "^$c|")"; IFS='|' read -r _ h sub ev fe r ct _ <<EOF
+$n
+EOF
+    w="$(cygpath -w "$T_FX")"
+    t_decide "$H/$h" "$T_FX" "$sub" "$ev" "$fe" "$w" "$w\\${r//\//\\}" "$(t_conteudo "$ct")" >/dev/null
+    grep -qE '[A-Za-z]:(\\\\|/)' "$T_FX/$EF" && T_ABS="$T_ABS $c"
+  done
+fi
+[ -z "$T_ABS" ]; afirma "t2-rastro-sem-caminho-absoluto-do-windows" $? "arquivos relativos a raiz${T_ABS:+ — ABSOLUTO EM:$T_ABS}"
+
+# Estrutural. A auditoria: estes sao os hooks que leem pathname do payload, e a variavel de cada
+# um. Cada par passa por rastro_caminho_em ANTES de qualquer uso que nao seja a propria leitura
+# ou o teste de vazio; nenhum hook fora da lista le `cwd`/`file_path`; e nenhum hook reimplementa
+# a normalizacao (cygpath, troca de barra, letra de drive) — o helper e o contrato.
+T_PARES="comum/segredo.sh:CWD comum/segredo.sh:ALVO comum/rastro-post.sh:CWD comum/rastro-post.sh:ALVO
+comum/rastro-subagente.sh:CWD sprintx/escopo-da-task.sh:CWD sprintx/escopo-da-task.sh:ALVO
+sprintx/git-perigoso.sh:CWD sprintx/arvore-limpa-antes-da-suite.sh:CWD
+sprintx/sem-placeholder-no-plano.sh:CWD sprintx/sem-placeholder-no-plano.sh:ALVO
+sprintx/task-so-fecha-verde.sh:CWD sprintx/task-so-fecha-verde.sh:ALVO
+sprintx/task-reivindicada.sh:CWD sprintx/task-reivindicada.sh:ALVO
+sprintx/tdd-teste-antes.sh:CWD sprintx/tdd-teste-antes.sh:ALVO"
+# t_normaliza_antes <hook> <VAR> — a linha `rastro_caminho_em VAR "$VAR"` existe e toda linha
+# anterior que toca VAR e leitura (atribuicao, rastro_json_campo_em VAR) ou teste de vazio.
+t_normaliza_antes() {
+  awk -v V="$2" '
+    { sub(/^[ \t]+/, "") }
+    /^#/ { next }
+    $0 == "rastro_caminho_em " V " \"$" V "\"" { achou = 1; exit }
+    index($0, "$" V) || index($0, "${" V) || index($0, V "=") || index($0, "rastro_json_campo_em " V " ") {
+      l = $0
+      gsub("\\[ -n \"\\$" V "\" \\] \\|\\| (exit 0|" V "=\"\\$PWD\")", "", l)
+      gsub("rastro_json_campo_em " V " \"\\$ENTRADA\" [a-z_]+", "", l)
+      gsub("(^|[; ])" V "=\"\\$\\((rastro_json_get|rastro_tool_input_get) \"\\$ENTRADA\" [a-z_]+\\)\"", "", l)
+      gsub("(^|[; ])" V "=\"\\$\\{CAMPOS\\[[0-9]\\]-\\}\"", "", l)
+      if (index(l, "$" V) || index(l, "${" V) || index(l, V "=")) { ruim = NR ": " $0; exit }
+    }
+    END { if (ruim != "") { print ruim; exit 1 } if (!achou) { print "sem rastro_caminho_em"; exit 1 } }
+  ' "$1"
+}
+t_estrutura() { # t_estrutura <raiz-hooks> — falhas em T_FALHA
+  local H2="$1" p f v out
+  T_FALHA=""
+  for p in $T_PARES; do
+    f="${p%%:*}"; v="${p#*:}"
+    out="$(t_normaliza_antes "$H2/$f" "$v")" || T_FALHA="$T_FALHA $f:$v($out)"
+  done
+  for f in "$H2"/comum/*.sh "$H2"/sprintx/*.sh; do
+    case "$f" in */comum/rastro.sh) continue ;; esac
+    # Le pathname do payload sem estar na auditoria?
+    if grep -v '^[[:space:]]*#' "$f" | grep -qE '(rastro_json_get|rastro_tool_input_get|rastro_json_campo_em [A-Z_]+) "\$ENTRADA" (cwd|file_path)|\.(cwd|file_path) //'; then
+      case " $(printf '%s' "$T_PARES" | tr '\n' ' ') " in *" ${f#"$H2"/}:"*) ;; *) T_FALHA="$T_FALHA ${f#"$H2"/}:le-caminho-fora-da-auditoria" ;; esac
+    fi
+    # Normalizacao propria: cygpath, troca de barra invertida, letra de drive.
+    if grep -v '^[[:space:]]*#' "$f" | grep -qE 'cygpath|//\\\\+/|s[#/|,]\\\\\\\\|tr .\\\\\\\\|\[A-Za-z\]:|\[a-zA-Z\]:'; then
+      T_FALHA="$T_FALHA ${f#"$H2"/}:normalizacao-propria"
+    fi
+  done
+  [ -z "$T_FALHA" ]
+}
+t_estrutura "$H"; afirma "t3-todo-caminho-do-payload-pelo-helper" $? "$(printf '%s\n' "$T_PARES" | wc -w | tr -d ' ') pares hook:variavel; nenhuma normalizacao propria${T_FALHA:+ — FORA:$T_FALHA}"
+
+# Custo (DS-157): normalizar e builtin. O formato Windows nao custa processo a mais que o POSIX,
+# nos dois criticos e num PostToolUse. Shims no PATH, como nas secoes Q e S.
+T_SHIM="$T_DIR/shim"; mkdir -p "$T_SHIM"
+for c in awk jq grep sed cut tr wc sort head tail find cat date mkdir dirname basename ps git cygpath python3 xargs; do
+  r="$(command -v "$c" 2>/dev/null)"; case "$r" in */*) ;; *) continue ;; esac
+  printf '#!/bin/sh\nprintf "%%s\\n" "%s" >> "$T_LOG"\nexec "%s" "$@"\n' "$c" "$r" > "$T_SHIM/$c"; chmod +x "$T_SHIM/$c"
+done
+t_custo() { # t_custo <hook> <evento> <cwd> <file_path> <conteudo> — processos externos
+  rm -rf "$T_FX/src/docs"; printf '%s\n' "$T_BASE" > "$T_FX/$EF"; : > "$T_DIR/log"
+  t_json "$2" Write "$3" "$4" "$5" | (cd "$T_FX" && PATH="$T_SHIM:$PATH" T_LOG="$T_DIR/log" EXPX_SESSAO=t3e@1 CLAUDECODE=1 bash "$H/$1") >/dev/null 2>&1
+  grep -c '' "$T_DIR/log"
+}
+T_CUSTO=""; T_CRUIM=""
+T_W="$T_FX"; [ "$T_WIN" = 1 ] && T_W="$(cygpath -w "$T_FX")"
+while IFS='|' read -r rot h ev ct; do
+  cp_="$(t_custo "$h" "$ev" "$T_FX" "$T_FX/src/a.ts" "$(t_conteudo "$ct")")"
+  cw_="$(t_custo "$h" "$ev" "$T_W" "$T_W\\src\\a.ts" "$(t_conteudo "$ct")")"
+  T_CUSTO="$T_CUSTO $rot posix=$cp_ win=$cw_;"
+  [ "$cw_" -le "$cp_" ] || T_CRUIM="$T_CRUIM $rot"
+done <<EOF
+segredo-limpo|comum/segredo.sh|PreToolUse|inocente
+segredo-achado|comum/segredo.sh|PreToolUse|aws
+escopo|sprintx/escopo-da-task.sh|PreToolUse|inocente
+rastro-post|comum/rastro-post.sh|PostToolUse|inocente
+EOF
+[ -z "$T_CRUIM" ]; afirma "t4-formato-windows-nao-custa-processo" $? "${T_CUSTO% ;}${T_CRUIM:+ — MAIS CARO:$T_CRUIM}"
+
+# Mutantes. Copia da arvore de hooks (comum/ + sprintx/); o controle e a copia sem mutacao.
+T_M="$T_DIR/mut"
+t_copia() { rm -rf "$T_M/$1"; mkdir -p "$T_M/$1"; cp -R "$H/comum" "$H/sprintx" "$T_M/$1/"; printf '%s' "$T_M/$1"; }
+T_MF="posix"; [ "$T_WIN" = 1 ] && T_MF="win minuscula caixa-do-drive"
+t_mutante() { # t_mutante <nome> <rc geracao> <raiz> <casos que TEM de matar> [estrutural]
+  local nome="$1" rc="$2" r="$3" casos="$4" est="${5:-}" morto=""
+  if [ "$rc" -eq 0 ]; then
+    t_formatos "$r" "$T_FX" "$T_MF" "$casos" || morto="comportamento"
+    if [ -n "$est" ]; then t_estrutura "$r" || morto="${morto:+$morto+}estrutura"; fi
+  fi
+  local msg="SOBREVIVEU"; [ -z "$morto" ] || msg="morto por: $morto"
+  [ "$rc" -eq 0 ] && [ -n "$morto" ]; afirma "$nome" $? "$msg (rc geracao=$rc)"
+}
+TMC="$(t_copia controle)"; t_formatos "$TMC" "$T_FX" "$T_MF" todos && t_estrutura "$TMC"
+afirma "tm-controle-copia-intacta-sobrevive" $? "$T_MF + estrutura${T_FALHA:+ — FORA:$T_FALHA}"
+# 1. O segredo volta a usar cwd e file_path crus.
+TMU="$(t_copia m1)"; muta_lit "$TMU/comum/segredo.sh" "$TMU/s.m" 'rastro_caminho_em ALVO "$ALVO"' ':' \
+  && muta_lit "$TMU/s.m" "$TMU/comum/segredo.sh" 'rastro_caminho_em CWD "$CWD"' ':'
+t_mutante "tm-mutante-1-segredo-sem-normalizar" $? "$TMU" "seg-env-ignorado seg-aws seg-cwd-sub" estrutura
+# 2. Outro PreToolUse (task-so-fecha-verde) volta a casar `*/tasks.md` no caminho cru.
+TMU="$(t_copia m2)"; muta_lit "$H/sprintx/task-so-fecha-verde.sh" "$TMU/sprintx/task-so-fecha-verde.sh" 'rastro_caminho_em ALVO "$ALVO"' ':'
+t_mutante "tm-mutante-2-outro-pretooluse-sem-normalizar" $? "$TMU" "verde-ruim" estrutura
+# 3. A caixa do drive deixa de ser canonica no helper (c:\ e C:\ viram raizes diferentes). So
+# onde o formato Windows existe: fora dele o helper e no-op e o trecho mutado nem roda.
+if [ "$T_WIN" = 1 ]; then
+  TMU="$(t_copia m3)"; muta_lit "$H/comum/rastro.sh" "$TMU/comum/rastro.sh" '_d="${_m:${#_i}:1}"' ':'
+  t_mutante "tm-mutante-3-caixa-do-drive-nao-normalizada" $? "$TMU" "seg-env-ignorado seg-aws tdd-com-teste verde-ruim reivindicada placeholder post-write"
+fi
+# 4. Caminho com espaco quebra: a variavel vai sem aspas para o helper.
+TMU="$(t_copia m4)"; muta_lit "$H/comum/segredo.sh" "$TMU/comum/segredo.sh" 'rastro_caminho_em ALVO "$ALVO"' 'rastro_caminho_em ALVO $ALVO'
+t_mutante "tm-mutante-4-caminho-com-espaco-quebra" $? "$TMU" "seg-aws-espaco" estrutura
+# 5. O rastro-post grava o caminho Windows cru.
+TMU="$(t_copia m5)"; muta_lit "$H/comum/rastro-post.sh" "$TMU/comum/rastro-post.sh" 'rastro_caminho_em ALVO "$ALVO"' ':'
+t_mutante "tm-mutante-5-rastro-post-grava-caminho-cru" $? "$TMU" "post-write post-espaco" estrutura
+# 6. Um hook volta a normalizar sozinho, so trocando a barra, e corta a raiz por `/`.
+TMU="$(t_copia m6)"; muta_lit "$H/sprintx/tdd-teste-antes.sh" "$TMU/sprintx/tdd-teste-antes.sh" 'rastro_caminho_em ALVO "$ALVO"' 'ALVO="${ALVO//\\//}"'
+t_mutante "tm-mutante-6-hook-volta-ao-corte-por-barra" $? "$TMU" "tdd-com-teste tdd-artefato-da-skill" estrutura
+rm -rf "$T_DIR"
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"
 [ "$pulado" -eq 0 ] || echo "  ATENCAO: skip interno e buraco de cobertura da sprintx nesta plataforma, nao dependencia externa."
