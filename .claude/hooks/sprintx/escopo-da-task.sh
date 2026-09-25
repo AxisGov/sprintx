@@ -43,11 +43,15 @@ case "${BASH_SOURCE[0]}" in */*) DIR="${BASH_SOURCE[0]%/*}" ;; *) DIR=. ;; esac
 rastro_le_entrada_em ENTRADA
 rastro_json_campo_em CWD "$ENTRADA" cwd
 [ -n "$CWD" ] || CWD="$PWD"
+# No Windows o runner manda C:\dir (e a caixa do drive varia): raiz e alvo na mesma forma,
+# senao o prefixo nao sai, o caminho nao casa com `arquivos` e a irma so avisa.
+rastro_caminho_em CWD "$CWD"
 rastro_raiz_em RAIZ "$CWD"
 
 rastro_json_campo_em ALVO "$ENTRADA" file_path
 # Sem caminho no payload nao ha o que verificar (ex.: ferramenta sem file_path).
 [ -n "$ALVO" ] || exit 0
+rastro_caminho_em ALVO "$ALVO"
 
 # Caminho relativo a raiz do repo — e assim que o plano declara `arquivos`.
 REL="${ALVO#"$RAIZ"/}"

@@ -3770,6 +3770,162 @@ muta_lit "$RM/.claude/hooks/sprintx/git-perigoso.sh" "$RM/g.m" 'rastro_modo_em M
 r_mutante "rm-mutante-2-manifesto-com-id-sem-namespace" $? "$RM" r_caminhos r_modo
 rm -rf "$R"
 
+echo "== S. paths do tool input no Windows: C:\\ e C:/ decidem igual (P0.2-C7-B S3-D) =="
+# O Claude Code no Windows entrega `cwd` e `tool_input.file_path` como C:\dir\arq (payload
+# real capturado no runner). `${ALVO#"$RAIZ"/}` so tira prefixo com `/`: o caminho ficava
+# absoluto, nao casava com `arquivos` e o hook falhava ABERTO — a irma so avisava. A semantica
+# tem de ser a mesma em POSIX, C:\, C:/, misto e drive em outra caixa. Fora de MSYS/Cygwin a
+# normalizacao e no-op: la C:\ nao e caminho, e nada muda.
+S_WIN=0; case "${OSTYPE:-}" in msys*|cygwin*) S_WIN=1 ;; esac
+S_DIR="$(mktemp -d)"
+s_fx() { # s_fx <dir> — T-01.01 corrente, T-01.02 irma, uma compartilhada, nomes com espaco
+  local d="$1" p="$1/docs/sprintx/features/feat/sprint-01/tasks.md"
+  rm -rf "$d"; mkdir -p "$d/.git" "$d/src" "$d/docs/eventos" "${p%/*}"
+  printf -- '---\nexpx_schema: 1\nexpx_tool: sprintx\nkind: tasks\ntrabalho_id: feat\nsprint_id: sprint-01\ntasks:\n' > "$p"
+  printf '  - id: T-01.01\n    status: em_andamento\n    arquivos:\n      cria: ["src/com espaco/novo.ts"]\n      altera: [src/a.ts, src/shared.ts]\n' >> "$p"
+  printf '  - id: T-01.02\n    status: pendente\n    arquivos:\n      cria: ["src/irma espaco/y.ts"]\n      altera: [src/shared.ts, src/irma.ts]\n---\n' >> "$p"
+  printf '{"trabalho_id":"feat","evento":"task_iniciada","task":"T-01.01","sessao":"s3d@1"}\n' > "$d/docs/eventos/feat.jsonl"
+}
+s_json() { # s_json <cwd> <file_path> — JSON como o runner manda (barra invertida escapada)
+  printf '{"session_id":"x","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":"%s","old_string":"a","new_string":"b"}}' \
+    "${1//\\/\\\\}" "${2//\\/\\\\}"
+}
+s_decide() { # s_decide <hook> <dir-posix> <cwd> <file_path> — "rc/irma|aviso|silencio|outro"
+  local o r
+  o="$(s_json "$3" "$4" | (cd "$2" && EXPX_SESSAO=s3d@1 bash "$1") 2>&1)"; r=$?
+  case "$o" in
+    *arquivo_de_task_irma*) o=irma ;; *"nao esta na lista"*) o=aviso ;; "") o=silencio ;; *) o=outro ;;
+  esac
+  printf '%s/%s' "$r" "$o"
+}
+# Os casos A..E e o que cada um TEM de decidir, em qualquer formato.
+S_CASOS="A|src/a.ts|0/silencio
+B|src/shared.ts|0/silencio
+C|src/irma.ts|2/irma
+D|src/outro.ts|0/aviso
+E1|src/com espaco/novo.ts|0/silencio
+E2|src/irma espaco/y.ts|2/irma"
+S_FALHA=""
+S_TODOS="posix win misto cwdwin-arqmisto caixa-do-drive"
+s_formatos() { # s_formatos <hook> <dir-posix> <formatos> <casos> — falhas em S_FALHA
+  local h="$1" d="$2" w="" m="" wl="" n r esp rw fn fc fa got
+  S_FALHA=""
+  s_fx "$d"
+  if [ "$S_WIN" = 1 ]; then
+    w="$(cygpath -w "$d")"; m="$(cygpath -m "$d")"
+    # A caixa do drive troca entre sessoes do runner (f:\ e F:\): cwd numa, arquivo na outra.
+    case "$w" in [A-Z]*) wl="$(printf '%s' "${w:0:1}" | tr A-Z a-z)${w:1}" ;; *) wl="$(printf '%s' "${w:0:1}" | tr a-z A-Z)${w:1}" ;; esac
+  fi
+  while IFS='|' read -r n r esp; do
+    case " $4 " in *" $n "*) ;; *) continue ;; esac
+    rw="${r//\//\\}"
+    for fn in $3; do
+      case "$fn" in
+        posix) fc="$d"; fa="$d/$r" ;;
+        win) fc="$w"; fa="$w\\$rw" ;;
+        misto) fc="$m"; fa="$m/$r" ;;
+        cwdwin-arqmisto) fc="$w"; fa="$m/$r" ;;
+        caixa-do-drive) fc="$wl"; fa="$w\\$rw" ;;
+      esac
+      [ -n "$fc" ] || continue
+      # A reivindicacao volta ao estado inicial: o hook anexa eventos ao rastro a cada decisao.
+      printf '{"trabalho_id":"feat","evento":"task_iniciada","task":"T-01.01","sessao":"s3d@1"}\n' > "$d/docs/eventos/feat.jsonl"
+      got="$(s_decide "$h" "$d" "$fc" "$fa")"
+      [ "$got" = "$esp" ] || S_FALHA="$S_FALHA $n:$fn=$got(esperado $esp)"
+    done
+  done <<EOF
+$S_CASOS
+EOF
+  [ -z "$S_FALHA" ]
+}
+# Os drives da maquina que a bancada alcanca: o do temporario com todos os formatos e, se
+# diferente, o do checkout com os formatos que o runner entrega (C:\ e a caixa do drive trocada).
+S_SHOOK="$H/sprintx/escopo-da-task.sh"
+bash -n "$S_SHOOK"; afirma "s0-hook-sintaxe" $? "bash -n"
+S_ROT=posix; S_FMT=posix; [ "$S_WIN" = 1 ] && { S_ROT="$(cygpath -m "$S_DIR" | cut -c1-2)"; S_FMT="$S_TODOS"; }
+s_formatos "$S_SHOOK" "$S_DIR/fx c3d" "$S_TODOS" "A B C D E1 E2"
+afirma "s1-mesma-decisao-em-todo-formato-$S_ROT" $? "A..E x $S_FMT${S_FALHA:+ — FORA:$S_FALHA}"
+if [ "$S_WIN" = 1 ]; then
+  S_REPO_PAI="$(cd "$H/../../.." && pwd)"; S_ROT2="$(cygpath -m "$S_REPO_PAI" | cut -c1-2)"
+  if [ "$(printf '%s' "$S_ROT2" | tr a-z A-Z)" != "$(printf '%s' "$S_ROT" | tr a-z A-Z)" ] \
+    && S_DIR2="$(mktemp -d -p "$S_REPO_PAI" .sx-s3d.XXXXXX 2>/dev/null)"; then
+    s_formatos "$S_SHOOK" "$S_DIR2/fx c3d" "posix win caixa-do-drive" "A B C D E1 E2"
+    afirma "s1-mesma-decisao-em-todo-formato-$S_ROT2" $? "A..E x posix win caixa-do-drive${S_FALHA:+ — FORA:$S_FALHA}"
+  fi
+fi
+
+# O helper. No Windows: drive montado vira o que o `cygpath -u` devolve, sem chama-lo; drive fora
+# da montagem vira X:/... canonico; POSIX fica intacto; relativo continua relativo. Fora do
+# Windows: no-op, byte a byte.
+s_cam() { # s_cam <ostype> <caminho> — o que rastro_caminho_em devolve
+  OSTYPE="$1" bash -c '. "$0/comum/rastro.sh"; rastro_caminho_em v "$1"; printf "%s" "$v"' "$H" "$2"
+}
+S_RUIM=""
+for c in 'C:\a b\c.ts' 'C:/a/c.ts' 'X:\y' '/c/a/b' 'src/a.ts' 'src\a.ts' '\\srv\share\x'; do
+  [ "$(s_cam linux-gnu "$c")" = "$c" ] || S_RUIM="$S_RUIM linux:$c"
+done
+if [ "$S_WIN" = 1 ]; then
+  for c in 'C:\a b\c.ts' 'c:\a\c.ts' 'C:/a/c.ts' 'F:\Projetos\x y\z.ts' 'C:\'; do
+    [ "$(s_cam "$OSTYPE" "$c")" = "$(cygpath -u "$c")" ] || S_RUIM="$S_RUIM win:$c=$(s_cam "$OSTYPE" "$c")"
+  done
+  # Um drive sintetico, fora da montagem: a mesma forma canonica X:/..., venha em que caixa vier.
+  S_SINT=""; for l in Q R S T U V W Y Z; do [ -e "$(cygpath -u "$l:/")" ] || { S_SINT="$l"; break; }; done
+  S_SL="$(printf '%s' "$S_SINT" | tr A-Z a-z)"
+  for c in "$S_SINT:\\nao existe\\z.ts" "$S_SL:/nao existe/z.ts"; do
+    [ "$(s_cam "$OSTYPE" "$c")" = "$S_SINT:/nao existe/z.ts" ] || S_RUIM="$S_RUIM sint:$c=$(s_cam "$OSTYPE" "$c")"
+  done
+  [ "$(s_cam "$OSTYPE" '\\srv\share\x')" = //srv/share/x ] || S_RUIM="$S_RUIM unc"
+  [ "$(s_cam "$OSTYPE" '/c/a/b')" = /c/a/b ] || S_RUIM="$S_RUIM posix-intacto"
+  [ "$(s_cam "$OSTYPE" 'src/a.ts')" = src/a.ts ] && [ "$(s_cam "$OSTYPE" 'src\a.ts')" = src/a.ts ] || S_RUIM="$S_RUIM relativo"
+  # Hook num drive sintetico: nada ali, nada a decidir — igual em C:\ e C:/, sem erro.
+  [ "$(s_decide "$S_SHOOK" "$S_DIR" "$S_SINT:\\nao existe" "$S_SINT:\\nao existe\\src\\irma.ts")" = 0/silencio ] \
+    && [ "$(s_decide "$S_SHOOK" "$S_DIR" "$S_SINT:/nao existe" "$S_SINT:/nao existe/src/irma.ts")" = 0/silencio ] \
+    || S_RUIM="$S_RUIM drive-sintetico-$S_SINT"
+fi
+[ -z "$S_RUIM" ]; afirma "s2-helper-no-windows-e-no-op-fora" $? "drive montado = cygpath -u, sintetico X:/, UNC, relativo; byte a byte fora${S_RUIM:+ — FORA:$S_RUIM}"
+
+# Custo (DS-157): o formato Windows nao pode custar processo a mais que o POSIX. Shims no PATH,
+# como na secao Q, e o cygpath entra na conta.
+S_SHIM="$S_DIR/shim"; mkdir -p "$S_SHIM"
+for c in awk jq grep sed cut tr wc sort head tail find cat date mkdir dirname basename ps git cygpath python3; do
+  r="$(command -v "$c" 2>/dev/null)"; case "$r" in */*) ;; *) continue ;; esac
+  printf '#!/bin/sh\nprintf "%%s\\n" "%s" >> "$S_LOG"\nexec "%s" "$@"\n' "$c" "$r" > "$S_SHIM/$c"; chmod +x "$S_SHIM/$c"
+done
+s_custo() { # s_custo <hook> <dir> <cwd> <file_path> — processos externos
+  s_fx "$2"; : > "$S_DIR/log"
+  s_json "$3" "$4" | (cd "$2" && PATH="$S_SHIM:$PATH" S_LOG="$S_DIR/log" EXPX_SESSAO=s3d@1 bash "$1") >/dev/null 2>&1
+  grep -c '' "$S_DIR/log"
+}
+S_CD="$S_DIR/custo"; s_fx "$S_CD"
+S_CP="$(s_custo "$S_SHOOK" "$S_CD" "$S_CD" "$S_CD/src/a.ts")"; S_CPI="$(s_custo "$S_SHOOK" "$S_CD" "$S_CD" "$S_CD/src/irma.ts")"
+S_CW="$S_CP"; S_CWI="$S_CPI"
+if [ "$S_WIN" = 1 ]; then
+  S_W="$(cygpath -w "$S_CD")"
+  S_CW="$(s_custo "$S_SHOOK" "$S_CD" "$S_W" "$S_W\\src\\a.ts")"; S_CWI="$(s_custo "$S_SHOOK" "$S_CD" "$S_W" "$S_W\\src\\irma.ts")"
+fi
+[ "$S_CW" -le "$S_CP" ] && [ "$S_CWI" -le "$S_CPI" ] && [ "$S_CP" -le $((2 + Q_FOLGA)) ] && [ "$S_CPI" -le $((3 + Q_FOLGA)) ]
+afirma "s3-formato-windows-nao-custa-processo" $? "corrente posix=$S_CP win=$S_CW; irma posix=$S_CPI win=$S_CWI"
+
+# Mutantes, so onde o formato Windows existe: fora dele o caminho mutado nem roda.
+if [ "$S_WIN" = 1 ]; then
+  S_M="$S_DIR/mut"
+  s_copia() { # s_copia <nome> — hook + helper copiados; devolve o hook
+    rm -rf "$S_M/$1"; mkdir -p "$S_M/$1/sprintx" "$S_M/$1/comum"
+    cp "$H/comum/rastro.sh" "$S_M/$1/comum/rastro.sh"; cp "$S_SHOOK" "$S_M/$1/sprintx/escopo-da-task.sh"
+    printf '%s' "$S_M/$1/sprintx/escopo-da-task.sh"
+  }
+  S_MD="$S_DIR/fx c3d"; S_MF="win caixa-do-drive"
+  SMC="$(s_copia controle)"; s_formatos "$SMC" "$S_MD" "$S_MF" "A C"
+  afirma "sm-controle-copia-intacta-sobrevive" $? "${S_FALHA:-todos os formatos}"
+  SMUT="$(s_copia m1)"; muta_lit "$SMUT" "$SMUT.m" 'rastro_caminho_em ALVO "$ALVO"' ':' && mv "$SMUT.m" "$SMUT"
+  S_RC=$?; [ "$S_RC" -eq 0 ] && ! s_formatos "$SMUT" "$S_MD" "$S_MF" "A C"
+  afirma "sm-mutante-1-file-path-sem-normalizar" $? "rc geracao=$S_RC"
+  SMUT="$(s_copia m2)"; muta_lit "$S_M/m2/comum/rastro.sh" "$S_M/m2/r.m" '_d="${_m:${#_i}:1}"' ':' && mv "$S_M/m2/r.m" "$S_M/m2/comum/rastro.sh"
+  S_RC=$?; [ "$S_RC" -eq 0 ] && ! s_formatos "$SMUT" "$S_MD" "$S_MF" "A C"
+  afirma "sm-mutante-2-drive-sem-caixa-canonica" $? "rc geracao=$S_RC"
+fi
+rm -rf "$S_DIR" ${S_DIR2:+"$S_DIR2"}
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"
 [ "$pulado" -eq 0 ] || echo "  ATENCAO: skip interno e buraco de cobertura da sprintx nesta plataforma, nao dependencia externa."

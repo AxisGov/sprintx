@@ -46,6 +46,29 @@ rastro_raiz_em() { # rastro_raiz_em <var> [dir]
 }
 rastro_raiz() { local _r; rastro_raiz_em _r "$@"; printf '%s' "$_r"; }
 
+# rastro_caminho_em <var> <caminho> — um caminho do payload do harness (cwd, file_path) na
+# forma do shell. O Claude Code no Windows entrega C:\dir\arq, e a caixa do drive varia entre
+# sessoes (f:\ e F:\): prefixo de raiz com `/` nao casa com isso. Em MSYS/Cygwin, drive
+# absoluto vira /<letra>/... quando o drive esta montado ali (o padrao do Git Bash, o mesmo
+# que o $PWD mostra); com outro prefixo de montagem, a forma canonica X:/... — maiuscula e
+# com `/`, que o shell tambem abre. Nenhum processo: quem converte com processo e so o
+# caminho-git.sh da skill (DS-152). Caminho POSIX fica intacto; relativo continua relativo,
+# so com `/`. Fora do Windows: no-op.
+rastro_caminho_em() {
+  local _c="$2" _d _i _u=ABCDEFGHIJKLMNOPQRSTUVWXYZ _m=abcdefghijklmnopqrstuvwxyz
+  case "${OSTYPE:-}" in msys*|cygwin*) ;; *) printf -v "$1" '%s' "$_c"; return 0 ;; esac
+  case "$_c" in
+    [A-Za-z]:|[A-Za-z]:[\\/]*)
+      _d="${_c:0:1}"; _i="${_u%%"$_d"*}"
+      [ "${#_i}" -lt 26 ] || { _i="${_m%%"$_d"*}"; }
+      _c="${_c:2}"; _c="${_c//\\//}"
+      if [ -d "/${_m:${#_i}:1}" ]; then _d="${_m:${#_i}:1}"; _c="/$_d$_c"
+      else _c="${_u:${#_i}:1}:${_c:-/}"; fi ;;
+    *\\*) _c="${_c//\\//}" ;;
+  esac
+  printf -v "$1" '%s' "$_c"
+}
+
 # ------------------------------------------------------------- identidade
 
 # Nome do harness: EXPX_HARNESS (a ponte OpenCode injeta isso) -> CLAUDECODE
