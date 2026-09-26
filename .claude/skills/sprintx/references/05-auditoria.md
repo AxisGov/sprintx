@@ -61,7 +61,7 @@ declarado ainda não prova a cláusula — e isso a F6 resolve **antes** de escr
 obrigação de endurecer o teste (`references/06-execucao.md`, Passo 2.0). Sem essa obrigação, o
 MÉDIA não existiria.
 
-Grave no rastro o `veredito_emitido` com `agente: auditor-plano` (formato em `references/08-rastro.md`).
+Grave no rastro o `veredito_emitido` pelo escritor — `bash <raiz-da-skill>/scripts/rastro.sh veredito-emitido <slug> <SIM|NAO> "<resumo>"` —, que o registra com `agente: auditor-plano` (`references/08-rastro.md`).
 
 Se o agente não estiver disponível neste harness, faça a auditoria você mesma, seguindo os Passos 3 e 4 — e sabendo que a regra "só aponta, nunca corrige" volta a depender da sua disciplina.
 

@@ -405,6 +405,7 @@ Os kinds `orquestrador`, `sprint`, `fases`, `tasks`, `bloqueios` e `base_indice`
     scripts/
       planejamento.sh           estado, orçamentos (F5 e F6), fase, replanejamento da execução e checkpoints
       bloqueios.sh              registra, resolve e lê o B-NN tipado (classe obrigatória e imutável)
+      rastro.sh                 único escritor dos eventos da skill no rastro; deriva sessão e harness
   commands/
     sprintx*.md                 atalhos de comando para cada fase
   hooks/

@@ -249,7 +249,9 @@ fi
 # inconsistente) sao ambiguos — aqui a falha NAO e aberta: para por
 # contrato, nunca escolhe a primeira task em_andamento que encontrar.
 if [ "$N_MINHAS" -ne 1 ]; then
-  MSG_AMB="sprintx/escopo-da-task: sessao_ambigua — esta sessao nao foi associada de forma inequivoca a uma task em andamento pelo rastro ($N_MINHAS correspondencia(s) para a sessao $MINHA_SESSAO em $RAIZ/docs/eventos/*.jsonl). Por contrato a edicao fica bloqueada; a maquina nunca escolhe a primeira task em_andamento que encontra. Reivindique a task (evento task_iniciada no rastro) antes de editar."
+  # A mensagem aponta o escritor publico e nao ecoa a sessao: a identidade e derivada pelo
+  # mecanismo, nunca copiada daqui para uma linha montada a mao (DS-159).
+  MSG_AMB="sprintx/escopo-da-task: sessao_ambigua — esta sessao nao foi associada de forma inequivoca a uma task em andamento pelo rastro ($N_MINHAS reivindicacao(oes) ativa(s) desta sessao em $RAIZ/docs/eventos/). Por contrato a edicao fica bloqueada; a maquina nunca escolhe a primeira task em_andamento que encontra. Reivindique a task pelo escritor do rastro antes de editar: bash <raiz-da-skill>/scripts/rastro.sh task-iniciada <slug> <T-NN.MM> (references/08-rastro.md). Nao grave o evento a mao."
   EXTRAS_AMB="\"condicao\":\"sessao_ambigua\",\"tasks_candidatas\":$N_MINHAS"
   # Sem trabalho corrente inequivoco nao ha rastro de trabalho onde gravar: a
   # forma curta manda para `sem-trabalho`, que e exatamente o que aconteceu.

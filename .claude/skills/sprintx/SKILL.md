@@ -153,8 +153,12 @@ discriminar qual sessão está em qual.
   fase e de sprint" em `references/06-execucao.md`) só roda a suíte inteira depois de
   confirmar que a árvore não tem trabalho de outra sessão no meio. Uma árvore contaminada
   nunca faz a sprint fechar por engano — ela simplesmente adia o portão.
-- **Identidade no rastro.** Toda linha do rastro passa a trazer `sessao` (`<harness>@<id>`) e
-  `harness`, gravados por `rastro_grava` no parâmetro `extras`.
+- **Identidade no rastro.** `task_iniciada`, `task_concluida` e `task_bloqueada` trazem `sessao`
+  (`<harness>@<id>`) e `harness`, e são gravados **só** pelo escritor
+  `scripts/rastro.sh task-iniciada|task-concluida|task-bloqueada <slug> <T-NN.MM>`, que deriva a
+  identidade do próprio harness pela mesma regra com que os hooks a leem. A skill nunca descobre,
+  copia nem escreve a sessão; sem identidade disponível o escritor falha fechado e nada é gravado
+  (`references/08-rastro.md`, DS-159).
 
 **O que vale em cada harness:** o texto do método — a regra 21, os passos de F1 e F6 — vale
 nos dois harnesses, porque os dois leem o mesmo `SKILL.md`. Os hooks bash rodam nativamente
@@ -166,7 +170,7 @@ MimoCode não é suportado por esta skill.
 | Fase | Roteiro operacional | Templates usados |
 |---|---|---|
 | Todas as que gravam arquivo | `references/00-schema.md` — **leitura obrigatória** em qualquer fase que grave arquivo de estado (F1, F2, F3, F3.5, F4, F6) | — |
-| Todas as que gravam transição | `references/08-rastro.md` — formato do rastro de eventos, lido pelo painel | — |
+| Todas as que gravam transição | `references/08-rastro.md` — formato do rastro de eventos, lido pelo painel e pelos hooks; `scripts/rastro.sh` é o único escritor dos eventos da skill | — |
 | Todas as que gravam transição | `references/09-estado.md` — contrato `expx-estado` v1: o `.expx/estado.json` que a barra de status lê | — |
 | F3 e F6 (ao gravar `fases.md` e ao fechar task) | `references/09-diagrama.md` — o bloco Mermaid do grafo de tasks dentro de `fases.md`. Derivado: sua ausência é inofensiva e nunca bloqueia | `assets/TEMPLATE-fases.md` |
 | F1 a F5 (estado do planejamento) | `scripts/planejamento.sh` — cria, avança, detecta a fase e faz o checkpoint; único escritor de `00-PLANEJAMENTO.md` | `assets/TEMPLATE-PLANEJAMENTO.md` |
@@ -222,7 +226,7 @@ Quando o agente não existe no harness em uso, a fase roda como sempre rodou —
 
 ### O rastro
 
-Hooks e skill gravam os eventos em `docs/eventos/<trabalho_id>.jsonl`, formato em `references/08-rastro.md`. É o que dá ao painel a linha do tempo do trabalho, quem fez o quê, e a duração real por task — esta última alimentando a calibração da F3.5, sem ninguém anotar nada.
+Hooks e skill gravam os eventos em `docs/eventos/<trabalho_id>.jsonl`, formato em `references/08-rastro.md`; a skill grava os dela pelo escritor `scripts/rastro.sh`, nunca montando a linha à mão. É o que dá ao painel a linha do tempo do trabalho, quem fez o quê, e a duração real por task — esta última alimentando a calibração da F3.5, sem ninguém anotar nada.
 
 ## Onde fica `docs/sprintx/features/<slug>/`
 

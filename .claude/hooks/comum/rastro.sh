@@ -4,7 +4,9 @@
 # Implementa o contrato expx-eventos v1:
 #   /Users/.../Expx/docs/contrato/CONTRATO-expx-eventos.md
 #
-# Nao e executavel por si so: os hooks fazem `source` deste arquivo.
+# Nao e executavel por si so: os hooks fazem `source` deste arquivo — e tambem o
+# scripts/rastro.sh da skill, o escritor publico dos eventos que a skill grava (DS-159),
+# para que identidade, destino e serializacao tenham uma implementacao so.
 #
 # Regras do contrato que este arquivo materializa:
 #   1. Rapido      — sem subshell desnecessario, sem rede, sem parser externo pesado.
@@ -95,17 +97,40 @@ rastro_harness() { local _h; rastro_harness_em _h; printf '%s' "$_h"; }
 
 # Identidade da sessao: <harness>@<id>. Ordem: EXPX_SESSAO (a ponte injeta) ->
 # CLAUDE_CODE_SESSION_ID (com o harness na frente) -> <harness>@<ppid> ->
-# <harness>@sem-id. Nunca lanca excecao (regra 3 do contrato).
+# <harness>@sem-id. Nunca lanca excecao (regra 3 do contrato). A fonte usada fica em
+# RASTRO_SESSAO_FONTE (expx | harness | ppid | sem-id): so as duas primeiras sao a mesma
+# para o hook e para o processo do agente — o <ppid> de um nao e o do outro.
 rastro_sessao_em() { # rastro_sessao_em <var>
-  if [ -n "${EXPX_SESSAO:-}" ]; then printf -v "$1" '%s' "$EXPX_SESSAO"; return 0; fi
+  if [ -n "${EXPX_SESSAO:-}" ]; then RASTRO_SESSAO_FONTE=expx; printf -v "$1" '%s' "$EXPX_SESSAO"; return 0; fi
   local _h; rastro_harness_em _h
   if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
-    printf -v "$1" '%s@%s' "$_h" "$CLAUDE_CODE_SESSION_ID"; return 0
+    RASTRO_SESSAO_FONTE=harness; printf -v "$1" '%s@%s' "$_h" "$CLAUDE_CODE_SESSION_ID"; return 0
   fi
-  if [ -n "${PPID:-}" ]; then printf -v "$1" '%s@%s' "$_h" "$PPID"; return 0; fi
-  printf -v "$1" '%s@sem-id' "$_h"
+  if [ -n "${PPID:-}" ]; then RASTRO_SESSAO_FONTE=ppid; printf -v "$1" '%s@%s' "$_h" "$PPID"; return 0; fi
+  RASTRO_SESSAO_FONTE=sem-id; printf -v "$1" '%s@sem-id' "$_h"
 }
 rastro_sessao() { local _s; rastro_sessao_em _s; printf '%s' "$_s"; }
+
+# rastro_identidade_em <var_sessao> <var_harness> — a identidade que um evento de
+# reivindicacao precisa levar, derivada pela MESMA regra que os hooks usam para ler
+# (rastro_sessao_em). Retorna 1, com as duas variaveis vazias, quando a identidade nao e
+# estavel entre o hook e quem grava: fonte <ppid> ou sem-id, harness desconhecido, id vazio,
+# ou caractere que a leitura do rastro nao casa (`"sessao":"[^"]*"`). Nunca fabrica: quem
+# chama e que falha fechado (scripts/rastro.sh da skill, DS-159).
+rastro_identidade_em() {
+  local _s _h
+  printf -v "$1" '%s' ""; printf -v "$2" '%s' ""
+  rastro_sessao_em _s
+  case "$RASTRO_SESSAO_FONTE" in expx|harness) ;; *) return 1 ;; esac
+  case "$_s" in
+    ''|@*|*@|*@sem-id|desconhecido@*|*[!A-Za-z0-9@._:+_-]*) return 1 ;;
+    *@*) ;;
+    *) return 1 ;;
+  esac
+  rastro_harness_em _h
+  case "$_h" in ''|desconhecido|*[!A-Za-z0-9._-]*) return 1 ;; esac
+  printf -v "$1" '%s' "$_s"; printf -v "$2" '%s' "$_h"
+}
 
 # Escapa uma string para caber dentro de um JSON string literal.
 # Ordem importa: a barra invertida primeiro, senao escapamos o que ja escapamos.
@@ -347,7 +372,7 @@ $arq	"}"; tam="${tam%%
   [ -n "$extras" ] && linha="$linha,$extras"
   linha="$linha}"
 
-  printf '%s\n' "$linha" >> "$arq" 2>/dev/null || true
+  if printf '%s\n' "$linha" >> "$arq" 2>/dev/null; then RASTRO_GRAVACAO=gravado; else RASTRO_GRAVACAO=falha; fi
 }
 
 # rastro_grava_trabalho <raiz> <trabalho_id|-> <evento> <origem> <resultado> <detalhe> [arquivos_json] [extras_json]
@@ -369,10 +394,13 @@ $arq	"}"; tam="${tam%%
 # por que nao foi atribuido a trabalho nenhum.
 #
 # Falha aberta: qualquer erro aqui e engolido. Um hook nunca trava o trabalho
-# por nao conseguir escrever o proprio rastro.
+# por nao conseguir escrever o proprio rastro. O desfecho fica em RASTRO_GRAVACAO
+# (gravado | divergente | invalido | falha), para quem NAO pode falhar aberto — o
+# scripts/rastro.sh da skill (DS-159) — saber se a linha entrou onde pediu.
 rastro_grava_trabalho() {
   local raiz="$1" pedido="$2" evento="$3" origem="$4" resultado="$5" detalhe="$6"
   local arquivos="${7:-[]}" extras="${8:-}"
+  RASTRO_GRAVACAO=falha
 
   {
     local dir="$raiz/docs/eventos"
@@ -396,10 +424,12 @@ rastro_grava_trabalho() {
     elif ! rastro_trabalho_valido "$pedido"; then
       _rastro_linha "$dir/sem-trabalho.jsonl" sem-trabalho acao_bloqueada "$origem" bloqueado \
         "trabalho_id_invalido: $evento pedido para '$pedido'" '[]' ''
+      RASTRO_GRAVACAO=invalido
       return 0
     elif [ -n "$sessao_tid" ] && [ "$sessao_tid" != "$pedido" ]; then
       _rastro_linha "$dir/sem-trabalho.jsonl" sem-trabalho acao_bloqueada "$origem" bloqueado \
         "contexto_de_trabalho_divergente: $evento pedido em '$pedido', a sessao reivindica '$sessao_tid'" '[]' ''
+      RASTRO_GRAVACAO=divergente
       return 0
     else
       tid="$pedido"
