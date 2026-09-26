@@ -4197,6 +4197,356 @@ TMU="$(t_copia m6)"; muta_lit "$H/sprintx/tdd-teste-antes.sh" "$TMU/sprintx/tdd-
 t_mutante "tm-mutante-6-hook-volta-ao-corte-por-barra" $? "$TMU" "tdd-com-teste tdd-artefato-da-skill" estrutura
 rm -rf "$T_DIR"
 
+echo "== U. o rastro da skill tem escritor oficial: identidade derivada, nunca montada pelo agente (P0.2 / D-01) =="
+# O piloto real C7-C seguiu 08-rastro.md: `printf >> docs/eventos/...` sem `sessao`, primeiro Edit
+# barrado com sessao_ambigua, o agente abriu o hook e forjou `claude-code@<id>`. O contrato agora
+# e: task_iniciada/task_concluida/task_bloqueada so saem de scripts/rastro.sh, que deriva a
+# identidade pela mesma funcao com que o escopo-da-task a le, e falha fechado sem ela (DS-159).
+#
+# Cada caso recebe uma ARVORE no layout instalado (<arv>/.claude/hooks + <arv>/.claude/skills/
+# sprintx) e monta a fixture do zero: e assim que o controle e os mutantes sao julgados.
+U_DIR="$(mktemp -d)"
+U_N=0
+U_RC=0; U_OUT=""
+U_REAL="$(cd "$H/../.." && pwd)"
+# As formas do caminho que o runner manda: POSIX sempre; no Windows tambem C:\, c:\ e C:/.
+U_MF="posix"; [ "$T_WIN" = 1 ] && U_MF="posix win minuscula caixa-do-drive"
+
+u_arvore() { # u_arvore <nome> — copia do layout instalado: hooks comum/ sprintx/ testes/ + a skill
+  local r="$U_DIR/arv/$1"
+  rm -rf "$r"; mkdir -p "$r/.claude/hooks/testes" "$r/.claude/skills"
+  cp -R "$H/comum" "$H/sprintx" "$r/.claude/hooks/"
+  cp "$H/testes/transcrito-agente.sh" "$r/.claude/hooks/testes/"
+  cp -R "$SK" "$r/.claude/skills/sprintx"
+  printf '%s' "$r"
+}
+u_plano() { # u_plano <dir> <slug> <status T-01.01> <arquivo T-01.01> <status T-01.02> <arquivo T-01.02>
+  n_plano "$1/docs/sprintx/features/$2/sprint-01/tasks.md" "$2" 01 <<EOF
+$(n_task T-01.01 "$3" "$4")
+$(n_task T-01.02 "$5" "$6")
+EOF
+}
+u_fx() { # u_fx — repo git novo com dois trabalhos que repetem os ids: fx (a.ts | b.ts) e fy (c.ts | d.ts)
+  U_N=$((U_N + 1)); U_FX="$U_DIR/fx$U_N"
+  mkdir -p "$U_FX/src"; git init -q --template= "$U_FX" >/dev/null 2>&1
+  u_plano "$U_FX" fx em_andamento src/a.ts pendente src/b.ts
+  u_plano "$U_FX" fy pendente src/c.ts pendente src/d.ts
+}
+# u_w <arv> <dir> <sessao|-> <args...> — o escritor, com a identidade que o Claude Code exporta
+# (CLAUDECODE + CLAUDE_CODE_SESSION_ID) ou, com `-`, sem identidade nenhuma.
+u_w() {
+  local a="$1" d="$2" s="$3"; shift 3
+  if [ "$s" = - ]; then
+    U_OUT="$(cd "$d" && env -u EXPX_SESSAO -u EXPX_HARNESS -u CLAUDE_CODE_SESSION_ID -u CLAUDECODE \
+      bash "$a/.claude/skills/sprintx/scripts/rastro.sh" "$@" 2>&1)"; U_RC=$?
+  else
+    U_OUT="$(cd "$d" && env -u EXPX_SESSAO -u EXPX_HARNESS CLAUDECODE=1 CLAUDE_CODE_SESSION_ID="$s" \
+      bash "$a/.claude/skills/sprintx/scripts/rastro.sh" "$@" 2>&1)"; U_RC=$?
+  fi
+}
+u_wenv() { # u_wenv <arv> <dir> <env...> -- <args...> — o escritor com um ambiente dado
+  local a="$1" d="$2" e=(); shift 2
+  while [ $# -gt 0 ] && [ "$1" != -- ]; do e+=("$1"); shift; done; shift
+  U_OUT="$(cd "$d" && env -u EXPX_SESSAO -u EXPX_HARNESS -u CLAUDE_CODE_SESSION_ID -u CLAUDECODE "${e[@]}" \
+    bash "$a/.claude/skills/sprintx/scripts/rastro.sh" "$@" 2>&1)"; U_RC=$?
+}
+# u_h <arv> <dir> <sessao> <arquivo-relativo> [cwd-payload] [file_path-payload] — o escopo-da-task
+# da arvore, com o payload do runner (cwd/file_path podem vir na forma Windows).
+u_h() {
+  local a="$1" d="$2" s="$3" rel="$4" c="${5:-$2}" f="${6:-$2/$4}"
+  U_OUT="$(printf '{"cwd":"%s","tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$(t_esc "$c")" "$(t_esc "$f")" \
+    | (cd "$d" && env -u EXPX_SESSAO -u EXPX_HARNESS CLAUDECODE=1 CLAUDE_CODE_SESSION_ID="$s" \
+        bash "$a/.claude/hooks/sprintx/escopo-da-task.sh") 2>&1)"; U_RC=$?
+}
+u_ok() { [ "$U_RC" -eq 0 ] && [ -z "$U_OUT" ]; }           # permitido, em silencio
+u_barra() { [ "$U_RC" -eq 2 ] && printf '%s' "$U_OUT" | grep -qF "$1"; }
+u_linha() { # u_linha <arquivo> <evento> <task> — a linha do evento (a ultima), vazia se nao ha
+  [ -f "$1" ] || return 0
+  grep -F "\"evento\":\"$2\"" "$1" | grep -F "\"task\":\"$3\"" | tail -1
+}
+# O primeiro `"sessao":"..."` da linha e o que a leitura do rastro usa (_RASTRO_AWK_REIV).
+u_campo() { printf '%s' "$1" | grep -o "\"$2\":\"[^\"]*\"" | head -1 | sed "s/^\"$2\":\"//; s/\"\$//"; }
+
+# ---------------------------------------------------------------- os casos
+u_a() { # A: escritor -> task_iniciada -> o escopo reconhece a task corrente
+  local a="$1" l; u_fx
+  u_w "$a" "$U_FX" s1 task-iniciada fx T-01.01; [ "$U_RC" -eq 0 ] || return 1
+  l="$(u_linha "$U_FX/docs/eventos/fx.jsonl" task_iniciada T-01.01)"
+  [ "$(u_campo "$l" sessao)" = claude-code@s1 ] && [ "$(u_campo "$l" harness)" = claude-code ] || return 1
+  printf '%s' "$l" | grep -qF '"origem":"skill"' || return 1
+  u_h "$a" "$U_FX" s1 src/a.ts; u_ok
+}
+u_b() { # B: escritor -> task_iniciada -> arquivo so da irma continua barrado
+  local a="$1"; u_fx
+  u_w "$a" "$U_FX" s1 task-iniciada fx T-01.01; [ "$U_RC" -eq 0 ] || return 1
+  u_h "$a" "$U_FX" s1 src/b.ts; u_barra arquivo_de_task_irma
+}
+u_c() { # C: identidade indisponivel -> o escritor falha e nao grava nada, nem incompleto
+  local a="$1" e; u_fx
+  u_w "$a" "$U_FX" - task-iniciada fx T-01.01; [ "$U_RC" -eq 3 ] || return 1
+  u_w "$a" "$U_FX" - task-concluida fx T-01.01; [ "$U_RC" -eq 3 ] || return 1
+  u_w "$a" "$U_FX" - task-bloqueada fx T-01.01; [ "$U_RC" -eq 3 ] || return 1
+  # So o id, sem o harness conhecido: o <harness>@ nao seria o mesmo no hook.
+  u_wenv "$a" "$U_FX" CLAUDE_CODE_SESSION_ID=s1 -- task-iniciada fx T-01.01; [ "$U_RC" -eq 3 ] || return 1
+  # So o harness, sem o id: o fallback <harness>@<ppid> e o processo de quem chama, nao a sessao.
+  u_wenv "$a" "$U_FX" CLAUDECODE=1 -- task-iniciada fx T-01.01; [ "$U_RC" -eq 3 ] || return 1
+  u_wenv "$a" "$U_FX" EXPX_HARNESS=opencode EXPX_SESSAO=opencode@sem-id -- task-iniciada fx T-01.01; [ "$U_RC" -eq 3 ] || return 1
+  u_wenv "$a" "$U_FX" CLAUDECODE=1 'CLAUDE_CODE_SESSION_ID=s1","x' -- task-iniciada fx T-01.01; [ "$U_RC" -eq 3 ] || return 1
+  for e in "$U_FX"/docs/eventos/*.jsonl; do
+    [ -f "$e" ] || continue
+    grep -qE '"evento":"task_(iniciada|concluida|bloqueada)"' "$e" && return 1
+  done
+  u_h "$a" "$U_FX" s1 src/a.ts; u_barra sessao_ambigua
+}
+u_d() { # D: caminhos Windows no payload e o escritor chamado de um subdiretorio
+  local a="$1" f w; u_fx
+  U_OUT="$(cd "$U_FX/src" && env -u EXPX_SESSAO -u EXPX_HARNESS CLAUDECODE=1 CLAUDE_CODE_SESSION_ID=s1 \
+    bash "$a/.claude/skills/sprintx/scripts/rastro.sh" task-iniciada fx T-01.01 2>&1)" || return 1
+  [ -n "$(u_linha "$U_FX/docs/eventos/fx.jsonl" task_iniciada T-01.01)" ] || return 1
+  [ ! -e "$U_FX/src/docs" ] || return 1
+  for f in $U_MF; do
+    case "$f" in
+      posix) w="$U_FX" ;;
+      win) w="$(cygpath -w "$U_FX")" ;;
+      minuscula) w="$(cygpath -w "$U_FX")"; w="$(printf '%s' "${w:0:1}" | tr 'A-Z' 'a-z')${w:1}" ;;
+      caixa-do-drive) w="$(cygpath -m "$U_FX")" ;;
+    esac
+    if [ "$f" = posix ] || [ "$f" = caixa-do-drive ]; then
+      u_h "$a" "$U_FX" s1 src/a.ts "$w" "$w/src/a.ts"; u_ok || return 1
+      u_h "$a" "$U_FX" s1 src/b.ts "$w" "$w/src/b.ts"; u_barra arquivo_de_task_irma || return 1
+    else
+      u_h "$a" "$U_FX" s1 src/a.ts "$w" "$w\\src\\a.ts"; u_ok || return 1
+      u_h "$a" "$U_FX" s1 src/b.ts "$w" "$w\\src\\b.ts"; u_barra arquivo_de_task_irma || return 1
+    fi
+  done
+}
+u_e() { # E: sessoes diferentes — uma nunca reivindica pela outra
+  local a="$1"; u_fx
+  u_plano "$U_FX" fx em_andamento src/a.ts em_andamento src/b.ts
+  u_w "$a" "$U_FX" s1 task-iniciada fx T-01.01; [ "$U_RC" -eq 0 ] || return 1
+  u_w "$a" "$U_FX" s2 task-iniciada fx T-01.02; [ "$U_RC" -eq 0 ] || return 1
+  u_h "$a" "$U_FX" s1 src/a.ts; u_ok || return 1
+  u_h "$a" "$U_FX" s2 src/b.ts; u_ok || return 1
+  u_h "$a" "$U_FX" s2 src/a.ts; u_barra arquivo_de_task_irma || return 1
+  u_h "$a" "$U_FX" s3 src/a.ts; u_barra sessao_ambigua
+}
+u_f() { # F: worktrees diferentes — rastro e reivindicacao nao atravessam a arvore
+  local a="$1" r wt; U_N=$((U_N + 1)); r="$U_DIR/wt$U_N"; wt="$r--fx"
+  mkdir -p "$r/src"; git init -q --template= -b main "$r" >/dev/null 2>&1
+  u_plano "$r" fx em_andamento src/a.ts pendente src/b.ts
+  git -C "$r" add -A >/dev/null 2>&1
+  git -C "$r" -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q -m p >/dev/null 2>&1 || return 1
+  git -C "$r" worktree add -q -b feature/fx "$wt" main >/dev/null 2>&1 || return 1
+  u_w "$a" "$wt" s1 task-iniciada fx T-01.01; [ "$U_RC" -eq 0 ] || return 1
+  [ -n "$(u_linha "$wt/docs/eventos/fx.jsonl" task_iniciada T-01.01)" ] || return 1
+  [ ! -e "$r/docs/eventos" ] || return 1
+  u_h "$a" "$wt" s1 src/a.ts; u_ok || return 1
+  u_h "$a" "$r" s1 src/a.ts; u_barra sessao_ambigua || return 1
+  git -C "$r" worktree remove --force "$wt" >/dev/null 2>&1; return 0
+}
+u_g() { # G: evento legado sem identidade continua sem reivindicar nada (DS-150)
+  local a="$1"; u_fx; mkdir -p "$U_FX/docs/eventos"
+  printf '%s\n' '{"ts":"2026-09-26T10:23:54Z","expx_eventos":1,"trabalho_id":"fx","ferramenta":"sprintx","origem":"skill","evento":"task_iniciada","fase":"f6","task":"T-01.01","agente":"principal","resultado":"ok","detalhe":"legado","arquivos":[]}' \
+    >> "$U_FX/docs/eventos/fx.jsonl"
+  u_h "$a" "$U_FX" s1 src/a.ts; u_barra sessao_ambigua || return 1
+  u_w "$a" "$U_FX" s1 task-iniciada fx T-01.01; [ "$U_RC" -eq 0 ] || return 1
+  u_h "$a" "$U_FX" s1 src/a.ts; u_ok
+}
+u_hc() { # H: task_concluida e task_bloqueada pelo escritor fecham a reivindicacao, com identidade
+  local a="$1" l; u_fx
+  u_w "$a" "$U_FX" s1 task-iniciada fx T-01.01; [ "$U_RC" -eq 0 ] || return 1
+  u_w "$a" "$U_FX" s1 task-concluida fx T-01.01 "suite parcial verde" src/a.ts; [ "$U_RC" -eq 0 ] || return 1
+  l="$(u_linha "$U_FX/docs/eventos/fx.jsonl" task_concluida T-01.01)"
+  [ "$(u_campo "$l" sessao)" = claude-code@s1 ] || return 1
+  printf '%s' "$l" | grep -qF '"arquivos":["src/a.ts"]' || return 1
+  u_h "$a" "$U_FX" s1 src/a.ts; u_barra sessao_ambigua || return 1
+  u_w "$a" "$U_FX" s1 task-iniciada fx T-01.01; [ "$U_RC" -eq 0 ] || return 1
+  u_w "$a" "$U_FX" s1 task-bloqueada fx T-01.01 B-01; [ "$U_RC" -eq 0 ] || return 1
+  l="$(u_linha "$U_FX/docs/eventos/fx.jsonl" task_bloqueada T-01.01)"
+  [ "$(u_campo "$l" sessao)" = claude-code@s1 ] && printf '%s' "$l" | grep -qF '"resultado":"bloqueado"' || return 1
+  u_h "$a" "$U_FX" s1 src/a.ts; u_barra sessao_ambigua
+}
+u_i() { # I: contexto que nao fecha nao grava no trabalho pedido
+  local a="$1"; u_fx
+  u_w "$a" "$U_FX" s1 task-iniciada fx T-01.01; [ "$U_RC" -eq 0 ] || return 1
+  u_w "$a" "$U_FX" s1 task-iniciada fy T-01.01; [ "$U_RC" -eq 4 ] || return 1
+  [ ! -e "$U_FX/docs/eventos/fy.jsonl" ] || return 1
+  grep -qF contexto_de_trabalho_divergente "$U_FX/docs/eventos/sem-trabalho.jsonl" || return 1
+  u_w "$a" "$U_FX" s1 task-iniciada nao-existe T-01.01; [ "$U_RC" -eq 4 ] || return 1
+  u_w "$a" "$U_FX" s1 task-iniciada fx T-09.09; [ "$U_RC" -eq 4 ] || return 1
+  [ ! -e "$U_FX/docs/eventos/nao-existe.jsonl" ] && [ "$(grep -c 'T-09.09' "$U_FX/docs/eventos/fx.jsonl")" -eq 0 ]
+}
+u_j() { # J: sessao e harness nunca vem de quem chama
+  local a="$1" l; u_fx
+  u_w "$a" "$U_FX" s1 task-iniciada fx T-01.01 d --sessao claude-code@forjada; [ "$U_RC" -eq 64 ] || return 1
+  u_w "$a" "$U_FX" s1 task-iniciada fx T-01.01 d --harness forjado; [ "$U_RC" -eq 64 ] || return 1
+  [ ! -e "$U_FX/docs/eventos/fx.jsonl" ] || return 1
+  u_w "$a" "$U_FX" s1 task-iniciada fx T-01.01 'x","sessao":"claude-code@forjada","harness":"forjado'; [ "$U_RC" -eq 0 ] || return 1
+  l="$(u_linha "$U_FX/docs/eventos/fx.jsonl" task_iniciada T-01.01)"
+  [ "$(u_campo "$l" sessao)" = claude-code@s1 ] && [ "$(u_campo "$l" harness)" = claude-code ] || return 1
+  u_h "$a" "$U_FX" forjada src/a.ts; u_barra sessao_ambigua || return 1
+  u_h "$a" "$U_FX" s1 src/a.ts; u_ok
+}
+u_k() { # K: o evento vai para o rastro do trabalho DADO, mesmo com a task homonima em outro
+  local a="$1"; u_fx
+  u_plano "$U_FX" fy em_andamento src/c.ts pendente src/d.ts
+  u_w "$a" "$U_FX" s1 task-iniciada fy T-01.01; [ "$U_RC" -eq 0 ] || return 1
+  [ -n "$(u_linha "$U_FX/docs/eventos/fy.jsonl" task_iniciada T-01.01)" ] || return 1
+  [ ! -e "$U_FX/docs/eventos/fx.jsonl" ] || return 1
+  [ ! -e "$U_FX/docs/eventos/sem-trabalho.jsonl" ] || return 1
+  u_h "$a" "$U_FX" s1 src/c.ts; u_ok
+}
+u_l() { # L: eventos informativos pelo mesmo escritor — identidade quando ha, null quando nao
+  local a="$1" l; u_fx
+  u_w "$a" "$U_FX" - fase-iniciada fx f6; [ "$U_RC" -eq 0 ] || return 1
+  l="$(grep -F '"evento":"fase_iniciada"' "$U_FX/docs/eventos/fx.jsonl")"
+  printf '%s' "$l" | grep -qF '"fase":"f6","task":null' && printf '%s' "$l" | grep -qF '"sessao":null,"harness":null' || return 1
+  u_w "$a" "$U_FX" s1 veredito-emitido fx SIM "sem ALTA"; [ "$U_RC" -eq 0 ] || return 1
+  l="$(grep -F '"evento":"veredito_emitido"' "$U_FX/docs/eventos/fx.jsonl")"
+  printf '%s' "$l" | grep -qF '"agente":"auditor-plano"' && printf '%s' "$l" | grep -qF 'VEREDITO: SIM' || return 1
+  [ "$(u_campo "$l" sessao)" = claude-code@s1 ] || return 1
+  u_w "$a" "$U_FX" s1 fase-iniciada fx f9; [ "$U_RC" -eq 64 ]
+}
+# Guarda estrutural (R8): a referencia instalada nunca volta a ensinar a linha a mao para os tres
+# eventos que o enforcement le, e o escritor e o caminho de cada passo que os grava. So o
+# contrato conhecido — nao e uma regex universal para documentacao futura.
+u_doc() {
+  local a="$1" sk="$1/.claude/skills/sprintx" f r
+  r="$sk/references"
+  for f in "$sk/SKILL.md" "$r"/*.md "$sk"/assets/*.md; do
+    [ -f "$f" ] || continue
+    # linha a mao (printf/echo/tee/>>) com evento de reivindicacao, ou template JSON dele
+    grep -nE '(printf|echo|tee|>>).*task_(iniciada|concluida|bloqueada)|task_(iniciada|concluida|bloqueada).*(>>|\| *tee)' "$f" && return 1
+    grep -nE '"evento" *: *"task_(iniciada|concluida|bloqueada)"' "$f" && return 1
+    # o escritor nunca recebe identidade por argumento
+    grep -nE 'scripts/rastro\.sh.*(sessao|harness|--)' "$f" && return 1
+  done
+  # 08-rastro: nenhum exemplo de append a mao em docs/eventos
+  grep -nE '(printf|echo).*>> *docs/eventos|>> *docs/eventos' "$r/08-rastro.md" && return 1
+  grep -qF 'scripts/rastro.sh task-iniciada' "$r/08-rastro.md" || return 1
+  grep -qF 'scripts/rastro.sh task-concluida' "$r/08-rastro.md" || return 1
+  grep -qF 'scripts/rastro.sh task-bloqueada' "$r/08-rastro.md" || return 1
+  # 06-execucao: cada passo que grava um dos tres chama o escritor na mesma linha/bloco
+  awk '/^1\. Marque `status: em_andamento`/,/^   \*\*Passo 2\.0/' "$r/06-execucao.md" | grep -qF 'scripts/rastro.sh task-iniciada' || return 1
+  grep -E '^5\. Só então marque `status: concluida`' "$r/06-execucao.md" | grep -qF 'scripts/rastro.sh task-concluida' || return 1
+  grep -E '^2\. Marque a task como `status: bloqueada`' "$r/06-execucao.md" | grep -qF 'scripts/rastro.sh task-bloqueada' || return 1
+  grep -E 'Grave no rastro o `veredito_emitido`' "$r/05-auditoria.md" | grep -qF 'scripts/rastro.sh veredito-emitido' || return 1
+  grep -qF 'scripts/rastro.sh task-iniciada|task-concluida|task-bloqueada' "$sk/SKILL.md" || return 1
+  [ -f "$sk/scripts/rastro.sh" ]
+}
+# O verificador de transcrito (o que reprova o agente real) julga transcritos sinteticos.
+u_tr_ev() { # u_tr_ev <ferramenta> <input-json> — uma linha stream-json com um tool_use
+  printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t","name":"%s","input":%s}]}}\n' "$1" "$2"
+}
+u_tr() {
+  local a="$1" d t bom
+  command -v jq >/dev/null 2>&1 || return 1
+  U_N=$((U_N + 1)); d="$U_DIR/tr$U_N"; mkdir -p "$d"
+  bom="$(u_tr_ev Read '{"file_path":"C:\\p\\.claude\\skills\\sprintx\\references\\08-rastro.md"}')
+$(u_tr_ev Bash '{"command":"bash .claude/skills/sprintx/scripts/rastro.sh task-iniciada fx T-01.01"}')
+$(u_tr_ev Bash '{"command":"cat docs/eventos/fx.jsonl 2>/dev/null | tail -3"}')
+$(u_tr_ev Edit '{"file_path":"C:\\p\\src\\a.ts","old_string":"a","new_string":"b"}')
+$(u_tr_ev Bash '{"command":"bash .claude/skills/sprintx/scripts/rastro.sh task-concluida fx T-01.01 ok src/a.ts"}')"
+  printf '%s\n' "$bom" > "$d/bom"
+  ( . "$a/.claude/hooks/testes/transcrito-agente.sh"; transcrito_verifica "$d/bom" 1111-2222 fx T-01.01 ) >/dev/null || return 1
+  # cada uma destas reprova, pela regra certa
+  for t in \
+    'leu_hook|Read|{"file_path":"C:\\p\\.claude\\hooks\\comum\\rastro.sh"}' \
+    'leu_hook|Grep|{"pattern":"sessao","path":".claude/hooks"}' \
+    'leu_hook|Bash|{"command":"sed -n 1,80p .claude/hooks/sprintx/escopo-da-task.sh"}' \
+    'rastro_manual|Bash|{"command":"printf %s x >> docs/eventos/fx.jsonl"}' \
+    'rastro_manual|Write|{"file_path":"C:\\p\\docs\\eventos\\fx.jsonl","content":"x"}' \
+    'identidade_fabricada|Bash|{"command":"echo $CLAUDE_CODE_SESSION_ID"}' \
+    'identidade_fabricada|Bash|{"command":"EXPX_SESSAO=claude-code@1111-2222 bash x.sh"}' \
+    'identidade_fabricada|Bash|{"command":"echo 1111-2222"}'; do
+    printf '%s\n%s\n' "$bom" "$(u_tr_ev "$(printf '%s' "$t" | cut -d'|' -f2)" "$(printf '%s' "$t" | cut -d'|' -f3-)")" > "$d/ruim"
+    # `|| :` — sob pipefail o codigo 1 do verificador (o esperado aqui) viraria o codigo do pipe
+    ( . "$a/.claude/hooks/testes/transcrito-agente.sh"; transcrito_verifica "$d/ruim" 1111-2222 fx T-01.01 || : ) \
+      | grep -q "^${t%%|*}:" || return 1
+  done
+  # sem o escritor: reprova mesmo sem nenhuma outra violacao
+  u_tr_ev Edit '{"file_path":"src/a.ts"}' > "$d/sem"
+  ( . "$a/.claude/hooks/testes/transcrito-agente.sh"; transcrito_verifica "$d/sem" 1111-2222 fx T-01.01 || : ) | grep -q '^sem_escritor_inicio:'
+}
+
+U_CASOS="u_a u_b u_c u_d u_e u_f u_g u_hc u_i u_j u_k u_l u_doc u_tr"
+if ! command -v jq >/dev/null 2>&1; then
+  pula_externo "u-verificador-de-transcrito" "jq"
+  U_CASOS="${U_CASOS% u_tr}"
+fi
+u_nome() {
+  case "$1" in
+    u_a) echo "ua-escritor-task-iniciada-escopo-reconhece-corrente" ;;
+    u_b) echo "ub-escritor-task-iniciada-irma-continua-barrada" ;;
+    u_c) echo "uc-sem-identidade-escritor-falha-e-nao-grava" ;;
+    u_d) echo "ud-paths-windows-e-subdiretorio" ;;
+    u_e) echo "ue-sessoes-diferentes-nao-reivindicam-uma-pela-outra" ;;
+    u_f) echo "uf-worktrees-diferentes-nao-se-confundem" ;;
+    u_g) echo "ug-evento-legado-sem-sessao-continua-sem-reivindicar" ;;
+    u_hc) echo "uh-task-concluida-e-bloqueada-pelo-escritor" ;;
+    u_i) echo "ui-contexto-divergente-nao-grava-no-pedido" ;;
+    u_j) echo "uj-sessao-e-harness-nunca-vem-de-quem-chama" ;;
+    u_k) echo "uk-grava-no-trabalho-dado-nao-no-homonimo" ;;
+    u_l) echo "ul-eventos-informativos-pelo-mesmo-escritor" ;;
+    u_doc) echo "udoc-referencia-nao-ensina-linha-a-mao" ;;
+    u_tr) echo "utr-verificador-de-transcrito-do-agente" ;;
+  esac
+}
+for c in $U_CASOS; do "$c" "$U_REAL" >/dev/null 2>&1; afirma "$(u_nome "$c")" $? "arvore do repositorio"; done
+
+# Mutantes: copia do layout instalado; o controle e a copia sem mutacao. Cada mutante tem de
+# morrer pelos casos que o nomeiam — nao vale morrer de carona.
+u_mutante() { # u_mutante <nome> <rc geracao> <arvore> <casos que TEM de matar>
+  local nome="$1" rc="$2" r="$3" c vivos=""
+  if [ "$rc" -eq 0 ]; then for c in $4; do "$c" "$r" >/dev/null 2>&1 && vivos="$vivos$c "; done; fi
+  [ "$rc" -eq 0 ] && [ -z "$vivos" ]; afirma "$nome" $? "morto por: $4 ${vivos:+— SOBREVIVEU a: $vivos}(rc geracao=$rc)"
+}
+UMC="$(u_arvore controle)"; U_VIVO=""
+for c in $U_CASOS; do "$c" "$UMC" >/dev/null 2>&1 || U_VIVO="$U_VIVO $c"; done
+[ -z "$U_VIVO" ]; afirma "um-controle-copia-intacta-sobrevive" $? "${U_VIVO:+reprovada por:$U_VIVO}"
+U_W=".claude/skills/sprintx/scripts/rastro.sh"; U_L=".claude/hooks/comum/rastro.sh"
+U_R=".claude/skills/sprintx/references"
+u_m() { # u_m <nome> <arquivo-relativo> <trecho> <troca> — arvore nova com UMA troca literal
+  local r; r="$(u_arvore "$1")"
+  muta_lit "$r/$2" "$r/$2.m" "$3" "$4" && mv "$r/$2.m" "$r/$2" && printf '%s' "$r"
+}
+# 1. task_iniciada volta a ser gravada sem identidade (o escritor nao a poe na linha).
+UMU="$(u_m m1 "$U_W" 'EXTRAS="\"sessao\":\"$SESSAO_E\",\"harness\":\"$HARNESS_E\""' "EXTRAS='\"sessao\":null,\"harness\":null'")"
+u_mutante "um-1-task-iniciada-sem-identidade" $? "$UMU" "u_a u_hc"
+# 2. A referencia volta a ensinar printf manual em Como gravar.
+UMU="$(u_m m2 "$U_R/08-rastro.md" 'Pelo escritor da skill' "Acrescente uma linha: printf '%s\\n' '{\"evento\":\"task_iniciada\",...}' >> docs/eventos/<slug>.jsonl. Pelo escritor da skill")"
+u_mutante "um-2-referencia-volta-a-ensinar-printf" $? "$UMU" "u_doc"
+# 3. O escritor aceita a ausencia de identidade (evento de reivindicacao nao a exige mais).
+UMU="$(u_m m3 "$U_W" 'RASTRO_TASK="\"$ALVO\""; EXIGE_IDENTIDADE=1' 'RASTRO_TASK="\"$ALVO\""; EXIGE_IDENTIDADE=0')"
+u_mutante "um-3-escritor-aceita-sem-identidade" $? "$UMU" "u_c"
+# 3b. A identidade aceita o <ppid> do fallback (nao e o mesmo no hook).
+UMU="$(u_m m3b "$U_L" 'case "$RASTRO_SESSAO_FONTE" in expx|harness) ;;' 'case "$RASTRO_SESSAO_FONTE" in expx|harness|ppid) ;;')"
+u_mutante "um-3b-identidade-aceita-ppid" $? "$UMU" "u_c"
+# 4. A sessao fornecida pelo agente substitui a derivada.
+UMU="$(u_m m4 "$U_W" 'DETALHE="${1:-}"; [ $# -gt 0 ] && shift' 'DETALHE="${1:-}"; [ $# -gt 0 ] && shift; [ "${1:-}" = --sessao ] && { export EXPX_SESSAO="$2"; shift 2; }')"
+u_mutante "um-4-sessao-do-agente-substitui-a-derivada" $? "$UMU" "u_j"
+# 5. O harness fornecido pelo agente substitui o derivado.
+UMU="$(u_m m5 "$U_W" 'DETALHE="${1:-}"; [ $# -gt 0 ] && shift' 'DETALHE="${1:-}"; [ $# -gt 0 ] && shift; [ "${1:-}" = --harness ] && { export EXPX_HARNESS="$2"; shift 2; }')"
+u_mutante "um-5-harness-do-agente-substitui-o-derivado" $? "$UMU" "u_j"
+# 6. O escopo nao reconhece o evento do escritor (a chave sai num formato que a leitura nao casa).
+UMU="$(u_m m6 "$U_W" 'EXTRAS="\"sessao\":\"$SESSAO_E\"' 'EXTRAS="\"sessao\": \"$SESSAO_E\"')"
+u_mutante "um-6-escopo-nao-reconhece-evento-do-escritor" $? "$UMU" "u_a u_b"
+# 7. A sessao A usa a reivindicacao da sessao B (a leitura para de comparar a sessao).
+UMU="$(u_m m7 "$U_L" 'if (_rv_dono[k] == "" || _rv_dono[k] != ses) continue' 'if (_rv_dono[k] == "") continue')"
+u_mutante "um-7-sessao-a-usa-reivindicacao-da-b" $? "$UMU" "u_e"
+# 8. O escritor grava no trabalho errado (destino pela sessao, nao pelo trabalho dado).
+UMU="$(u_m m8 "$U_W" 'rastro_grava_trabalho "$RAIZ" "$SLUG"' 'rastro_grava_trabalho "$RAIZ" -')"
+u_mutante "um-8-escritor-grava-no-trabalho-errado" $? "$UMU" "u_a u_k"
+# 9. O agente passa so porque leu a implementacao do hook: o verificador deixa de olhar isso.
+UMU="$(u_m m9 .claude/hooks/testes/transcrito-agente.sh '*.claude/hooks*) v=' '*.claude/hooks-nunca*) v=')"
+u_mutante "um-9-agente-passa-lendo-o-hook" $? "$UMU" "u_tr"
+# 10. task_concluida volta ao caminho manual: a referencia e o escritor.
+UMU="$(u_m m10 "$U_R/06-execucao.md" 'grave `task_concluida` no rastro pelo escritor — `bash <raiz-da-skill>/scripts/rastro.sh task-concluida <slug> <T-NN.MM> "<resultado da suíte>" <arquivos da task>` —,' 'grave `task_concluida` no rastro,')"
+u_mutante "um-10-task-concluida-volta-ao-manual-na-referencia" $? "$UMU" "u_doc"
+UMU="$(u_m m10b "$U_W" 'RASTRO_TASK="\"$ALVO\""; EXIGE_IDENTIDADE=1' 'RASTRO_TASK="\"$ALVO\""; EXIGE_IDENTIDADE=$([ "$CMD" = task-iniciada ] && echo 1 || echo 0)')"
+u_mutante "um-10b-task-concluida-sem-identidade-no-escritor" $? "$UMU" "u_c"
+rm -rf "$U_DIR"
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"
 [ "$pulado" -eq 0 ] || echo "  ATENCAO: skip interno e buraco de cobertura da sprintx nesta plataforma, nao dependencia externa."
