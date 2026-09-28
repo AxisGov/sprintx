@@ -194,6 +194,53 @@ else
   falhou=$((falhou+1)); printf '  FALHA %-45s esperado=claude-code@abc-123 real=%s\n' "sessao-por-claude-code-env" "$sessao_por_claude"
 fi
 
+echo "== rastro-post.sh: corte de 120 bytes sem partir UTF-8 (hook real) =="
+# O hook corta suite_executada.detalhe em 120 bytes. Cada caso monta um comando
+# de suite com prefixo ASCII de (120-k) bytes — "npm test -- " mais enchimento —
+# seguido do caractere UTF-8 de <largura> bytes repetido. O corte de 120 cai,
+# entao, exatamente depois de k bytes do primeiro desses caracteres:
+#   k <  largura -> sequencia incompleta no fim: tem de sumir inteira
+#   k == largura -> sequencia completa no fim: tem de ser preservada
+# O caso largura=2, k=1 e a regressao do defeito observado em
+# docs/eventos/sem-trabalho.jsonl: byte-lider 0xc3 sem o byte de continuacao.
+corte_utf8() { # corte_utf8 <nome> <char> <largura> <k>
+  local nome="$1" ch="$2" largura="$3" k="$4" enchimento prefixo esperado
+  # "npm test -- " tem 12 bytes, logo 108-k de enchimento fecham 120-k.
+  printf -v enchimento '%*s' "$((108-k))" ''
+  prefixo="npm test -- ${enchimento// /x}"
+  if [ "$k" -eq "$largura" ]; then esperado="$prefixo$ch"; else esperado="$prefixo"; fi
+  : > "$RASTRO"
+  printf '%s' "$(bash_ev "$prefixo$ch$ch$ch")" | (cd "$W" && bash "$H/comum/rastro-post.sh") >/dev/null 2>&1
+  if ESPERADO="$esperado" python3 - "$RASTRO" 2>"$W/corte-utf8.erro" <<'PY'
+import json, os, sys
+bruto = open(sys.argv[1], 'rb').read()
+texto = bruto.decode('utf-8')  # UnicodeDecodeError se sobrou byte UTF-8 invalido
+linhas = [l for l in texto.splitlines() if l.strip()]
+assert len(linhas) == 1, 'esperava 1 linha no jsonl, veio %d' % len(linhas)
+detalhe = json.loads(linhas[0])['detalhe']  # falha se a linha nao for JSON valido
+tam = len(detalhe.encode('utf-8'))
+assert tam <= 120, 'detalhe com %d bytes, limite e 120' % tam
+esperado = os.environ['ESPERADO']
+assert detalhe == esperado, 'detalhe=%r esperado=%r' % (detalhe, esperado)
+PY
+  then
+    ok=$((ok+1)); printf '  ok   %-46s jsonl utf-8, json valido, detalhe exato\n' "$nome"
+  else
+    falhou=$((falhou+1)); printf '  FALHA %-45s %s\n' "$nome" "$(tr '\n' ' ' < "$W/corte-utf8.erro")"
+  fi
+  : > "$RASTRO"
+}
+
+corte_utf8 "corte-utf8-2b-parte-1-de-2" "á"  2 1
+corte_utf8 "corte-utf8-2b-completo"     "á"  2 2
+corte_utf8 "corte-utf8-3b-parte-1-de-3" "€"  3 1
+corte_utf8 "corte-utf8-3b-parte-2-de-3" "€"  3 2
+corte_utf8 "corte-utf8-4b-parte-1-de-4" "🚀" 4 1
+corte_utf8 "corte-utf8-4b-parte-2-de-4" "🚀" 4 2
+corte_utf8 "corte-utf8-4b-parte-3-de-4" "🚀" 4 3
+corte_utf8 "corte-utf8-4b-completo"     "🚀" 4 4
+corte_utf8 "corte-utf8-ascii-no-limite" "Z"  1 1
+
 echo
 echo "  $ok ok, $falhou falhas"
 [ "$falhou" -eq 0 ]
