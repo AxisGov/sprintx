@@ -80,8 +80,9 @@ rastro_json_escape() {
 # `cut -c` sozinho nao serve: o comportamento de -c (byte vs. caractere)
 # depende da locale do processo que chama o hook, que o hook nao controla.
 # Num ambiente sem locale UTF-8, `cut -c1-120` corta por byte e pode deixar
-# um byte de continuacao (0x80-0xBF) pendurado no fim — jsonl com byte UTF-8
-# invalido (contrato expx-eventos exige UTF-8 valido).
+# uma sequencia multibyte incompleta no fim: o byte-lider (0xC3, por exemplo)
+# fica pendurado sem o byte de continuacao (0x80-0xBF) que ele anuncia — jsonl
+# com byte UTF-8 invalido (contrato expx-eventos exige UTF-8 valido).
 #
 # Por isso aqui o corte e SEMPRE por byte (`head -c`, que e byte a byte em
 # qualquer locale, ao contrario de `cut -c`) e, so depois, os ate 3 bytes
