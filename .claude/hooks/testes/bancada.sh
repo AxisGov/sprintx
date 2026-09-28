@@ -194,6 +194,31 @@ else
   falhou=$((falhou+1)); printf '  FALHA %-45s esperado=claude-code@abc-123 real=%s\n' "sessao-por-claude-code-env" "$sessao_por_claude"
 fi
 
+echo "== rastro-post.sh: UTF-8 no limite do cut (multibyte) =="
+# Comando cujo byte 120 cai NO MEIO do primeiro caractere multibyte da
+# sequencia: 12 bytes de prefixo + 107 'x' = 119 bytes, entao o char 'á'
+# (2 bytes, c3 a1) comeca exatamente no byte 120. Reproduz o defeito visto
+# em docs/eventos/sem-trabalho.jsonl (byte invalido no meio de um jsonl).
+CMD_LIMITE="$(python3 -c "print('npm test -- ' + 'x'*107 + 'á'*10)")"
+: > "$RASTRO"
+printf '%s' "$(bash_ev "$CMD_LIMITE")" | (cd "$W" && bash "$H/comum/rastro-post.sh") >/dev/null 2>&1
+if [ -s "$RASTRO" ] && python3 -c "
+import json, sys
+dados = open('$RASTRO', 'rb').read()
+dados.decode('utf-8')  # lanca UnicodeDecodeError se algum byte for invalido
+linhas = [l for l in dados.decode('utf-8').splitlines() if l.strip()]
+assert linhas, 'nenhuma linha gravada'
+for linha in linhas:
+    obj = json.loads(linha)
+    assert len(obj['detalhe']) <= 120, 'detalhe excede o limite de 120 chars: %d' % len(obj['detalhe'])
+" 2>/tmp/rastro-post-utf8.erro; then
+  ok=$((ok+1)); printf '  ok   %-46s jsonl utf-8 valido, json valido, <=120 chars\n' "rastro-post-utf8-no-limite-do-cut"
+else
+  falhou=$((falhou+1)); printf '  FALHA %-45s %s\n' "rastro-post-utf8-no-limite-do-cut" "$(cat /tmp/rastro-post-utf8.erro 2>/dev/null)"
+fi
+rm -f /tmp/rastro-post-utf8.erro
+: > "$RASTRO"
+
 echo
 echo "  $ok ok, $falhou falhas"
 [ "$falhou" -eq 0 ]

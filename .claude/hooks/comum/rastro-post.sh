@@ -44,7 +44,7 @@ case "$FERRAMENTA" in
         elif printf '%s' "$SAIDA" | grep -qE '(^|[[:space:]])(FAILED|FAIL)([[:space:]]|$)'; then
           RES="falha"
         fi
-        rastro_grava "$RAIZ" suite_executada hook "$RES" "$(printf '%s' "$CMD" | cut -c1-120)" '[]'
+        rastro_grava "$RAIZ" suite_executada hook "$RES" "$(rastro_corta_utf8 "$CMD" 120)" '[]'
         ;;
     esac
     ;;

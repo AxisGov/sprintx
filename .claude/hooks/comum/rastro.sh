@@ -74,6 +74,42 @@ rastro_json_escape() {
   printf '%s' "$s"
 }
 
+# Corta uma string em ate <n> bytes (padrao 120) sem partir um caractere
+# UTF-8 multibyte ao meio.
+#
+# `cut -c` sozinho nao serve: o comportamento de -c (byte vs. caractere)
+# depende da locale do processo que chama o hook, que o hook nao controla.
+# Num ambiente sem locale UTF-8, `cut -c1-120` corta por byte e pode deixar
+# um byte de continuacao (0x80-0xBF) pendurado no fim — jsonl com byte UTF-8
+# invalido (contrato expx-eventos exige UTF-8 valido).
+#
+# Por isso aqui o corte e SEMPRE por byte (`head -c`, que e byte a byte em
+# qualquer locale, ao contrario de `cut -c`) e, so depois, os ate 3 bytes
+# finais sao inspecionados: se o corte caiu no meio de uma sequencia
+# multibyte (byte-lider 0xC0+ sem os bytes de continuacao que ele anuncia),
+# a sequencia incompleta inteira e removida.
+rastro_corta_utf8() {
+  local s="$1" n="${2:-120}" cortado total i b tam
+  cortado="$(printf '%s' "$s" | head -c "$n")"
+  total=$(printf '%s' "$cortado" | wc -c)
+  i=0
+  while [ "$i" -lt 4 ] && [ "$i" -lt "$total" ]; do
+    i=$((i+1))
+    b=$(printf '%s' "$cortado" | tail -c "$i" | head -c1 | od -An -tu1 | tr -d ' \n')
+    if [ "$b" -lt 128 ]; then
+      break
+    elif [ "$b" -ge 192 ]; then
+      if [ "$b" -ge 240 ]; then tam=4
+      elif [ "$b" -ge 224 ]; then tam=3
+      else tam=2
+      fi
+      [ "$tam" -gt "$i" ] && cortado="$(printf '%s' "$cortado" | head -c "$((total-i))")"
+      break
+    fi
+  done
+  printf '%s' "$cortado"
+}
+
 # Le uma chave de topo de um JSON simples vindo do stdin do hook.
 # Usa jq quando existe (correto); sem jq, cai para um grep tolerante.
 # Nunca falha: chave ausente devolve string vazia.
