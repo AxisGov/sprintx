@@ -4746,6 +4746,32 @@ W_RC_COM="$(w_hook "$PATH")"
 # 5. Guarda estrutural: nenhum leitor do payload volta ao grep tolerante que perdia escape.
 grep -qF 'grep -o "\"$chave\"' "$W_H/comum/rastro.sh"; [ $? -ne 0 ]
 afirma "w5-sem-grep-tolerante-no-rastro" $? "os fallbacks usam o helper que decodifica"
+
+# 6. `\uXXXX` tambem e escape de JSON. Sem jq ele ficava literal e — pior — o ramo
+# `*\u*` do case era o PRIMEIRO, entao engolia os outros escapes: um unico acento
+# (`é` -> `é`) devolvia `content` numa linha so e ressuscitava o defeito do w4.
+w_u() { # w_u <texto> <arquivo-saida> <PATH> — extrai `content` daquele texto
+  python3 -c 'import json,sys; print(json.dumps({"cwd":"/x","tool_input":{"content":sys.argv[1]}}))' "$1" > "$W_DIR/u.json"
+  PATH="$3" bash "$W_DIR/extrai.sh" "$W_H" "$W_DIR/u.json" content "$2"
+}
+W_BMP="a$(printf 'é')b"
+w_u "$W_BMP" "$W_DIR/u-sem.txt" "$W_SEMJQ"; w_u "$W_BMP" "$W_DIR/u-com.txt" "$PATH"
+cmp -s "$W_DIR/u-sem.txt" "$W_DIR/u-com.txt" && grep -qF "$W_BMP" "$W_DIR/u-sem.txt"
+afirma "w6-sem-jq-decodifica-bmp" $? "\\u00e9 vira o mesmo byte que o jq entrega"
+W_SUR="x$(printf '\U0001F600')y"
+w_u "$W_SUR" "$W_DIR/u2-sem.txt" "$W_SEMJQ"; w_u "$W_SUR" "$W_DIR/u2-com.txt" "$PATH"
+cmp -s "$W_DIR/u2-sem.txt" "$W_DIR/u2-com.txt" && grep -qF "$W_SUR" "$W_DIR/u2-sem.txt"
+afirma "w6b-sem-jq-decodifica-par-substituto" $? "\\ud83d\\ude00 vira um caractere so, fora do BMP"
+W_MIX="linha1
+linha2 com acento a$(printf 'é')b"
+w_u "$W_MIX" "$W_DIR/u3-sem.txt" "$W_SEMJQ"
+W_UL=$(wc -l < "$W_DIR/u3-sem.txt")
+[ "$W_UL" -ge 1 ]; afirma "w7-u-nao-engole-os-outros-escapes" $? "$W_UL linha(s) reais (esperado >= 1)"
+W_TUDO="a$(printf 'é')b$(printf '\t')c$(printf '\U0001F600')d
+fim"
+w_u "$W_TUDO" "$W_DIR/u4-sem.txt" "$W_SEMJQ"; w_u "$W_TUDO" "$W_DIR/u4-com.txt" "$PATH"
+cmp -s "$W_DIR/u4-sem.txt" "$W_DIR/u4-com.txt"
+afirma "w7b-paridade-total-dos-escapes" $? "BMP + controle + par substituto + \\n: igual byte a byte"
 rm -rf "$W_DIR"
 
 echo

@@ -164,22 +164,62 @@ rastro_le_entrada_em() {
 # `"chave": "valor"` no texto — a mesma regra do fallback sem jq, que ja era contrato —, com
 # o valor inteiro (aspas escapadas incluidas) e os escapes de JSON decodificados como o jq
 # os decodifica. Dentro de uma string JSON toda aspa e `\"`, entao `"chave"` so casa com uma
-# chave de verdade. `\uXXXX` (so aparece para caractere de controle: o harness manda UTF-8
-# cru) vai para o jq quando ha jq. Chave ausente: vazio.
+# chave de verdade. Chave ausente: vazio.
+#
+# `\uXXXX` e decodificado aqui tambem, pelo `printf` do proprio bash (builtin: nenhum
+# processo novo), com par substituto para fora do BMP. Nao ha caminho com jq: o resultado e
+# o mesmo com e sem jq, que e o que o contrato promete. Antes, `\uXXXX` so era tratado
+# quando havia jq — e, por ser o PRIMEIRO ramo do case, engolia os demais escapes quando nao
+# havia: um unico acento (`\u00e9`) devolvia `content` numa linha so.
+#
+# Limites deliberados: substituto solto (sem o par) fica literal, em vez de virar UTF-8
+# invalido — o jq recusa o documento inteiro nesse caso; e `\u0000` e descartado, porque NUL
+# nao cabe numa variavel de shell.
 rastro_json_campo_em() {
-  local _v="" _re
+  local _v="" _re _t _out _pre _hex _cp _lo _ch
   _re="\"$3\""'[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*)"'
   [[ $2 =~ $_re ]] && _v="${BASH_REMATCH[1]}"
   case "$_v" in
-    *\\u*)
-      if command -v jq >/dev/null 2>&1; then
-        _v="$(printf '"%s"' "$_v" | jq -r . 2>/dev/null)"
-      fi ;;
     *\\*)
+      # 1. esconde a barra escapada, para `\\u0041` nao ser lido como `\u0041`.
       _v="${_v//\\\\/$'\001'}"
+      # 2. \uXXXX, com par substituto.
+      case "$_v" in
+        *\\u*)
+          _t="$_v"; _out=""
+          while [ -n "$_t" ]; do
+            _pre="${_t%%\\u*}"
+            if [ "$_pre" = "$_t" ]; then _out="$_out$_t"; break; fi
+            _out="$_out$_pre"; _t="${_t#"$_pre"\\u}"
+            case "$_t" in
+              [0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]*) ;;
+              *) _out="$_out\\u"; continue ;;
+            esac
+            _hex="${_t:0:4}"; _t="${_t:4}"; _cp=$((16#$_hex))
+            if [ "$_cp" -ge 55296 ] && [ "$_cp" -le 56319 ]; then
+              _lo=-1
+              case "$_t" in
+                \\u[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]*) _lo=$((16#${_t:2:4})) ;;
+              esac
+              if [ "$_lo" -ge 56320 ] && [ "$_lo" -le 57343 ]; then
+                _cp=$(( 65536 + (_cp - 55296) * 1024 + (_lo - 56320) )); _t="${_t:6}"
+              else
+                _out="$_out\\u$_hex"; continue
+              fi
+            elif [ "$_cp" -ge 56320 ] && [ "$_cp" -le 57343 ]; then
+              _out="$_out\\u$_hex"; continue
+            fi
+            [ "$_cp" -eq 0 ] && continue
+            printf -v _hex '%08x' "$_cp"; printf -v _ch "\\U$_hex"
+            _out="$_out$_ch"
+          done
+          _v="$_out" ;;
+      esac
+      # 3. os demais escapes, sempre — nao mais presos a um ramo exclusivo.
       _v="${_v//\\\"/\"}"; _v="${_v//\\\//\/}"
       _v="${_v//\\n/$'\n'}"; _v="${_v//\\t/	}"; _v="${_v//\\r/$'\r'}"
       _v="${_v//\\b/$'\b'}"; _v="${_v//\\f/$'\f'}"
+      # 4. devolve a barra escapada.
       _v="${_v//$'\001'/\\}" ;;
   esac
   printf -v "$1" '%s' "$_v"
