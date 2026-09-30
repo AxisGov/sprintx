@@ -4602,6 +4602,18 @@ afirma "v7b-template-tabela-coerente" $? "cabecalho=$(v_colunas "$V_H") separado
 
 # 8. A lista de campos da estimativa (F3.5, Passo 10) nomeia o campo.
 tem "$V_EST" '`duracao_observada`'; afirma "v8-estimativa-lista-o-campo" $? "07-estimativa.md Passo 10"
+# A lista do Passo 10 (F3.5) e a do Passo 3 (F6) descrevem a MESMA entrada do
+# `estimativa_historico`: divergir em um campo faz a skill gravar coisas diferentes
+# conforme a referencia que a sessao abriu.
+v_campos() { # v_campos <arquivo> <ancora da linha> — campos `x` daquela lista, ordenados
+  grep -F "$2" "$1" | head -1 \
+    | sed 's/.*com: //; s/\. .*//; s/\.$//' \
+    | grep -oE '`[a-z_]+`' | tr -d '`' | sort -u
+}
+V_C7="$(v_campos "$V_EST" 'recebe uma linha por task concluída')"
+V_C6="$(v_campos "$V_EXE" 'Uma entrada por task **concluída**, com:')"
+printf '%s' "$V_C7" | grep -qx 'estimado_media'; afirma "v10-estimativa-lista-estimado-media" $? "Passo 10 nomeia estimado_media"
+[ "$V_C7" = "$V_C6" ]; afirma "v10b-listas-de-campos-coerentes" $? "F3.5 e F6 listam os mesmos campos${V_C7:+ ($(printf '%s' "$V_C7" | grep -c '') x $(printf '%s' "$V_C6" | grep -c ''))}"
 
 # 9. A lista de campos da propria F6 nomeia o campo que a prosa dela manda gravar.
 V_LISTA=$(grep -F 'Uma entrada por task **concluída**, com:' "$V_EXE" | head -1)

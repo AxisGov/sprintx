@@ -281,7 +281,7 @@ A saída na conversa espelha o arquivo. Nesta ordem:
 
 Isto acontece quando a F6 termina, não agora — mas o roteiro mora aqui, porque é a F3.5 que dá sentido ao dado.
 
-Ao fim de um trabalho, `docs/sprintx/estimativas/HISTORICO.md` recebe uma linha por task concluída, a partir de `assets/TEMPLATE-HISTORICO.md` (`kind: estimativa_historico`), com: `trabalho_id`, `task_id`, `tipo_task`, `area`, `sinais`, `estimado_min`, `estimado_max`, `real`, `desvio` e `duracao_observada`.
+Ao fim de um trabalho, `docs/sprintx/estimativas/HISTORICO.md` recebe uma linha por task concluída, a partir de `assets/TEMPLATE-HISTORICO.md` (`kind: estimativa_historico`), com: `trabalho_id`, `task_id`, `tipo_task`, `area`, `sinais`, `estimado_min`, `estimado_max`, `estimado_media`, `real`, `desvio` e `duracao_observada`.
 
 O **desvio** de uma task é calculado contra a média PERT que a originou:
 
