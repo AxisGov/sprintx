@@ -4547,6 +4547,66 @@ UMU="$(u_m m10b "$U_W" 'RASTRO_TASK="\"$ALVO\""; EXIGE_IDENTIDADE=1' 'RASTRO_TAS
 u_mutante "um-10b-task-concluida-sem-identidade-no-escritor" $? "$UMU" "u_c"
 rm -rf "$U_DIR"
 
+echo "== V. duracao_observada chega a todo contrato do HISTORICO.md (D-05) =="
+# O rastro mede o tempo de parede de cada task (par task_iniciada/task_concluida) e
+# 06-execucao.md / 08-rastro.md mandam persisti-lo no HISTORICO.md como duracao_observada
+# (DS-37). O contrato do kind, o template e a lista de campos da estimativa precisam
+# carregar o mesmo campo — senao a instrucao existe e nao tem onde pousar.
+V_SCH="$SK/references/00-schema.md"
+V_TPL="$SK/assets/TEMPLATE-HISTORICO.md"
+V_EST="$SK/references/07-estimativa.md"
+V_EXE="$SK/references/06-execucao.md"
+
+# Regiao de uma entrada (entre 'entradas:' e 'calibracao:') e a regiao da calibracao,
+# nos dois arquivos que carregam o frontmatter do kind.
+v_entradas() { awk '/^entradas:/{f=1;next} /^calibracao:/{f=0} f' "$1"; }
+v_calibracao() { awk '/^calibracao:/{f=1;next} f && /^---/{f=0} f' "$1"; }
+v_colunas() { printf '%s' "$1" | awk -F'|' '{print NF}'; }
+
+# 1. A instrucao que origina o campo continua de pe nas duas referencias que a mandam.
+tem "$V_EXE" 'entra no `HISTORICO.md` como `duracao_observada`'; afirma "v1-execucao-manda-persistir" $? "06-execucao.md Passo 3"
+tem "$SK/references/08-rastro.md" 'O valor entra como **`duracao_observada`**'; afirma "v1b-rastro-manda-persistir" $? "08-rastro.md"
+
+# 2. O kind estimativa_historico carrega o campo na entrada do exemplo.
+v_entradas "$V_SCH" | grep -qF 'duracao_observada:'; afirma "v2-schema-entrada-tem-campo" $? "00-schema.md, exemplo do kind"
+
+# 3. Opcional/nullable: sem o par de eventos, nao ha valor — e legado sem a chave nao e recusado.
+tem "$V_SCH" '`duracao_observada` é **opcional**'; afirma "v3-schema-opcional" $? "declarado opcional"
+tem "$V_SCH" '`null` quando o par `task_iniciada`/`task_concluida` do rastro não existe'; afirma "v3b-schema-null-sem-par" $? "null sem par de eventos"
+tem "$V_SCH" 'Entrada legada sem a chave é lida como `duracao_observada: null`, nunca recusada.'; afirma "v3c-schema-legado-aceito" $? "compatibilidade com historico antigo"
+
+# 4. Distinto de real: tempo de parede nao e esforco, e nunca o substitui (DS-37).
+tem "$V_SCH" '`duracao_observada` **não é `real`** e nunca o substitui'; afirma "v4-schema-distinto-de-real" $? "campo separado de real"
+
+# 5. Fora do desvio e fora da calibracao: nao contamina o numero que calibra estimativa.
+tem "$V_SCH" 'fica **fora do cálculo de `desvio`**'; afirma "v5-schema-fora-do-desvio" $? "desvio continua real/estimado_media"
+tem "$V_SCH" 'e **fora da `calibracao`**'; afirma "v5b-schema-fora-da-calibracao" $? "desvio_medio e fator_ativo nao a leem"
+v_calibracao "$V_SCH" | grep -qF 'duracao_observada'; [ $? -ne 0 ]; afirma "v5c-schema-calibracao-limpa" $? "bloco calibracao nao carrega o campo"
+# A entrada coloca duracao_observada DEPOIS de desvio: a cadeia de calibracao termina em desvio.
+V_LD=$(v_entradas "$V_SCH" | grep -nF 'desvio:' | head -1 | cut -d: -f1)
+V_LO=$(v_entradas "$V_SCH" | grep -nF 'duracao_observada:' | head -1 | cut -d: -f1)
+[ -n "$V_LD" ] && [ -n "$V_LO" ] && [ "$V_LO" -gt "$V_LD" ]; afirma "v5d-schema-campo-depois-do-desvio" $? "desvio=$V_LD < duracao_observada=$V_LO"
+
+# 6. O template que gera o arquivo carrega o campo no YAML, opcional.
+v_entradas "$V_TPL" | grep -qF 'duracao_observada: {{numero ou null}}'; afirma "v6-template-yaml-tem-campo" $? "TEMPLATE-HISTORICO.md, entradas"
+v_calibracao "$V_TPL" | grep -qF 'duracao_observada'; [ $? -ne 0 ]; afirma "v6b-template-calibracao-limpa" $? "calibracao do template nao carrega o campo"
+
+# 7. Regra universal 7: o YAML e a tabela humana dizem a mesma coisa.
+tem "$V_TPL" 'Duração observada'; afirma "v7-template-tabela-tem-coluna" $? "coluna na tabela de Entradas"
+V_H=$(grep -F '| Trabalho | Task | Tipo |' "$V_TPL" | head -1)
+V_SEP=$(grep -nF '| Trabalho | Task | Tipo |' "$V_TPL" | head -1 | cut -d: -f1)
+V_SEP=$(sed -n "$((V_SEP + 1))p" "$V_TPL")
+V_LIN=$(grep -F '| {{slug}} |' "$V_TPL" | head -1)
+[ "$(v_colunas "$V_H")" = "$(v_colunas "$V_SEP")" ] && [ "$(v_colunas "$V_H")" = "$(v_colunas "$V_LIN")" ]
+afirma "v7b-template-tabela-coerente" $? "cabecalho=$(v_colunas "$V_H") separador=$(v_colunas "$V_SEP") linha=$(v_colunas "$V_LIN")"
+
+# 8. A lista de campos da estimativa (F3.5, Passo 10) nomeia o campo.
+tem "$V_EST" '`duracao_observada`'; afirma "v8-estimativa-lista-o-campo" $? "07-estimativa.md Passo 10"
+
+# 9. A lista de campos da propria F6 nomeia o campo que a prosa dela manda gravar.
+V_LISTA=$(grep -F 'Uma entrada por task **concluída**, com:' "$V_EXE" | head -1)
+printf '%s' "$V_LISTA" | grep -qF 'duracao_observada'; afirma "v9-execucao-lista-o-campo" $? "lista do Passo 3 bate com a prosa do Passo 3"
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"
 [ "$pulado" -eq 0 ] || echo "  ATENCAO: skip interno e buraco de cobertura da sprintx nesta plataforma, nao dependencia externa."

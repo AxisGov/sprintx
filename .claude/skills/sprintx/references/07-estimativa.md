@@ -281,7 +281,7 @@ A saída na conversa espelha o arquivo. Nesta ordem:
 
 Isto acontece quando a F6 termina, não agora — mas o roteiro mora aqui, porque é a F3.5 que dá sentido ao dado.
 
-Ao fim de um trabalho, `docs/sprintx/estimativas/HISTORICO.md` recebe uma linha por task concluída, a partir de `assets/TEMPLATE-HISTORICO.md` (`kind: estimativa_historico`), com: `trabalho_id`, `task_id`, `tipo_task`, `area`, `sinais`, `estimado_min`, `estimado_max`, `real` e `desvio`.
+Ao fim de um trabalho, `docs/sprintx/estimativas/HISTORICO.md` recebe uma linha por task concluída, a partir de `assets/TEMPLATE-HISTORICO.md` (`kind: estimativa_historico`), com: `trabalho_id`, `task_id`, `tipo_task`, `area`, `sinais`, `estimado_min`, `estimado_max`, `real`, `desvio` e `duracao_observada`.
 
 O **desvio** de uma task é calculado contra a média PERT que a originou:
 
@@ -294,6 +294,8 @@ desvio_task = real / media_task_estimada
 O **desvio por tipo** é a média dos `desvio_task` de todas as entradas encerradas daquele tipo. Ele é gravado na tabela de calibração do próprio `HISTORICO.md` e é o que vira **fator de correção** no Passo 1 — a partir de 3 entradas do tipo, e sempre declarado na saída, nunca embutido em silêncio.
 
 Se o trabalho não teve estimativa (a F3.5 não rodou), registre o real mesmo assim, com `estimado_min: null`, `estimado_max: null` e `desvio: null`: o real alimenta a comparabilidade por tipo e área nas estimativas futuras.
+
+A **`duracao_observada`** vem do rastro (`references/08-rastro.md`), é opcional (`null` sem o par `task_iniciada`/`task_concluida`) e **não entra em conta nenhuma desta fase**: o desvio continua sendo `real / media_task_estimada`, e a calibração por tipo continua lendo só o desvio. Ela serve para conferir o real e para expor interrupção, nunca para corrigir a estimativa (DS-37).
 
 ## Verificação própria antes de encerrar
 

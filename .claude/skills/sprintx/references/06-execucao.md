@@ -253,7 +253,7 @@ nunca é trabalho desta skill na F6 — a única exceção são os checkpoints d
 terminam antes dela (`references/02-descoberta.md`). Um `HISTORICO.md` não rastreado ao fim de uma execução standalone
 é o resultado esperado, não uma pendência.
 
-Uma entrada por task **concluída**, com: `trabalho_id`, `task_id`, `tipo_task`, `area`, `sinais`, `estimado_min`, `estimado_max`, `estimado_media`, `real` e `desvio`. Task `bloqueada` não entra — ela não tem real completo a registrar.
+Uma entrada por task **concluída**, com: `trabalho_id`, `task_id`, `tipo_task`, `area`, `sinais`, `estimado_min`, `estimado_max`, `estimado_media`, `real`, `desvio` e `duracao_observada`. Task `bloqueada` não entra — ela não tem real completo a registrar.
 
 **O desvio.** Se `docs/sprintx/features/<slug>/00-ESTIMATIVA.md` existe, cada entrada traz o estimado daquela task e o desvio entre estimado e real:
 
