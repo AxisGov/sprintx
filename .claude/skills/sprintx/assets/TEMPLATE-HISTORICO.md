@@ -41,11 +41,13 @@ A **duração observada** é outra coisa: o tempo de parede entre `task_iniciada
 
 | Trabalho | Task | Tipo | Área | Sinais | Estimado (min–max) | Média est. | Real | Desvio | Duração observada |
 |---|---|---|---|---|---|---|---|---|---|
-| {{slug}} | T-{{NN}}.{{MM}} | {{tipo_task}} | {{area}} | {{sinais}} | {{min}}–{{max}} h | {{media}} h | {{real}} h | {{desvio}} | {{duracao_observada}} h |
+| {{slug}} | T-{{NN}}.{{MM}} | {{tipo_task}} | {{area}} | {{sinais}} | {{min}}–{{max}} h | {{media}} h | {{real}} h | {{desvio}} | {{duracao_observada em h, ou — quando null}} |
 
 {{Trabalho que rodou sem a F3.5 entra assim: estimado_min, estimado_max, estimado_media e desvio em `null`, com o real preenchido. O real ainda alimenta a comparabilidade por tipo e área.}}
 
 {{Sem o par `task_iniciada`/`task_concluida` no rastro, `duracao_observada` fica em `null` — o campo é opcional, e entrada antiga sem a chave continua válida. Entrada sem duração observada não perde nada: a calibração nunca a lê.}}
+
+> **Célula sem valor.** Quando o campo é `null` no YAML, a célula correspondente da tabela leva `—`, nunca `null` e nunca `null h`: a unidade só acompanha número. É a regra universal 7 aplicada à ausência — o YAML diz `null`, a prosa mostra que não há valor, e as duas continuam dizendo a mesma coisa.
 
 ## Calibração por tipo de task
 

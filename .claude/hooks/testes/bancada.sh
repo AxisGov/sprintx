@@ -4599,6 +4599,17 @@ V_SEP=$(sed -n "$((V_SEP + 1))p" "$V_TPL")
 V_LIN=$(grep -F '| {{slug}} |' "$V_TPL" | head -1)
 [ "$(v_colunas "$V_H")" = "$(v_colunas "$V_SEP")" ] && [ "$(v_colunas "$V_H")" = "$(v_colunas "$V_LIN")" ]
 afirma "v7b-template-tabela-coerente" $? "cabecalho=$(v_colunas "$V_H") separador=$(v_colunas "$V_SEP") linha=$(v_colunas "$V_LIN")"
+# 7.1 Ausencia nao vira numero com unidade: `duracao_observada` e null de rotina
+# (rastro desligado, sem par de eventos), e `null h` leria como "null horas", misturando
+# ausencia com grandeza. A regra da celula vazia vale para a tabela inteira.
+tem "$V_TPL" 'a célula correspondente da tabela leva `—`, nunca `null` e nunca `null h`'
+afirma "v11-regra-da-celula-sem-valor" $? "a tabela diz como ausencia se escreve"
+V_CEL="$(grep -F '| {{slug}} |' "$V_TPL" | head -1 | awk -F'|' '{print $(NF-1)}')"
+printf '%s' "$V_CEL" | grep -qE '\}\}[[:space:]]*h[[:space:]]*$'; [ $? -ne 0 ]
+afirma "v11b-duracao-sem-unidade-fora-do-marcador" $? "celula=[$V_CEL]"
+V_SIM="$(printf '%s' "$V_CEL" | sed 's/{{[^}]*}}/null/g')"
+printf '%s' "$V_SIM" | grep -qE 'null[[:space:]]+h'; [ $? -ne 0 ]
+afirma "v11c-nulo-nao-renderiza-null-h" $? "render=[$V_SIM]"
 
 # 8. A lista de campos da estimativa (F3.5, Passo 10) nomeia o campo.
 tem "$V_EST" '`duracao_observada`'; afirma "v8-estimativa-lista-o-campo" $? "07-estimativa.md Passo 10"
