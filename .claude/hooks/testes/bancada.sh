@@ -4547,6 +4547,233 @@ UMU="$(u_m m10b "$U_W" 'RASTRO_TASK="\"$ALVO\""; EXIGE_IDENTIDADE=1' 'RASTRO_TAS
 u_mutante "um-10b-task-concluida-sem-identidade-no-escritor" $? "$UMU" "u_c"
 rm -rf "$U_DIR"
 
+echo "== V. duracao_observada chega a todo contrato do HISTORICO.md (D-05) =="
+# O rastro mede o tempo de parede de cada task (par task_iniciada/task_concluida) e
+# 06-execucao.md / 08-rastro.md mandam persisti-lo no HISTORICO.md como duracao_observada
+# (DS-37). O contrato do kind, o template e a lista de campos da estimativa precisam
+# carregar o mesmo campo — senao a instrucao existe e nao tem onde pousar.
+V_SCH="$SK/references/00-schema.md"
+V_TPL="$SK/assets/TEMPLATE-HISTORICO.md"
+V_EST="$SK/references/07-estimativa.md"
+V_EXE="$SK/references/06-execucao.md"
+
+# Regiao de uma entrada (entre 'entradas:' e 'calibracao:') e a regiao da calibracao,
+# nos dois arquivos que carregam o frontmatter do kind.
+v_entradas() { awk '/^entradas:/{f=1;next} /^calibracao:/{f=0} f' "$1"; }
+v_calibracao() { awk '/^calibracao:/{f=1;next} f && /^---/{f=0} f' "$1"; }
+v_colunas() { printf '%s' "$1" | awk -F'|' '{print NF}'; }
+
+# 1. A instrucao que origina o campo continua de pe nas duas referencias que a mandam.
+tem "$V_EXE" 'entra no `HISTORICO.md` como `duracao_observada`'; afirma "v1-execucao-manda-persistir" $? "06-execucao.md Passo 3"
+tem "$SK/references/08-rastro.md" 'O valor entra como **`duracao_observada`**'; afirma "v1b-rastro-manda-persistir" $? "08-rastro.md"
+
+# 2. O kind estimativa_historico carrega o campo na entrada do exemplo.
+v_entradas "$V_SCH" | grep -qF 'duracao_observada:'; afirma "v2-schema-entrada-tem-campo" $? "00-schema.md, exemplo do kind"
+
+# 3. Opcional/nullable: sem o par de eventos, nao ha valor — e legado sem a chave nao e recusado.
+tem "$V_SCH" '`duracao_observada` é **opcional**'; afirma "v3-schema-opcional" $? "declarado opcional"
+tem "$V_SCH" '`null` quando o par `task_iniciada`/`task_concluida` do rastro não existe'; afirma "v3b-schema-null-sem-par" $? "null sem par de eventos"
+tem "$V_SCH" 'Entrada legada sem a chave é lida como `duracao_observada: null`, nunca recusada.'; afirma "v3c-schema-legado-aceito" $? "compatibilidade com historico antigo"
+
+# 4. Distinto de real: tempo de parede nao e esforco, e nunca o substitui (DS-37).
+tem "$V_SCH" '`duracao_observada` **não é `real`** e nunca o substitui'; afirma "v4-schema-distinto-de-real" $? "campo separado de real"
+
+# 5. Fora do desvio e fora da calibracao: nao contamina o numero que calibra estimativa.
+tem "$V_SCH" 'fica **fora do cálculo de `desvio`**'; afirma "v5-schema-fora-do-desvio" $? "desvio continua real/estimado_media"
+tem "$V_SCH" 'e **fora da `calibracao`**'; afirma "v5b-schema-fora-da-calibracao" $? "desvio_medio e fator_ativo nao a leem"
+v_calibracao "$V_SCH" | grep -qF 'duracao_observada'; [ $? -ne 0 ]; afirma "v5c-schema-calibracao-limpa" $? "bloco calibracao nao carrega o campo"
+# A entrada coloca duracao_observada DEPOIS de desvio: a cadeia de calibracao termina em desvio.
+V_LD=$(v_entradas "$V_SCH" | grep -nF 'desvio:' | head -1 | cut -d: -f1)
+V_LO=$(v_entradas "$V_SCH" | grep -nF 'duracao_observada:' | head -1 | cut -d: -f1)
+[ -n "$V_LD" ] && [ -n "$V_LO" ] && [ "$V_LO" -gt "$V_LD" ]; afirma "v5d-schema-campo-depois-do-desvio" $? "desvio=$V_LD < duracao_observada=$V_LO"
+
+# 6. O template que gera o arquivo carrega o campo no YAML, opcional.
+v_entradas "$V_TPL" | grep -qF 'duracao_observada: {{numero ou null}}'; afirma "v6-template-yaml-tem-campo" $? "TEMPLATE-HISTORICO.md, entradas"
+v_calibracao "$V_TPL" | grep -qF 'duracao_observada'; [ $? -ne 0 ]; afirma "v6b-template-calibracao-limpa" $? "calibracao do template nao carrega o campo"
+
+# 7. Regra universal 7: o YAML e a tabela humana dizem a mesma coisa.
+tem "$V_TPL" 'Duração observada'; afirma "v7-template-tabela-tem-coluna" $? "coluna na tabela de Entradas"
+V_H=$(grep -F '| Trabalho | Task | Tipo |' "$V_TPL" | head -1)
+V_SEP=$(grep -nF '| Trabalho | Task | Tipo |' "$V_TPL" | head -1 | cut -d: -f1)
+V_SEP=$(sed -n "$((V_SEP + 1))p" "$V_TPL")
+V_LIN=$(grep -F '| {{slug}} |' "$V_TPL" | head -1)
+[ "$(v_colunas "$V_H")" = "$(v_colunas "$V_SEP")" ] && [ "$(v_colunas "$V_H")" = "$(v_colunas "$V_LIN")" ]
+afirma "v7b-template-tabela-coerente" $? "cabecalho=$(v_colunas "$V_H") separador=$(v_colunas "$V_SEP") linha=$(v_colunas "$V_LIN")"
+# 7.1 Ausencia nao vira numero com unidade: `duracao_observada` e null de rotina
+# (rastro desligado, sem par de eventos), e `null h` leria como "null horas", misturando
+# ausencia com grandeza. A regra da celula vazia vale para a tabela inteira.
+tem "$V_TPL" 'a célula correspondente da tabela leva `—`, nunca `null` e nunca `null h`'
+afirma "v11-regra-da-celula-sem-valor" $? "a tabela diz como ausencia se escreve"
+V_CEL="$(grep -F '| {{slug}} |' "$V_TPL" | head -1 | awk -F'|' '{print $(NF-1)}')"
+printf '%s' "$V_CEL" | grep -qE '\}\}[[:space:]]*h[[:space:]]*$'; [ $? -ne 0 ]
+afirma "v11b-duracao-sem-unidade-fora-do-marcador" $? "celula=[$V_CEL]"
+V_SIM="$(printf '%s' "$V_CEL" | sed 's/{{[^}]*}}/null/g')"
+printf '%s' "$V_SIM" | grep -qE 'null[[:space:]]+h'; [ $? -ne 0 ]
+afirma "v11c-nulo-nao-renderiza-null-h" $? "render=[$V_SIM]"
+
+# 8. A lista de campos da estimativa (F3.5, Passo 10) nomeia o campo.
+tem "$V_EST" '`duracao_observada`'; afirma "v8-estimativa-lista-o-campo" $? "07-estimativa.md Passo 10"
+# A lista do Passo 10 (F3.5) e a do Passo 3 (F6) descrevem a MESMA entrada do
+# `estimativa_historico`: divergir em um campo faz a skill gravar coisas diferentes
+# conforme a referencia que a sessao abriu.
+v_campos() { # v_campos <arquivo> <ancora da linha> — campos `x` daquela lista, ordenados
+  grep -F "$2" "$1" | head -1 \
+    | sed 's/.*com: //; s/\. .*//; s/\.$//' \
+    | grep -oE '`[a-z_]+`' | tr -d '`' | sort -u
+}
+V_C7="$(v_campos "$V_EST" 'recebe uma linha por task concluída')"
+V_C6="$(v_campos "$V_EXE" 'Uma entrada por task **concluída**, com:')"
+printf '%s' "$V_C7" | grep -qx 'estimado_media'; afirma "v10-estimativa-lista-estimado-media" $? "Passo 10 nomeia estimado_media"
+[ "$V_C7" = "$V_C6" ]; afirma "v10b-listas-de-campos-coerentes" $? "F3.5 e F6 listam os mesmos campos${V_C7:+ ($(printf '%s' "$V_C7" | grep -c '') x $(printf '%s' "$V_C6" | grep -c ''))}"
+
+# 9. A lista de campos da propria F6 nomeia o campo que a prosa dela manda gravar.
+V_LISTA=$(grep -F 'Uma entrada por task **concluída**, com:' "$V_EXE" | head -1)
+printf '%s' "$V_LISTA" | grep -qF 'duracao_observada'; afirma "v9-execucao-lista-o-campo" $? "lista do Passo 3 bate com a prosa do Passo 3"
+
+echo "== W. fallback sem jq decodifica os escapes do payload (D-06) =="
+# Sem jq, rastro_tool_input_get extraia o valor com grep -o + sed e NAO decodificava os
+# escapes de JSON: `content` voltava numa linha so, com \n literais. O awk de
+# task-reivindicada.sh (/^  - id:/) nao casava nada, IDS_EM_ANDAMENTO saia vazio e o hook
+# falhava ABERTO (exit 0) onde devia bloquear (exit 2). O helper correto — sem processo,
+# com aspa escapada e \n decodificados — ja existia no mesmo arquivo: rastro_json_campo_em.
+W_DIR="$(mktemp -d)"
+# Raiz dos hooks em forma absoluta: os casos abaixo rodam com `cd` na fixture.
+W_H="$(cd "$H" && pwd)"
+
+# Um PATH equivalente ao atual, sem nenhum `jq` executavel: so os diretorios que de fato
+# tem jq viram espelho de symlinks sem ele. Funciona com jq em ~/.local/bin ou em /usr/bin,
+# e e no-op na maquina que nao tem jq.
+w_path_sem_jq() {
+  local d f espelho novo="" i=0 IFS=:
+  for d in $PATH; do
+    [ -n "$d" ] || continue
+    if [ -x "$d/jq" ]; then
+      i=$((i+1)); espelho="$W_DIR/bin$i"
+      if [ ! -d "$espelho" ]; then
+        mkdir -p "$espelho"
+        for f in "$d"/*; do
+          [ -e "$f" ] || continue
+          [ "${f##*/}" = jq ] && continue
+          ln -sf "$f" "$espelho/${f##*/}" 2>/dev/null
+        done
+      fi
+      novo="$novo:$espelho"
+    else
+      novo="$novo:$d"
+    fi
+  done
+  printf '%s' "${novo#:}"
+}
+W_SEMJQ="$(w_path_sem_jq)"
+PATH="$W_SEMJQ" command -v jq >/dev/null 2>&1; [ $? -ne 0 ]
+afirma "w0-sandbox-esconde-jq" $? "o PATH do caso nao enxerga jq"
+
+# Extrator isolado: le a chave pelo helper publico e grava o valor cru num arquivo, para
+# que a comparacao nao dependa de substituicao de comando (que come newline do fim).
+cat > "$W_DIR/extrai.sh" <<'SH'
+. "$1/comum/rastro.sh"
+J="$(cat "$2")"
+V="$(rastro_tool_input_get "$J" "$3")"
+printf '%s' "$V" > "$4"
+SH
+
+# O payload real do harness: content e o tasks.md inteiro, escapado como JSON.
+W_TASKS="$W_DIR/tasks-fonte.md"
+cat > "$W_TASKS" <<'YAML'
+---
+expx_schema: 1
+expx_tool: sprintx
+kind: tasks
+trabalho_id: feat-w
+sprint_id: sprint-01
+tasks:
+  - id: T-01.01
+    status: em_andamento
+    teste_integracao: Chama o endpoint de exportacao
+    arquivos:
+      cria: []
+      altera: [src/a.ts]
+---
+YAML
+W_FX="$W_DIR/repo"
+mkdir -p "$W_FX/.git" "$W_FX/docs/sprintx/features/feat-w/sprint-01" "$W_FX/docs/eventos" "$W_FX/.expx"
+cp "$W_TASKS" "$W_FX/docs/sprintx/features/feat-w/sprint-01/tasks.md"
+W_PAY="$W_DIR/payload.json"
+python3 -c "
+import json, sys
+print(json.dumps({'cwd': sys.argv[1], 'tool_name': 'Write',
+  'tool_input': {'file_path': sys.argv[2], 'content': open(sys.argv[3], encoding='utf-8').read()}}))
+" "$W_FX" "$W_FX/docs/sprintx/features/feat-w/sprint-01/tasks.md" "$W_TASKS" > "$W_PAY"
+
+# 1. Sem jq, o content volta com linhas DE VERDADE — e o awk do hook acha o id.
+PATH="$W_SEMJQ" bash "$W_DIR/extrai.sh" "$W_H" "$W_PAY" content "$W_DIR/sem.txt"
+W_L=$(wc -l < "$W_DIR/sem.txt")
+[ "$W_L" -ge 10 ]; afirma "w1-sem-jq-content-tem-linhas-reais" $? "$W_L linhas (esperado >= 10)"
+grep -qF '\n' "$W_DIR/sem.txt"; [ $? -ne 0 ]; afirma "w1b-sem-jq-sem-barra-n-literal" $? "nenhum \\n literal sobrou"
+W_IDS="$(awk '/^  - id:/ { id = $3; sub(/^[ \t]+/, "", id) } /status:[ \t]*em_andamento/ { if (id != "") print id }' "$W_DIR/sem.txt")"
+[ "$W_IDS" = "T-01.01" ]; afirma "w1c-sem-jq-awk-do-hook-acha-o-id" $? "IDS_EM_ANDAMENTO=[$W_IDS]"
+
+# 2. Paridade: com jq e sem jq entregam exatamente o mesmo valor.
+bash "$W_DIR/extrai.sh" "$W_H" "$W_PAY" content "$W_DIR/com.txt"
+cmp -s "$W_DIR/com.txt" "$W_DIR/sem.txt"; afirma "w2-paridade-com-jq-e-sem-jq" $? "content identico nos dois caminhos"
+bash "$W_DIR/extrai.sh" "$W_H" "$W_PAY" file_path "$W_DIR/fc.txt"
+PATH="$W_SEMJQ" bash "$W_DIR/extrai.sh" "$W_H" "$W_PAY" file_path "$W_DIR/fs.txt"
+cmp -s "$W_DIR/fc.txt" "$W_DIR/fs.txt" && grep -qF 'sprint-01/tasks.md' "$W_DIR/fs.txt"
+afirma "w2b-file-path-nao-regride" $? "file_path identico e correto sem jq"
+
+# 3. Aspa escapada dentro do valor nao trunca (o `[^"]*` do fallback antigo parava nela).
+python3 -c "
+import json
+print(json.dumps({'cwd': '/x', 'tool_input': {'content': 'a: \"entre aspas\"\nb: fim'}}))
+" > "$W_DIR/aspas.json"
+PATH="$W_SEMJQ" bash "$W_DIR/extrai.sh" "$W_H" "$W_DIR/aspas.json" content "$W_DIR/aspas.txt"
+grep -qF 'b: fim' "$W_DIR/aspas.txt"; afirma "w3-sem-jq-aspa-escapada-nao-trunca" $? "valor inteiro preservado"
+
+# 4. Ponta a ponta: o caso que reprovou. Modo bloqueio, task aberta por OUTRA sessao.
+printf '%s\n' '{"ts":"2026-09-30T10:00:00Z","expx_eventos":1,"trabalho_id":"feat-w","ferramenta":"sprintx","origem":"skill","evento":"task_iniciada","fase":"f6","task":"T-01.01","agente":"principal","resultado":"ok","detalhe":null,"arquivos":[],"sessao":"opencode@outra","harness":"opencode"}' \
+  > "$W_FX/docs/eventos/feat-w.jsonl"
+echo '{"hooks":{"task-reivindicada":{"modo":"bloqueio"}}}' > "$W_FX/.expx/hooks.json"
+w_hook() { # w_hook <PATH> -> ecoa o exit code do hook
+  local rc
+  (cd "$W_FX" && PATH="$1" EXPX_SESSAO=sessao-minha bash "$W_H/sprintx/task-reivindicada.sh" < "$W_PAY" >/dev/null 2>&1)
+  rc=$?; printf '%s' "$rc"
+}
+W_RC_SEM="$(w_hook "$W_SEMJQ")"
+[ "$W_RC_SEM" = 2 ]; afirma "w4-sem-jq-hook-bloqueia" $? "exit=$W_RC_SEM (esperado 2)"
+W_RC_COM="$(w_hook "$PATH")"
+[ "$W_RC_COM" = 2 ]; afirma "w4b-com-jq-hook-continua-bloqueando" $? "exit=$W_RC_COM (esperado 2)"
+
+# 5. Guarda estrutural: nenhum leitor do payload volta ao grep tolerante que perdia escape.
+grep -qF 'grep -o "\"$chave\"' "$W_H/comum/rastro.sh"; [ $? -ne 0 ]
+afirma "w5-sem-grep-tolerante-no-rastro" $? "os fallbacks usam o helper que decodifica"
+
+# 6. `\uXXXX` tambem e escape de JSON. Sem jq ele ficava literal e — pior — o ramo
+# `*\u*` do case era o PRIMEIRO, entao engolia os outros escapes: um unico acento
+# (`é` -> `é`) devolvia `content` numa linha so e ressuscitava o defeito do w4.
+w_u() { # w_u <texto> <arquivo-saida> <PATH> — extrai `content` daquele texto
+  python3 -c 'import json,sys; print(json.dumps({"cwd":"/x","tool_input":{"content":sys.argv[1]}}))' "$1" > "$W_DIR/u.json"
+  PATH="$3" bash "$W_DIR/extrai.sh" "$W_H" "$W_DIR/u.json" content "$2"
+}
+W_BMP="a$(printf 'é')b"
+w_u "$W_BMP" "$W_DIR/u-sem.txt" "$W_SEMJQ"; w_u "$W_BMP" "$W_DIR/u-com.txt" "$PATH"
+cmp -s "$W_DIR/u-sem.txt" "$W_DIR/u-com.txt" && grep -qF "$W_BMP" "$W_DIR/u-sem.txt"
+afirma "w6-sem-jq-decodifica-bmp" $? "\\u00e9 vira o mesmo byte que o jq entrega"
+W_SUR="x$(printf '\U0001F600')y"
+w_u "$W_SUR" "$W_DIR/u2-sem.txt" "$W_SEMJQ"; w_u "$W_SUR" "$W_DIR/u2-com.txt" "$PATH"
+cmp -s "$W_DIR/u2-sem.txt" "$W_DIR/u2-com.txt" && grep -qF "$W_SUR" "$W_DIR/u2-sem.txt"
+afirma "w6b-sem-jq-decodifica-par-substituto" $? "\\ud83d\\ude00 vira um caractere so, fora do BMP"
+W_MIX="linha1
+linha2 com acento a$(printf 'é')b"
+w_u "$W_MIX" "$W_DIR/u3-sem.txt" "$W_SEMJQ"
+W_UL=$(wc -l < "$W_DIR/u3-sem.txt")
+[ "$W_UL" -ge 1 ]; afirma "w7-u-nao-engole-os-outros-escapes" $? "$W_UL linha(s) reais (esperado >= 1)"
+W_TUDO="a$(printf 'é')b$(printf '\t')c$(printf '\U0001F600')d
+fim"
+w_u "$W_TUDO" "$W_DIR/u4-sem.txt" "$W_SEMJQ"; w_u "$W_TUDO" "$W_DIR/u4-com.txt" "$PATH"
+cmp -s "$W_DIR/u4-sem.txt" "$W_DIR/u4-com.txt"
+afirma "w7b-paridade-total-dos-escapes" $? "BMP + controle + par substituto + \\n: igual byte a byte"
+rm -rf "$W_DIR"
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"
 [ "$pulado" -eq 0 ] || echo "  ATENCAO: skip interno e buraco de cobertura da sprintx nesta plataforma, nao dependencia externa."

@@ -537,6 +537,7 @@ entradas:
     estimado_media: 3
     real: 3.5
     desvio: 1.17
+    duracao_observada: 5.2
     registrado_em: 2026-08-29
 calibracao:
   - tipo_task: config
@@ -557,6 +558,17 @@ Regras duras deste kind:
 - `desvio` é `real / estimado_media`. `fator_ativo` só é `true` com 3 ou mais entradas
   encerradas daquele tipo.
 - `calibracao` é `[]` enquanto não houver entrada suficiente para calcular desvio por tipo.
+- `duracao_observada` é **opcional**: o tempo de parede da task, derivado do par
+  `task_iniciada`/`task_concluida` do rastro (`references/08-rastro.md`). Vale
+  `null` quando o par `task_iniciada`/`task_concluida` do rastro não existe — rastro desligado,
+  task iniciada em outra sessão, ou execução que nunca gravou as duas pontas.
+  Entrada legada sem a chave é lida como `duracao_observada: null`, nunca recusada.
+- `duracao_observada` **não é `real`** e nunca o substitui: `real` é o esforço anotado por quem
+  executou; `duracao_observada` é tempo de parede medido pelo rastro (DS-37). As duas chaves
+  coexistem, e divergência grande entre elas é sinal de interrupção — não erro de nenhuma das duas.
+- `duracao_observada` fica **fora do cálculo de `desvio`** — que continua sendo
+  `real / estimado_media`, só — e **fora da `calibracao`**: `desvio_medio` e `fator_ativo` não a
+  leem. Por isso ela aparece **depois** de `desvio` na entrada: a cadeia de calibração termina ali.
 
 ### `FECHAMENTO.md` → `kind: fechamento`
 

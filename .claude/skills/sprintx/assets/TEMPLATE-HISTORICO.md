@@ -16,6 +16,7 @@ entradas:
     estimado_media: {{numero ou null}}
     real: {{numero}}
     desvio: {{numero ou null}}
+    duracao_observada: {{numero ou null}}
     registrado_em: {{AAAA-MM-DD}}
 calibracao:
   - tipo_task: {{tipo}}
@@ -34,13 +35,19 @@ Uma linha por task concluída, com o esforço real medido. É a única base de c
 
 Unidade: hora de trabalho focado. O real é o esforço efetivamente gasto na task — escrever os dois testes, implementar, rodar a suíte e verificar o critério de aceite. Não inclui reunião, revisão, deploy nem ida e volta com o cliente: esses são "não incluído" na estimativa e precisam continuar fora aqui, senão a calibração fica corrompida.
 
+A **duração observada** é outra coisa: o tempo de parede entre `task_iniciada` e `task_concluida` no rastro, obtido sem ninguém anotar nada. Ela entra ao lado do real, nunca no lugar dele, e não entra no desvio nem na calibração — tempo de parede não é esforço, e uma task aberta por seis horas pode ter tido vinte minutos de trabalho e um almoço no meio.
+
 ## Entradas
 
-| Trabalho | Task | Tipo | Área | Sinais | Estimado (min–max) | Média est. | Real | Desvio |
-|---|---|---|---|---|---|---|---|---|
-| {{slug}} | T-{{NN}}.{{MM}} | {{tipo_task}} | {{area}} | {{sinais}} | {{min}}–{{max}} h | {{media}} h | {{real}} h | {{desvio}} |
+| Trabalho | Task | Tipo | Área | Sinais | Estimado (min–max) | Média est. | Real | Desvio | Duração observada |
+|---|---|---|---|---|---|---|---|---|---|
+| {{slug}} | T-{{NN}}.{{MM}} | {{tipo_task}} | {{area}} | {{sinais}} | {{min}}–{{max}} h | {{media}} h | {{real}} h | {{desvio}} | {{duracao_observada em h, ou — quando null}} |
 
 {{Trabalho que rodou sem a F3.5 entra assim: estimado_min, estimado_max, estimado_media e desvio em `null`, com o real preenchido. O real ainda alimenta a comparabilidade por tipo e área.}}
+
+{{Sem o par `task_iniciada`/`task_concluida` no rastro, `duracao_observada` fica em `null` — o campo é opcional, e entrada antiga sem a chave continua válida. Entrada sem duração observada não perde nada: a calibração nunca a lê.}}
+
+> **Célula sem valor.** Quando o campo é `null` no YAML, a célula correspondente da tabela leva `—`, nunca `null` e nunca `null h`: a unidade só acompanha número. É a regra universal 7 aplicada à ausência — o YAML diz `null`, a prosa mostra que não há valor, e as duas continuam dizendo a mesma coisa.
 
 ## Calibração por tipo de task
 
