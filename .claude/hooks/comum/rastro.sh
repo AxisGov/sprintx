@@ -186,29 +186,33 @@ rastro_json_campo_em() {
 }
 
 # Le uma chave de topo de um JSON simples vindo do stdin do hook.
-# Usa jq quando existe (correto); sem jq, cai para um grep tolerante.
-# Nunca falha: chave ausente devolve string vazia.
+# Usa jq quando existe (correto); sem jq, delega a rastro_json_campo_em — mesma regra de
+# casamento de sempre, mas com os escapes de JSON decodificados como o jq os decodifica.
+# Grep tolerante aqui era defeito: `[^"]*` truncava na primeira aspa escapada e deixava
+# `\n` literal, o que devolvia `content` numa linha so e fazia o leitor do hook nao achar
+# nada. Nunca falha: chave ausente devolve string vazia.
 rastro_json_get() {
-  local json="$1" chave="$2"
+  local json="$1" chave="$2" _saida
   if command -v jq >/dev/null 2>&1; then
     printf '%s' "$json" | jq -r --arg k "$chave" '.[$k] // empty' 2>/dev/null
     return 0
   fi
-  printf '%s' "$json" \
-    | grep -o "\"$chave\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
-    | head -1 | sed 's/.*:[[:space:]]*"//; s/"$//'
+  rastro_json_campo_em _saida "$json" "$chave"
+  printf '%s' "$_saida"
 }
 
-# Le uma chave aninhada em tool_input (ex.: file_path).
+# Le uma chave aninhada em tool_input (ex.: file_path). Sem jq, mesmo delegado do
+# rastro_json_get: o valor sai inteiro e com os escapes decodificados. `content` e
+# `new_string` chegam com `\n` — sem decodificar, o texto vira uma linha so e todo leitor
+# que casa inicio de linha (`/^  - id:/`) para de achar o que existe.
 rastro_tool_input_get() {
-  local json="$1" chave="$2"
+  local json="$1" chave="$2" _saida
   if command -v jq >/dev/null 2>&1; then
     printf '%s' "$json" | jq -r --arg k "$chave" '.tool_input[$k] // empty' 2>/dev/null
     return 0
   fi
-  printf '%s' "$json" \
-    | grep -o "\"$chave\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
-    | head -1 | sed 's/.*:[[:space:]]*"//; s/"$//'
+  rastro_json_campo_em _saida "$json" "$chave"
+  printf '%s' "$_saida"
 }
 
 # ------------------------------------------------------------ trabalho_id

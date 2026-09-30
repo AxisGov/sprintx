@@ -4607,6 +4607,124 @@ tem "$V_EST" '`duracao_observada`'; afirma "v8-estimativa-lista-o-campo" $? "07-
 V_LISTA=$(grep -F 'Uma entrada por task **concluída**, com:' "$V_EXE" | head -1)
 printf '%s' "$V_LISTA" | grep -qF 'duracao_observada'; afirma "v9-execucao-lista-o-campo" $? "lista do Passo 3 bate com a prosa do Passo 3"
 
+echo "== W. fallback sem jq decodifica os escapes do payload (D-06) =="
+# Sem jq, rastro_tool_input_get extraia o valor com grep -o + sed e NAO decodificava os
+# escapes de JSON: `content` voltava numa linha so, com \n literais. O awk de
+# task-reivindicada.sh (/^  - id:/) nao casava nada, IDS_EM_ANDAMENTO saia vazio e o hook
+# falhava ABERTO (exit 0) onde devia bloquear (exit 2). O helper correto — sem processo,
+# com aspa escapada e \n decodificados — ja existia no mesmo arquivo: rastro_json_campo_em.
+W_DIR="$(mktemp -d)"
+# Raiz dos hooks em forma absoluta: os casos abaixo rodam com `cd` na fixture.
+W_H="$(cd "$H" && pwd)"
+
+# Um PATH equivalente ao atual, sem nenhum `jq` executavel: so os diretorios que de fato
+# tem jq viram espelho de symlinks sem ele. Funciona com jq em ~/.local/bin ou em /usr/bin,
+# e e no-op na maquina que nao tem jq.
+w_path_sem_jq() {
+  local d f espelho novo="" i=0 IFS=:
+  for d in $PATH; do
+    [ -n "$d" ] || continue
+    if [ -x "$d/jq" ]; then
+      i=$((i+1)); espelho="$W_DIR/bin$i"
+      if [ ! -d "$espelho" ]; then
+        mkdir -p "$espelho"
+        for f in "$d"/*; do
+          [ -e "$f" ] || continue
+          [ "${f##*/}" = jq ] && continue
+          ln -sf "$f" "$espelho/${f##*/}" 2>/dev/null
+        done
+      fi
+      novo="$novo:$espelho"
+    else
+      novo="$novo:$d"
+    fi
+  done
+  printf '%s' "${novo#:}"
+}
+W_SEMJQ="$(w_path_sem_jq)"
+PATH="$W_SEMJQ" command -v jq >/dev/null 2>&1; [ $? -ne 0 ]
+afirma "w0-sandbox-esconde-jq" $? "o PATH do caso nao enxerga jq"
+
+# Extrator isolado: le a chave pelo helper publico e grava o valor cru num arquivo, para
+# que a comparacao nao dependa de substituicao de comando (que come newline do fim).
+cat > "$W_DIR/extrai.sh" <<'SH'
+. "$1/comum/rastro.sh"
+J="$(cat "$2")"
+V="$(rastro_tool_input_get "$J" "$3")"
+printf '%s' "$V" > "$4"
+SH
+
+# O payload real do harness: content e o tasks.md inteiro, escapado como JSON.
+W_TASKS="$W_DIR/tasks-fonte.md"
+cat > "$W_TASKS" <<'YAML'
+---
+expx_schema: 1
+expx_tool: sprintx
+kind: tasks
+trabalho_id: feat-w
+sprint_id: sprint-01
+tasks:
+  - id: T-01.01
+    status: em_andamento
+    teste_integracao: Chama o endpoint de exportacao
+    arquivos:
+      cria: []
+      altera: [src/a.ts]
+---
+YAML
+W_FX="$W_DIR/repo"
+mkdir -p "$W_FX/.git" "$W_FX/docs/sprintx/features/feat-w/sprint-01" "$W_FX/docs/eventos" "$W_FX/.expx"
+cp "$W_TASKS" "$W_FX/docs/sprintx/features/feat-w/sprint-01/tasks.md"
+W_PAY="$W_DIR/payload.json"
+python3 -c "
+import json, sys
+print(json.dumps({'cwd': sys.argv[1], 'tool_name': 'Write',
+  'tool_input': {'file_path': sys.argv[2], 'content': open(sys.argv[3], encoding='utf-8').read()}}))
+" "$W_FX" "$W_FX/docs/sprintx/features/feat-w/sprint-01/tasks.md" "$W_TASKS" > "$W_PAY"
+
+# 1. Sem jq, o content volta com linhas DE VERDADE — e o awk do hook acha o id.
+PATH="$W_SEMJQ" bash "$W_DIR/extrai.sh" "$W_H" "$W_PAY" content "$W_DIR/sem.txt"
+W_L=$(wc -l < "$W_DIR/sem.txt")
+[ "$W_L" -ge 10 ]; afirma "w1-sem-jq-content-tem-linhas-reais" $? "$W_L linhas (esperado >= 10)"
+grep -qF '\n' "$W_DIR/sem.txt"; [ $? -ne 0 ]; afirma "w1b-sem-jq-sem-barra-n-literal" $? "nenhum \\n literal sobrou"
+W_IDS="$(awk '/^  - id:/ { id = $3; sub(/^[ \t]+/, "", id) } /status:[ \t]*em_andamento/ { if (id != "") print id }' "$W_DIR/sem.txt")"
+[ "$W_IDS" = "T-01.01" ]; afirma "w1c-sem-jq-awk-do-hook-acha-o-id" $? "IDS_EM_ANDAMENTO=[$W_IDS]"
+
+# 2. Paridade: com jq e sem jq entregam exatamente o mesmo valor.
+bash "$W_DIR/extrai.sh" "$W_H" "$W_PAY" content "$W_DIR/com.txt"
+cmp -s "$W_DIR/com.txt" "$W_DIR/sem.txt"; afirma "w2-paridade-com-jq-e-sem-jq" $? "content identico nos dois caminhos"
+bash "$W_DIR/extrai.sh" "$W_H" "$W_PAY" file_path "$W_DIR/fc.txt"
+PATH="$W_SEMJQ" bash "$W_DIR/extrai.sh" "$W_H" "$W_PAY" file_path "$W_DIR/fs.txt"
+cmp -s "$W_DIR/fc.txt" "$W_DIR/fs.txt" && grep -qF 'sprint-01/tasks.md' "$W_DIR/fs.txt"
+afirma "w2b-file-path-nao-regride" $? "file_path identico e correto sem jq"
+
+# 3. Aspa escapada dentro do valor nao trunca (o `[^"]*` do fallback antigo parava nela).
+python3 -c "
+import json
+print(json.dumps({'cwd': '/x', 'tool_input': {'content': 'a: \"entre aspas\"\nb: fim'}}))
+" > "$W_DIR/aspas.json"
+PATH="$W_SEMJQ" bash "$W_DIR/extrai.sh" "$W_H" "$W_DIR/aspas.json" content "$W_DIR/aspas.txt"
+grep -qF 'b: fim' "$W_DIR/aspas.txt"; afirma "w3-sem-jq-aspa-escapada-nao-trunca" $? "valor inteiro preservado"
+
+# 4. Ponta a ponta: o caso que reprovou. Modo bloqueio, task aberta por OUTRA sessao.
+printf '%s\n' '{"ts":"2026-09-30T10:00:00Z","expx_eventos":1,"trabalho_id":"feat-w","ferramenta":"sprintx","origem":"skill","evento":"task_iniciada","fase":"f6","task":"T-01.01","agente":"principal","resultado":"ok","detalhe":null,"arquivos":[],"sessao":"opencode@outra","harness":"opencode"}' \
+  > "$W_FX/docs/eventos/feat-w.jsonl"
+echo '{"hooks":{"task-reivindicada":{"modo":"bloqueio"}}}' > "$W_FX/.expx/hooks.json"
+w_hook() { # w_hook <PATH> -> ecoa o exit code do hook
+  local rc
+  (cd "$W_FX" && PATH="$1" EXPX_SESSAO=sessao-minha bash "$W_H/sprintx/task-reivindicada.sh" < "$W_PAY" >/dev/null 2>&1)
+  rc=$?; printf '%s' "$rc"
+}
+W_RC_SEM="$(w_hook "$W_SEMJQ")"
+[ "$W_RC_SEM" = 2 ]; afirma "w4-sem-jq-hook-bloqueia" $? "exit=$W_RC_SEM (esperado 2)"
+W_RC_COM="$(w_hook "$PATH")"
+[ "$W_RC_COM" = 2 ]; afirma "w4b-com-jq-hook-continua-bloqueando" $? "exit=$W_RC_COM (esperado 2)"
+
+# 5. Guarda estrutural: nenhum leitor do payload volta ao grep tolerante que perdia escape.
+grep -qF 'grep -o "\"$chave\"' "$W_H/comum/rastro.sh"; [ $? -ne 0 ]
+afirma "w5-sem-grep-tolerante-no-rastro" $? "os fallbacks usam o helper que decodifica"
+rm -rf "$W_DIR"
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"
 [ "$pulado" -eq 0 ] || echo "  ATENCAO: skip interno e buraco de cobertura da sprintx nesta plataforma, nao dependencia externa."
