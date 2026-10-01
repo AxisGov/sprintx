@@ -64,10 +64,12 @@ A **duração observada** é outra coisa: o tempo de parede entre `task_iniciada
 ## Como se calcula o desvio
 
 ```
-desvio_task  = arredonda( real / media_task_estimada )     # media_task = (o + 4m + p) / 6
-desvio_medio_do_tipo = arredonda( media dos desvio_task PERSISTIDOS daquele tipo )
-arredonda(x)         = duas casas decimais, meio para cima (half-up)
+desvio_calibracao_task  = arredonda( real / media_task_estimada )   # media_task = (o + 4m + p) / 6
+desvio_medio_do_tipo    = arredonda( media dos desvio_calibracao_task PERSISTIDOS daquele tipo )
+arredonda(x)            = duas casas decimais, meio para cima (half-up)
 ```
+
+> **`desvio_calibracao_task` é razão, adimensional.** É quanto o `real` excedeu o `estimado_media` da task — nunca o `desvio_padrao_task` da `references/07-estimativa.md`, que é o desvio-padrão PERT de uma estimativa, medido em **horas**. As duas grandezas não são intercambiáveis, e nenhum dos dois símbolos vira chave em disco: o que se persiste aqui continua sendo `desvio` e `desvio_medio` (DS-162).
 
 > **Precisão e desempate.** São **duas casas decimais**, com desempate **half-up**: terceira casa exatamente `5`, a segunda sobe. A razão `1,125` vira `1,13`, nunca `1,12`. As duas casas são **fixas**, não "até duas": a razão `1,2` grava-se `1.20` no YAML e escreve-se `1,20` na prosa. O YAML usa ponto, a prosa em pt-BR usa vírgula, e as duas carregam as mesmas duas casas (regra universal 7); só a sintaxe de fórmula do bloco acima fica fora disso. Número com uma casa, ou com três, é número fora do contrato (DS-160).
 >

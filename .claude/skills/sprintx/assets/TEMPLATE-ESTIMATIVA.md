@@ -133,15 +133,17 @@ Método: **PERT com variâncias somadas em quadratura**. Reproduzível à mão.
 Por task estimada:
 
 ```
-media_task  = (o + 4m + p) / 6
-desvio_task = (p - o) / 6
+media_task         = (o + 4m + p) / 6
+desvio_padrao_task = (p - o) / 6
 ```
+
+> **`desvio_padrao_task` é dispersão, em horas.** É o desvio-padrão PERT da task, e é só ele que entra na quadratura abaixo — nunca o `desvio_calibracao_task`, que é a razão de calibração do `HISTORICO.md`, **adimensional**, e nunca entra em quadratura nenhuma. As duas grandezas não são intercambiáveis (DS-162).
 
 Por conjunto (fase, sprint, trabalho, caminho crítico):
 
 ```
 media_conjunto  = soma das media_task
-desvio_conjunto = raiz_quadrada( soma dos (desvio_task)^2 )
+desvio_conjunto = raiz_quadrada( soma dos (desvio_padrao_task)^2 )
 piso_conjunto   = soma( o(t) * fator(t) )
 fator(t) = 1                                # quando o tipo da task t nao tem fator ativo
 min = media_conjunto - desvio_conjunto      # se min < piso_conjunto, entao min = piso_conjunto

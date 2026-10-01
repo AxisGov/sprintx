@@ -569,12 +569,18 @@ Regras duras deste kind:
   número com uma casa ou com três é número fora do contrato. O YAML usa ponto e a prosa em pt-BR usa
   vírgula — as duas formas do mesmo número, com as mesmas duas casas (regra universal 7); a única
   exceção é a sintaxe de fórmula, onde o contrato a indica explicitamente.
-- `desvio_medio` é a **média** dos `desvio_task` — a chave `desvio` de cada entrada encerrada
-  daquele tipo, já **persistida** e portanto já arredondada, nunca a média das razões brutas —,
-  **arredondada de novo pela mesma regra**: duas casas, half-up. O agregador é **único** e a
-  precisão também: dois executores que leiam este contrato gravam o mesmo número, dígito a
-  dígito, a partir do mesmo histórico. Nem o agregador nem a precisão dependem de
-  `duracao_observada`, que a `calibracao` não lê (DS-37).
+- `desvio_medio` é a **média** dos `desvio_calibracao_task`, nunca o `desvio_padrao_task` — a
+  chave `desvio` de cada entrada encerrada daquele tipo, já **persistida** e portanto já
+  arredondada, nunca a média das razões brutas —, **arredondada de novo pela mesma regra**:
+  duas casas, half-up. O agregador é **único** e a precisão também: dois executores que leiam
+  este contrato gravam o mesmo número, dígito a dígito, a partir do mesmo histórico. Nem o
+  agregador nem a precisão dependem de `duracao_observada`, que a `calibracao` não lê (DS-37).
+- **Dois nomes, duas grandezas (DS-162).** O símbolo interno do número que `desvio` e
+  `desvio_medio` carregam é o `desvio_calibracao_task`, a razão entre `real` e
+  `estimado_media`: **adimensional**. Ele nunca é o `desvio_padrao_task` da
+  `references/07-estimativa.md`, que é o desvio-padrão PERT de uma estimativa, medido em
+  **horas** e somado em quadratura. As duas grandezas **não são intercambiáveis**, e nenhum
+  dos dois símbolos vira chave do YAML: em disco continuam valendo `desvio` e `desvio_medio`.
 - `calibracao` é `[]` enquanto não houver entrada suficiente para calcular desvio por tipo. Com
   `calibracao: []`, a tabela `Calibração por tipo de task` da prosa fica **com cabeçalho e separador
   e sem nenhuma linha de dados** — regra universal 7 aplicada à lista vazia: o YAML diz `[]` e a
