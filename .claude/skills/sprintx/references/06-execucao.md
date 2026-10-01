@@ -275,6 +275,8 @@ Se a F3.5 não rodou (não existe `00-ESTIMATIVA.md`), registre o real mesmo ass
 
 **Recalcule a tabela de calibração por tipo** ao acrescentar as entradas: para cada `tipo_task`, `desvio_medio` é a média dos `desvio_task` de todas as entradas encerradas daquele tipo, e `fator_ativo` é `true` a partir de 3 entradas. Esse desvio é o que vira fator de correção nas estimativas seguintes — e ele é sempre declarado na saída da estimativa, nunca embutido em silêncio (`references/07-estimativa.md`).
 
+**Calibração vazia tem forma própria.** Se o recálculo não produzir nenhum tipo com desvio — o caso do primeiro trabalho do projeto, e de todo trabalho que rodou sem a F3.5, em que `desvio` é `null` em cada entrada —, grave `calibracao: []` e a tabela `Calibração por tipo de task` **só com cabeçalho e separador, sem nenhuma linha de dados**. Uma linha de dados por item de `calibracao`, e nenhuma linha fabricada para a tabela não ficar vazia: `—` é a regra de célula ausente de uma linha real (`assets/TEMPLATE-HISTORICO.md`), e `| — | — | — | — |` declara um `tipo_task` fora do enum — tabela sem linha de dados é o que diz a verdade sobre `calibracao: []`.
+
 Se houve estimativa, inclua no relatório final (Passo 4) uma linha por sprint com estimado × real e o desvio, para que a divergência fique visível junto com as demais.
 
 ## Passo 3.1 — Fechar o trabalho: agregar e gravar o `FECHAMENTO.md`
@@ -384,7 +386,7 @@ quais módulos ele declara — é assim que o usuário sabe que a feature entrou
 - [ ] Se o trabalho inteiro foi entregue, `ORQUESTRADOR.md` teve `estagio`, `status`, `concluido_em` e `atualizado_em` reescritos; sprints e fases concluídas tiveram `status` atualizado onde o formato daquela sprint o guarda — `sprint.md` e `fases.md` nos três arquivos, `sprint.status` e `fases[].status` do `tasks.md` no condensado.
 - [ ] Toda task concluída tem o esforço real registrado em `tasks.md`.
 - [ ] Toda task que chegou da F5 com `[fraco:teste]` teve o teste endurecido e vermelho pelo motivo esperado antes do primeiro código de produto, e o `revisor-testes` confirmou que cada implementação errada registrada é discriminada — ou a task está `bloqueada` sem implementação.
-- [ ] `docs/sprintx/estimativas/HISTORICO.md` recebeu uma entrada por task concluída, com o desvio calculado (ou `null` quando não houve estimativa), e a tabela de calibração por tipo foi recalculada.
+- [ ] `docs/sprintx/estimativas/HISTORICO.md` recebeu uma entrada por task concluída, com o desvio calculado (ou `null` quando não houve estimativa), e a tabela de calibração por tipo foi recalculada — com uma linha de dados por item de `calibracao`, ou apenas cabeçalho e separador quando `calibracao` é `[]`.
 - [ ] `ORQUESTRADOR.md` teve `arquivos_alterados` agregado (união sem repetição dos `arquivos` das tasks concluídas) e `modulo_afetado` conferido contra o que a execução de fato tocou.
 - [ ] `FECHAMENTO.md` existe em `docs/sprintx/features/<slug>/` com frontmatter `kind: fechamento` válido e a prosa correspondente abaixo dele.
 - [ ] Relatório final entregue com as 4 seções — 5 quando a `mergex` estiver instalada, com a seção **Entrega**.
