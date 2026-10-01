@@ -155,13 +155,28 @@ min = media_conjunto - desvio_conjunto
 max = media_conjunto + desvio_conjunto
 ```
 
-Arredonde `min` para baixo e `max` para cima, à hora inteira. Se `min` der negativo ou menor que a maior `o` do conjunto, use a soma dos `o` como piso — nenhuma faixa agregada pode prometer menos do que o melhor caso somado.
+Arredonde `min` para baixo e `max` para cima, à hora inteira.
 
-Esse arredondamento à hora inteira é o **último passo** da faixa agregada. Quando há fator de correção (Passo 1), ele já entrou antes da agregação, na faixa de cada task do tipo — o piso dos `o` também vem corrigido. Arredondar à hora antes de aplicar o fator, ou arredondar o próprio fator, é estágio errado e publica outra faixa. As duas casas do `desvio` e do `desvio_medio` (DS-160) são do histórico; a hora inteira é da faixa publicada, e os dois arredondamentos não se misturam.
+**O piso do conjunto.** Nenhuma faixa agregada pode prometer menos do que o melhor caso somado, e o melhor caso somado já vem corrigido pelo fator da própria task:
+
+```
+piso_conjunto = soma( o(t) * fator(t) )
+fator(t) = 1                              # quando o tipo da task t nao tem fator ativo
+```
+
+Se `min < piso_conjunto`, então `min = piso_conjunto`. O operando comparado e o operando atribuído são o **mesmo** `piso_conjunto` (DS-163, que estende DS-41): nunca a maior `o` do conjunto no gatilho e a soma dos `o` na atribuição, que são grandezas diferentes e deixam o piso sem definição. `fator(t) = 1` é identidade aritmética do piso, não fator declarado — `fator_correcao_aplicado` continua `null` quando nenhum tipo tem fator ativo.
+
+O clamp acontece **antes** do arredondamento à hora inteira: `floor(min)`/`ceil(max)` recebe o `min` já pisado.
+
+Pisar depois de arredondar publica um `min` fracionário — `3,20 h` no exemplo abaixo —, e a faixa publicada é em hora inteira. É por isso que o estágio está escrito: a ordem entre o piso e o arredondamento é observável na faixa que sai.
+
+Esse arredondamento à hora inteira é o **último passo** da faixa agregada. Quando há fator de correção (Passo 1), ele já entrou antes da agregação, na faixa de cada task do tipo — e o piso também vem corrigido task a task, pelo fator do tipo de cada uma, nunca por um fator único do conjunto. Arredondar à hora antes de aplicar o fator, ou arredondar o próprio fator, é estágio errado e publica outra faixa. As duas casas do `desvio` e do `desvio_medio` (DS-160) são do histórico; a hora inteira é da faixa publicada, e os dois arredondamentos não se misturam.
+
+**Exemplo com fator abaixo de 1.** Uma task `api` `o=4 m=5 p=12` cujo tipo tem fator `0,80`: média corrigida `4,80`, desvio corrigido `1,0667`, `min` cru `3,7333`, `max` `5,8667`. O piso é `4 × 0,80 = 3,20`, e `3,7333` não fica abaixo dele: a faixa publicada é **3–6 h**. Com o piso bruto — a soma dos `o` sem fator, `4` — o `min` seria pisado em `4` e a faixa publicada viraria **4–6 h**: uma hora na base da faixa que o método não calculou. Fator abaixo de 1 é permitido e alcançável — é o tipo cujo histórico mostra que o projeto estima para cima.
 
 **Por que a quadratura.** Somar desvios em quadratura (raiz da soma dos quadrados) é o que faz o intervalo crescer **menos** que a soma linear: dez tasks com desvio 1 h cada dão desvio agregado de `√10 ≈ 3,2 h`, não 10 h. É exatamente o efeito de compensação descrito acima, e é a razão de a faixa da fase ser mais estreita, em proporção, que a faixa de uma task isolada.
 
-**Verificação obrigatória de sanidade:** a faixa agregada de qualquer conjunto tem de ser **mais estreita** que `[soma dos o, soma dos p]`. Se não for, você errou a conta — refaça.
+**Verificação obrigatória de sanidade:** a faixa agregada de qualquer conjunto tem de ser **mais estreita** que `[ soma( o(t) * fator(t) ), soma( p(t) * fator(t) ) ]` — os limites corrigidos task a task, pelos mesmos fatores que entraram na agregação. Se não for, você errou a conta — refaça. Comparar com o intervalo bruto reprova conta certa sempre que algum fator é abaixo de 1: no exemplo acima, `min` `3,7333` fica fora de `[4, 12]` e dentro de `[3,20, 9,60]`.
 
 ### Esforço total × caminho crítico
 
@@ -316,7 +331,7 @@ A **`duracao_observada`** vem do rastro (`references/08-rastro.md`), é opcional
 - [ ] Nenhuma conversão de esforço em data, prazo, dia útil, semana ou sprint de calendário.
 - [ ] A frase "esforço não é prazo" está na saída e no arquivo.
 - [ ] Esforço total e caminho crítico são números **diferentes**, e a diferença está explicada em uma frase que nomeia o que roda em paralelo.
-- [ ] A faixa agregada é mais estreita que `[soma dos o, soma dos p]` (senão a quadratura foi feita errado).
+- [ ] A faixa agregada é mais estreita que `[ soma( o(t) * fator(t) ), soma( p(t) * fator(t) ) ]` (senão a quadratura foi feita errado), e o piso aplicado a `min` foi `piso_conjunto`, antes do arredondamento à hora inteira.
 - [ ] O método de agregação está documentado na saída, com as fórmulas.
 - [ ] Toda task tem seus sinais declarados ao lado dela.
 - [ ] Toda task com `p > 4 × o` está em `tasks_a_quebrar`, **não** foi estimada e **não** entrou nos totais.
