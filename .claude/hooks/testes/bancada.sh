@@ -641,10 +641,11 @@ pl "$D" criar menu 3 buildx >/dev/null; afirma "ga5-criar-de-novo-e-noop" $? "me
 pl "$D" criar menu 5 buildx >/dev/null; [ $? -eq 4 ]; afirma "ga6-orcamento-nao-muda-em-silencio" $? "outro teto: erro de contrato"
 for ruim in "0 buildx" "-1 buildx" "tres buildx" "2.5 buildx" "3 null" "null buildx" "3 BuildX"; do
   D="$G/a-ruim"; rm -rf "$D"; nova_feature "$D" menu
+  g_nome="ga7-orcamento-invalido-$(printf '%s' "$ruim" | tr ' .' '__')"
   # shellcheck disable=SC2086
   pl "$D" criar menu $ruim >/dev/null; rc=$?
-  [ "$rc" -eq 4 ] && [ ! -f "$(fdir "$D" menu)/00-PLANEJAMENTO.md" ]
-  afirma "ga7-orcamento-invalido-$(printf '%s' "$ruim" | tr ' .' '__')" $? "rc=$rc, nada gravado"
+  [ "$rc" -eq 4 ] && [ ! -f "$(fdir "$D" menu)/00-PLANEJAMENTO.md" ]; g_rc=$?
+  afirma "$g_nome" "$g_rc" "rc=$rc, nada gravado"
 done
 
 # B/C/D. Fim da F2, F3 e F4: estado + checkpoint com trailers.
@@ -772,7 +773,9 @@ grep -q '"resultado":"bloqueado"' "$D/docs/eventos/menu.jsonl" 2>/dev/null; afir
 for prod in package.json docs/projeto/PROJETO.md docs/stack/CONVENCOES.md docs/entregas/menu/ENTREGA.md tests/a.test.ts docs/sprintx/features/menu-outra/x.md; do
   D="$G/l2"; rm -rf "$D"; nova_feature "$D" menu; pl "$D" criar menu >/dev/null; F="$(fdir "$D" menu)"
   printf 'decisoes\n' > "$F/00-DECISOES.md"; mkdir -p "$D/$(dirname "$prod")"; printf 'x\n' > "$D/$prod"; git -C "$D" add -f "$prod"
-  pl "$D" avanca menu f2 >/dev/null; [ $? -eq 2 ]; afirma "gl3-recusa-$(printf '%s' "$prod" | tr '/.' '__')" $? "staged fora do prefixo"
+  g_nome="gl3-recusa-$(printf '%s' "$prod" | tr '/.' '__')"
+  pl "$D" avanca menu f2 >/dev/null; [ $? -eq 2 ]; g_rc=$?
+  afirma "$g_nome" "$g_rc" "staged fora do prefixo"
 done
 
 # M. Branch principal: estado gravado, nenhum commit.
@@ -1122,9 +1125,10 @@ done
 # Uma instrucao canonica por transicao na skill inteira, e so no arquivo da fase dona.
 for inst in "criar <slug>:01-ingestao" "avanca <slug> f2:02-descoberta" "avanca <slug> f3:03-plano" "avanca <slug> f4:04-orquestrador" \
   "avanca <slug> f5:05-auditoria" "checkpoint <slug>:02-descoberta" "obrigacoes-f6 <slug>:06-execucao"; do
+  h_nome="gh-instrucao-unica-$(printf '%s' "${inst%%:*}" | tr -c 'a-z0-9' '_' | sed 's/_*$//')"
   onde="$(grep -rlF -- "$CMD_PL ${inst%%:*}" "$SK" "$H/../commands" "$H/../../.opencode" 2>/dev/null)"
-  [ "$(printf '%s\n' "$onde" | sed '/^$/d' | wc -l | tr -d ' ')" -eq 1 ] && [ "$(basename "$onde")" = "${inst##*:}.md" ]
-  afirma "gh-instrucao-unica-$(printf '%s' "${inst%%:*}" | tr -c 'a-z0-9' '_' | sed 's/_*$//')" $? "${onde:-nenhum arquivo}"
+  [ "$(printf '%s\n' "$onde" | sed '/^$/d' | wc -l | tr -d ' ')" -eq 1 ] && [ "$(basename "$onde")" = "${inst##*:}.md" ]; h_rc=$?
+  afirma "$h_nome" "$h_rc" "${onde:-nenhum arquivo}"
 done
 # Auto-teste da guarda: mutantes em copia temporaria, nunca nas referencias reais.
 MU="$(mktemp -d)"
@@ -1192,8 +1196,9 @@ afirma "gw-sem-clausula-vira-criterio-alta" $? "'-' e texto livre -> criterio AL
 printf '%s\n' "$REV" | awk -F'\t' '$1=="T-02.01"{print $7}' | grep -qxF '[item 2][fraco:teste] T-02.01 — cláusula: D-13 — passaria com: contadores trocados entre itens'
 afirma "gw2-revisor-gera-linha-da-auditoria" $? "prefixo [item 2][fraco:teste]"
 for ruim in 'T-01.01 | fraco' 'T-01.01 | fraco | teste | D-13' 'T-01.01 | fraco | fragil | - | x' 'T-01.01 | solido | motivo' 'T1 | solido' 'T-01.01 | fraco | teste | D-13 | -'; do
-  printf '%s\n' "$ruim" | bash "$PL" revisor >/dev/null 2>&1; [ $? -eq 4 ]
-  afirma "gw3-revisor-recusa-$(printf '%s' "$ruim" | tr -c 'a-z0-9' '_' | cut -c1-28)" $? "linha fora da forma"
+  i_nome="gw3-revisor-recusa-$(printf '%s' "$ruim" | tr -c 'a-z0-9' '_' | cut -c1-28)"
+  printf '%s\n' "$ruim" | bash "$PL" revisor >/dev/null 2>&1; [ $? -eq 4 ]; i_rc=$?
+  afirma "$i_nome" "$i_rc" "linha fora da forma"
 done
 # A auditoria so e registrada com severidade deterministica.
 D="$G/sev"; nova_feature "$D" menu; ate_f5 "$D" menu; F="$(fdir "$D" menu)"
@@ -1221,9 +1226,10 @@ AUDF="$SK/references/05-auditoria.md"
 tem "$AUDF" '| `fraco:teste` | **MÉDIA** |' && tem "$AUDF" '| `fraco:ausente` | **ALTA** |' && tem "$AUDF" '| `fraco:criterio` | **ALTA** |'
 afirma "g-f5-tabela-deterministica" $? "05-auditoria.md"
 for ag in "$H/../agents/auditor-plano.md" "$H/../agents/revisor-testes.md"; do
+  i_nome="g-agente-tabela-$(basename "$ag" .md)"
   grep -qE '`?(\[item 2\]\[fraco:)?teste\]?`? \| MÉDIA' "$ag" && grep -qE '`?(\[item 2\]\[fraco:)?ausente\]?`? \| ALTA' "$ag" \
-    && grep -qE '`?(\[item 2\]\[fraco:)?criterio\]?`? \| ALTA' "$ag"
-  afirma "g-agente-tabela-$(basename "$ag" .md)" $? "mesma severidade no agente"
+    && grep -qE '`?(\[item 2\]\[fraco:)?criterio\]?`? \| ALTA' "$ag"; i_rc=$?
+  afirma "$i_nome" "$i_rc" "mesma severidade no agente"
 done
 tem "$SK/references/03-plano.md" 'Corrija a **classe** do defeito' && tem "$SK/references/03-plano.md" '**Não invente generalização além da cláusula.**' \
   && tem "$SK/references/03-plano.md" 'tabela/matriz'
@@ -4492,7 +4498,8 @@ u_nome() {
     u_tr) echo "utr-verificador-de-transcrito-do-agente" ;;
   esac
 }
-for c in $U_CASOS; do "$c" "$U_REAL" >/dev/null 2>&1; afirma "$(u_nome "$c")" $? "arvore do repositorio"; done
+for c in $U_CASOS; do u_nm="$(u_nome "$c")"; "$c" "$U_REAL" >/dev/null 2>&1; u_rc=$?
+  afirma "$u_nm" "$u_rc" "arvore do repositorio"; done
 
 # Mutantes: copia do layout instalado; o controle e a copia sem mutacao. Cada mutante tem de
 # morrer pelos casos que o nomeiam — nao vale morrer de carona.
@@ -5262,6 +5269,239 @@ Z_STRINGS="$(grep -rnE '^[[:space:]]*(desvio|desvio_medio|fator_correcao_aplicad
   $Z_DEFINEM "$Z_TES" | tr '\n' ' ')"
 [ -z "$Z_STRINGS" ]
 afirma "z10b-nenhum-valor-virou-string" $? "ocorrencias=[${Z_STRINGS:-nenhuma}]"
+
+echo "== AA. o status da condicao chega inteiro a \`afirma\`, mesmo com nome dinamico (D-12) =="
+# `afirma <nome> <status> <detalhe>` nao avalia condicao nenhuma: recebe o status JA avaliado.
+# Numa chamada escrita como `condicao; afirma "nome-$(cmd)" $? "detalhe"` o shell expande as
+# palavras da esquerda para a direita, entao a substituicao que monta o NOME roda ANTES de `$?`
+# ser expandido — e `$?` passa a ser o status dessa substituicao, nao o da condicao. Como
+# `printf`/`tr`/`basename` sempre terminam em 0, a assercao inteira vira "ok" incondicional:
+# sete casos de orcamento invalido, seis de produto staged, sete de instrucao unica, seis de
+# recusa do revisor, dois de tabela do agente e catorze do escritor do rastro (treze sem `jq`) —
+# 42 assercoes que nao podiam reprovar. Nem aritmetica (`$((...))`) nem expansao de parametro (`${v//a/b}`) mexem
+# no status; so substituicao de comando (`$(...)` ou crase), e so quando vem ANTES do `$?`.
+# Forma canonica (DS-161): derive o nome ANTES, capture o status imediatamente depois da
+# condicao, e passe por variavel — `nome=...; condicao; rc=$?; afirma "$nome" "$rc" ...`.
+# Trocar a ordem sem capturar na hora nao resolve: qualquer comando entre a condicao e `rc=$?`
+# (inclusive a propria derivacao do nome) rouba o status do mesmo jeito. Por isso esta secao tem
+# DOIS oraculos independentes: um guarda estatico, que acha a forma vulneravel por aninhamento,
+# e um replay em runtime, que recorta do proprio arquivo o grupo de comandos de cada familia,
+# forca a condicao a falsa e confere o status que `afirma` recebeu de verdade.
+AA_BANC="$H/testes/bancada.sh"
+AA_T="$(mktemp -d)"
+
+# --- oraculo 1: guarda estatico ----------------------------------------------
+# Toda leitura de `$?` feita num comando simples que JA executou uma substituicao de comando.
+# Caminha caractere a caractere porque a forma nao e reconhecivel por expressao regular: depende
+# de aspas simples e duplas, de aninhamento equilibrado de `$( )` (que pode conter `;` e `)`),
+# de crase, de comentario, de corpo de heredoc e de onde o comando simples comeca.
+aa_vulneraveis() { # aa_vulneraveis <script> -> "<linha>:<texto>" por ocorrencia
+  awk '
+  BEGIN { Q = sprintf("%c", 39); BT = sprintf("%c", 96); ASPAS = "[\"" Q "]"
+          CHAVE = "^(do|then|else|elif|in|while|until|if|case|esac|fi|done|function)([ \t;&|]|$)" }
+  {
+    if (hd != "") { t = $0; sub(/^[ \t]+/, "", t); if (t == hd) hd = ""; next }
+    L = $0; n = length(L); i = 1
+    while (i <= n) {
+      c = substr(L, i, 1); c2 = substr(L, i, 2); c3 = substr(L, i, 3)
+      if (pd > 0) {                                    # corpo de $( ): so procura o fim
+        if (psq)              { if (c == Q) psq = 0; i++; continue }
+        if (c == "\\")        { i += 2; continue }
+        if (c == Q && !pdq)   { psq = 1; i++; continue }
+        if (c == "\"")        { pdq = !pdq; i++; continue }
+        if (!pdq && c == "(") { pd++; i++; continue }
+        if (!pdq && c == ")") { pd--; i++; continue }
+        i++; continue
+      }
+      if (bt)              { if (c == "\\") { i += 2; continue } if (c == BT) bt = 0; i++; continue }
+      if (sq)              { if (c == Q) sq = 0; i++; continue }
+      if (c == "\\")       { i += 2; continue }
+      if (c == Q && !dq)   { sq = 1; i++; continue }
+      if (c == "\"")       { dq = !dq; i++; continue }
+      if (c3 == "$((")     { i = aa_par(L, i + 1, n); continue }   # aritmetica nao mexe no status
+      if (c2 == "$(")      { subst = 1; pd = 1; psq = 0; pdq = 0; i += 2; continue }
+      if (c == BT)         { subst = 1; bt = 1; i++; continue }
+      if (c2 == "$?")      { if (subst) printf "%d:%s\n", FNR, $0; i += 2; continue }
+      if (c2 == "${")      { bd++; i += 2; continue }              # `}` de expansao nao e separador
+      if (c == "}" && bd)  { bd--; i++; continue }
+      if (dq)              { i++; continue }
+      if (c == "#" && (i == 1 || substr(L, i - 1, 1) ~ /[ \t;&|(){}]/)) break
+      if (c2 == "<<") {
+        r = substr(L, i + 2); sub(/^-/, "", r); sub(/^[ \t]+/, "", r)
+        if (match(r, "^" ASPAS "[A-Za-z_][A-Za-z_0-9]*" ASPAS) || match(r, "^[A-Za-z_][A-Za-z_0-9]*")) {
+          hd = substr(r, RSTART, RLENGTH); gsub(ASPAS, "", hd); subst = 0; next
+        }
+        i += 2; continue
+      }
+      if (c ~ /[;&|(){}]/) { subst = 0; i++; continue }
+      if (c ~ /[A-Za-z_]/ && (i == 1 || substr(L, i - 1, 1) ~ /[ \t;&|(){}]/) && match(substr(L, i), CHAVE)) { subst = 0; i += RLENGTH; continue }
+      i++
+    }
+    if (pd == 0 && !bt && !sq && L !~ /\\$/) { subst = 0; bd = 0 }  # fim de linha fecha o comando
+  }
+  function aa_par(s, j, m,   d, k) { d = 0
+    while (j <= m) { k = substr(s, j, 1); if (k == "(") d++; else if (k == ")") { d--; if (d == 0) return j + 1 } j++ }
+    return j }
+  ' "$1"
+}
+aa_guarda_cega()  { :; }                       # mutante do oraculo: nunca acusa
+aa_guarda_tudo()  { grep -nF '$?' "$1"; }      # mutante do oraculo: acusa qualquer `$?`
+
+# --- oraculo 2: replay em runtime --------------------------------------------
+# Recorta do PROPRIO arquivo o grupo de comandos da familia — da primeira linha que carrega a
+# expressao do nome dinamico ate a linha do `afirma` que a consome — e roda esse trecho verbatim
+# com a condicao forcada a falsa e um `afirma` que so captura o status recebido. Prova
+# comportamento, nao texto: se o grupo voltar a perder o status (por substituicao antes do `$?`,
+# por comando no meio, ou por `$?` lido depois do `rc=$?`), o status capturado vira 0.
+aa_bloco() { # aa_bloco <script> <literal do nome dinamico> -> o grupo, verbatim
+  awk -v lit="$2" 'index($0, lit) { achou = 1 }
+                   achou { print; if (index($0, "afirma ")) exit }' "$1"
+}
+aa_replay() { # aa_replay <script> <literal do nome> <prelude> -> status que `afirma` recebeu
+  local b
+  b="$(aa_bloco "$1" "$2")"
+  [ -n "$b" ] || { printf 'BLOCO-VAZIO'; return; }
+  : > "$AA_T/cap"
+  { printf 'afirma() { printf %%s "$2" > %s/cap; }\n' "$AA_T"
+    printf '%s\nfalse\n%s\n' "$3" "$b"; } > "$AA_T/replay.sh"
+  bash "$AA_T/replay.sh" >/dev/null 2>&1
+  cat "$AA_T/cap"
+}
+aa_preserva() { # aa_preserva <status capturado> -> 0 se a condicao falsa chegou como nao-zero
+  case "$1" in [1-9] | [1-9][0-9]*) return 0 ;; *) return 1 ;; esac
+}
+
+# 1. Runtime, antes de olhar o harness: a forma canonica entrega o status da condicao, e a forma
+#    vulneravel realmente o perde. O segundo caso e o que impede o primeiro de passar de graca —
+#    sem ele, nao estariamos testando problema nenhum.
+#    A sonda vive num arquivo gerado, nunca aqui dentro: a forma vulneravel escrita no proprio
+#    harness seria acusada pelo guarda do item 2 — e um guarda com excecao convida ao abuso.
+cat > "$AA_T/sonda.sh" <<'AA_SONDA'
+eco() { printf '%s' "$2"; }
+canonica()   { local n r; n="aa-$(printf abc)"; false; r=$?; printf '%s' "$r"; }
+vulneravel() { false; eco "aa-$(printf abc)" $?; }
+printf '%s %s' "$(canonica)" "$(vulneravel)"
+AA_SONDA
+AA_SONDA="$(bash "$AA_T/sonda.sh")"
+[ "${AA_SONDA% *}" = 1 ]; aa_rc=$?
+afirma "aa1-condicao-falsa-chega-nao-zero-com-nome-dinamico" "$aa_rc" "nome derivado antes, status por variavel -> rc=${AA_SONDA% *}"
+[ "${AA_SONDA#* }" = 0 ]; aa_rc=$?
+afirma "aa1b-a-forma-vulneravel-realmente-perde-o-status" "$aa_rc" "substituicao no nome antes de \$? -> rc=${AA_SONDA#* }, a condicao do defeito existe"
+
+# 2. O harness inteiro esta livre da forma — nao so as seis familias conhecidas.
+AA_VUL="$(aa_vulneraveis "$AA_BANC" | tr '\n' ' ')"
+[ -z "$AA_VUL" ]; aa_rc=$?
+afirma "aa2-nenhuma-chamada-vulneravel-no-harness" "$aa_rc" "${AA_VUL:-nenhuma leitura de \$? depois de substituicao}"
+
+# 3. Auto-teste do guarda: cada forma vulneravel tem de ser acusada e cada forma segura tem de
+#    passar. Um guarda cego passaria no item 2 sem enxergar nada; um guarda que acusa todo `$?`
+#    tambem "passaria" se a bancada nao cobrasse os negativos.
+aa_caso() { printf '%s\n' "$2" > "$AA_T/$1.sh"; }
+aa_caso p1 'false; f "n-$(printf x)" $? d'
+aa_caso p2 'false; f "n-`printf x`" $? d'
+aa_caso p3 'false; f "n-$(echo a; echo b)" $? d'
+aa_caso p4 'for c in a b; do "$c" >/dev/null; f "n-$(basename "$c")" $? d; done'
+aa_caso p5 'false; f "$(g)" $? d'
+aa_caso p6 'false; f "n-${v:-$(printf x)}" $? d'
+aa_caso n1 'false; f "n" $? "$(printf x)"'
+aa_caso n2 'false; f "n-$((1 + 1))" $?'
+aa_caso n3 'v=zz; false; f "n-${v//z/y}" $?'
+aa_caso n4 '[ "$(printf a)" = a ]; f "n" $?'
+aa_caso n5 'false; f '"'"'n-$(printf x)'"'"' $? d'
+aa_caso n6 '# false; f "n-$(printf x)" $? d'
+aa_caso n7 'm="$(printf x)"
+false; f "n" $?'
+printf 'cat <<EOF\nn-$(printf x) $?\nEOF\n' > "$AA_T/n8.sh"
+AA_POS="p1 p2 p3 p4 p5 p6"; AA_NEG="n1 n2 n3 n4 n5 n6 n7 n8"
+aa_bateria() { # aa_bateria <implementacao do guarda> -> o que ela classificou errado
+  local g="$1" f erros=""
+  for f in $AA_POS; do [ -n "$("$g" "$AA_T/$f.sh")" ] || erros="$erros $f(nao-acusou)"; done
+  for f in $AA_NEG; do [ -z "$("$g" "$AA_T/$f.sh")" ] || erros="$erros $f(acusou)"; done
+  printf '%s' "${erros# }"
+}
+AA_BAT="$(aa_bateria aa_vulneraveis)"
+[ -z "$AA_BAT" ]; aa_rc=$?
+afirma "aa3-guarda-classifica-vulneravel-e-seguro" "$aa_rc" "${AA_BAT:-6 vulneraveis acusadas, 8 seguras liberadas}"
+AA_BAT="$(aa_bateria aa_guarda_cega)"
+[ -n "$AA_BAT" ]; aa_rc=$?
+afirma "aa3b-mutante-guarda-cega-morre" "$aa_rc" "${AA_BAT:-SOBREVIVEU: guarda que nunca acusa passou na bateria}"
+AA_BAT="$(aa_bateria aa_guarda_tudo)"
+[ -n "$AA_BAT" ]; aa_rc=$?
+afirma "aa3c-mutante-guarda-que-acusa-tudo-morre" "$aa_rc" "${AA_BAT:-SOBREVIVEU: guarda sem discriminacao passou na bateria}"
+
+# 4. As seis familias preexistentes, em runtime: com a condicao falsa, o status que `afirma`
+#    recebe e nao-zero. Cada prelude so faz a condicao real reprovar (stub do comando sob teste,
+#    arquivo vazio, script que sai 0) — a expressao do nome dinamico roda de verdade.
+printf 'exit 0\n' > "$AA_T/pl-ok.sh"; : > "$AA_T/agente-vazio.md"
+AA_LIT_GA7='ga7-orcamento-invalido-$(printf'
+AA_PRE_GA7='pl() { return 0; }; fdir() { printf %s '"$AA_T"'/sem-plano; }; D='"$AA_T"'/d; G='"$AA_T"'; ruim="2.5 buildx"; rc=0'
+for aa_f in \
+  "ga7-orcamento-invalido|$AA_LIT_GA7|$AA_PRE_GA7" \
+  "gl3-recusa-staged|gl3-recusa-\$(printf|pl() { return 0; }; D=$AA_T/d; prod=package.json" \
+  "gh-instrucao-unica|gh-instrucao-unica-\$(printf|grep() { return 1; }; inst=\"criar <slug>:01-ingestao\"" \
+  "gw3-revisor-recusa|gw3-revisor-recusa-\$(printf|PL=$AA_T/pl-ok.sh; ruim=\"T-01.01 | fraco\"" \
+  "g-agente-tabela|g-agente-tabela-\$(basename|ag=$AA_T/agente-vazio.md" \
+  "u-escritor-do-rastro|u_nome \"\$c\"|U_CASOS=u_x; u_nome() { printf ux-caso; }; u_x() { return 1; }; U_REAL=$AA_T/x" \
+; do
+  aa_nome="aa4-preserva-o-falso-${aa_f%%|*}"; aa_resto="${aa_f#*|}"
+  aa_cap="$(aa_replay "$AA_BANC" "${aa_resto%%|*}" "${aa_resto#*|}")"
+  aa_preserva "$aa_cap"; aa_rc=$?
+  afirma "$aa_nome" "$aa_rc" "condicao falsa -> afirma recebeu [$aa_cap]"
+done
+
+# 5. Mutantes do sitio corrigido, em copia temporaria da bancada. Cada um tem de morrer pelo
+#    oraculo que o nomeia, e nao de carona: o mutante 2 e exatamente a "troca de ordem" que o
+#    guarda estatico NAO ve (o `rc=$?` fica num comando simples proprio, sem substituicao) e que
+#    so o replay mata. Os equivalentes nao contam como mortos.
+AA_M="$AA_T/mut"; mkdir -p "$AA_M"
+AA_NOME_GA7='  g_nome="ga7-orcamento-invalido-$(printf '"'"'%s'"'"' "$ruim" | tr '"'"' .'"'"' '"'"'__'"'"')"'
+AA_COND_GA7='00-PLANEJAMENTO.md" ]; g_rc=$?'
+AA_AFIR_GA7='afirma "$g_nome" "$g_rc" "rc=$rc, nada gravado"'
+aa_morte() { # aa_morte <bancada> -> quais oraculos matam o arquivo
+  local m=""
+  [ -n "$(aa_vulneraveis "$1")" ] && m="$m guarda"
+  aa_preserva "$(aa_replay "$1" "$AA_LIT_GA7" "$AA_PRE_GA7")" || m="$m replay"
+  printf '%s' "${m# }"
+}
+aa_mutante() { # aa_mutante <nome> <rc geracao> <bancada mutada> <morte esperada>
+  local nome="$1" rcg="$2" arq="$3" esp="$4" m=""
+  [ "$rcg" -eq 0 ] && m="$(aa_morte "$arq")"
+  [ "$rcg" -eq 0 ] && [ "$m" = "$esp" ]; aa_rc=$?
+  afirma "$nome" "$aa_rc" "morte=[${m:-nenhuma}] esperada=[$esp] (rc geracao=$rcg)"
+}
+aa_equivalente() { # aa_equivalente <nome> <rc geracao> <bancada mutada> — equivalente nao morre
+  local nome="$1" rcg="$2" arq="$3" m=""
+  [ "$rcg" -eq 0 ] && m="$(aa_morte "$arq")"
+  [ "$rcg" -eq 0 ] && [ -z "$m" ]; aa_rc=$?
+  afirma "$nome" "$aa_rc" "equivalente, nao conta como morto; morte=[${m:-nenhuma}] (rc geracao=$rcg)"
+}
+cp "$AA_BANC" "$AA_M/controle.sh"; AA_K="$(aa_morte "$AA_M/controle.sh")"
+[ -z "$AA_K" ]; aa_rc=$?
+afirma "aam-controle-copia-intacta-sobrevive" "$aa_rc" "oraculos que reprovam a copia sem mutacao: [${AA_K:-nenhum}]"
+muta_lit "$AA_BANC" "$AA_M/m1.sh" "$AA_AFIR_GA7" 'afirma "$g_nome$(printf x)" $? "rc=$rc, nada gravado"'
+aa_mutante "aam-mutante-1-nome-montado-na-chamada-com-dolar-interrogacao" $? "$AA_M/m1.sh" "guarda replay"
+muta_lit "$AA_BANC" "$AA_M/m2a.sh" "$AA_NOME_GA7" '  :' \
+  && muta_lit "$AA_M/m2a.sh" "$AA_M/m2.sh" "$AA_COND_GA7" "00-PLANEJAMENTO.md\" ];$AA_NOME_GA7; g_rc=\$?"
+aa_mutante "aam-mutante-2-ordem-trocada-com-o-nome-entre-a-condicao-e-o-rc" $? "$AA_M/m2.sh" "replay"
+muta_lit "$AA_BANC" "$AA_M/m3.sh" "$AA_AFIR_GA7" 'afirma "$g_nome" $? "rc=$rc, nada gravado"'
+aa_mutante "aam-mutante-3-dolar-interrogacao-lido-depois-do-proprio-rc" $? "$AA_M/m3.sh" "replay"
+muta_lit "$AA_BANC" "$AA_M/e1a.sh" "$AA_COND_GA7" '00-PLANEJAMENTO.md" ]; g_estado=$?' \
+  && muta_lit "$AA_M/e1a.sh" "$AA_M/e1.sh" "$AA_AFIR_GA7" 'afirma "$g_nome" "$g_estado" "rc=$rc, nada gravado"'
+aa_equivalente "aae-equivalente-1-outro-nome-para-a-variavel-do-status" $? "$AA_M/e1.sh"
+muta_lit "$AA_BANC" "$AA_M/e2.sh" "$AA_AFIR_GA7" 'afirma "$g_nome" $g_rc "rc=$rc, nada gravado"'
+aa_equivalente "aae-equivalente-2-status-passado-sem-aspas" $? "$AA_M/e2.sh"
+
+# 6. A decisao esta registrada: sem DS-161, a forma canonica volta a ser escolha de quem escreve
+#    a proxima assercao, e o defeito reaparece na primeira chamada com nome dinamico.
+AA_DS="$SK/DECISOES-DA-SKILL.md"
+[ "$(grep -c '^| DS-161 |' "$AA_DS")" -eq 1 ]; aa_rc=$?
+afirma "aa5-ds161-registrada" "$aa_rc" "uma linha DS-161 no registro"
+AA_L161="$(grep -F '| DS-161 |' "$AA_DS")"
+[ "$(printf '%s' "$AA_L161" | grep -cF 'substitui')" -gt 0 ] && [ "$(printf '%s' "$AA_L161" | grep -cF '$?')" -gt 0 ]; aa_rc=$?
+afirma "aa5b-ds161-nomeia-a-causa" "$aa_rc" "DS-161 diz que a substituicao de comando come o \$?"
+[ "$(printf '%s' "$AA_L161" | grep -cE 'rc=\$\?|variavel')" -gt 0 ]; aa_rc=$?
+afirma "aa5c-ds161-fixa-a-forma-canonica" "$aa_rc" "DS-161 diz capturar o status e passar por variavel"
+rm -rf "$AA_T"
 
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"
