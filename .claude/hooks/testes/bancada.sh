@@ -5250,6 +5250,202 @@ Z_FX_CANON="$(z_faixa "$Z_CANON")"; Z_FX_HEV="$(z_faixa "$Z_HEV")"
 afirma "z8c-fator-canonico-muda-a-faixa-publicada" $? \
   "fator $Z_CANON -> $Z_FX_CANON h; fator $Z_HEV -> $Z_FX_HEV h"
 
+# 8d. O PISO da faixa agregada (DS-163, que estende a DS-41). A DS-41 fixou "min nunca abaixo do
+#     melhor caso somado", e o Passo 5 a escrevia com DOIS operandos diferentes: comparava `min`
+#     contra "a maior `o` do conjunto" e atribuia "a soma dos `o`". Sao grandezas distintas, e o
+#     piso ficava sem definicao justamente onde ha fator de correcao abaixo de 1 — permitido e
+#     alcancavel (tipo cujo historico mostra que o projeto estima para cima). A regra canonica tem
+#     um operando so, corrigido task a task: piso_conjunto = soma( o(t) * fator(t) ), com
+#     fator(t) = 1 quando o tipo da task nao tem fator ativo.
+#
+# Os detectores de formula leem o texto sem backtick, sem negrito e sem espaco em branco, mas
+# PRESERVAM o `*`: aqui o operador de multiplicacao e contrato, nao marcacao. `**` sempre vem em
+# par (negrito) e cai antes; `×` e `*` sao a mesma multiplicacao. Assim um mutante de espacamento
+# ou de marcacao sobrevive, e um mutante de operando morre.
+z_fml() { sed -e 's/\*\*//g' -e 's/`//g' -e 's/×/*/g' -e 's/[[:space:]]//g' "$1"; }
+z_fml_tem() { [ "$(z_fml "$1" | grep -cF "$2")" -gt 0 ]; }
+
+Z_PISO_FML='piso_conjunto=soma(o(t)*fator(t))'
+Z_PISO_CRU_FML='piso_conjunto=soma(o(t))'
+Z_SAN_FML='[soma(o(t)*fator(t)),soma(p(t)*fator(t))]'
+Z_SAN_CRU_FML='[somadoso,somadosp]'
+# A forma antiga, em prosa: gatilho na maior `o`, atribuicao na soma crua dos `o`.
+Z_MAIOR_O_RE='maior .?o.? do conjunto|maior dos .?o.?|soma dos .?o.? como piso|piso: soma dos .?o.?'
+# Nomear a forma recusada nao e prescreve-la (mesmo cuidado da z2 e da y8): a linha que traz o
+# token tem de estar livre de marca de recusa para contar como prescricao.
+Z_RECUSA_PISO_RE="$Z_RECUSA_RE|publica|fracion|reprova|viraria|deixam? o piso sem|grandezas diferentes"
+z_prescreve_maior_o() {
+  local tot rec
+  tot="$(z_conta "$1" "$Z_MAIOR_O_RE")"
+  rec="$(z_txt "$1" | grep -iE "$Z_MAIOR_O_RE" | grep -ciE "$Z_RECUSA_PISO_RE")"
+  [ "$tot" -gt 0 ] && [ "$rec" -lt "$tot" ]
+}
+z_piso_lido() { # z_piso_lido <arquivo> -> corrigido | cru | contraditorio | indefinido
+  local f=1 g=1 a=1 w=1
+  z_fml_tem "$1" "$Z_PISO_FML" && f=0
+  # O gatilho compara e atribui o MESMO operando, na mesma linha: `min < piso_conjunto` entao
+  # `min = piso_conjunto`. Conferir so a formula nao basta — era exatamente o par comparacao/
+  # atribuicao que divergia.
+  [ "$(z_fml "$1" | grep -cE 'min<piso_conjunto.*min=piso_conjunto')" -gt 0 ] && g=0
+  z_fml_tem "$1" "$Z_PISO_CRU_FML" && a=0
+  z_prescreve_maior_o "$1" && w=0
+  if   [ $w -eq 0 ];                   then printf 'contraditorio'
+  elif [ $f -eq 0 ] && [ $g -eq 0 ];   then printf 'corrigido'
+  elif [ $a -eq 0 ];                   then printf 'cru'
+  else printf 'indefinido'; fi
+}
+Z_PISO_FORA=""
+for z_f in $Z_CONSOMEM; do
+  z_p="$(z_piso_lido "$z_f")"
+  [ "$z_p" = corrigido ] || Z_PISO_FORA="$Z_PISO_FORA $(basename "$z_f"):$z_p"
+done
+[ -z "$Z_PISO_FORA" ]
+afirma "z8d-piso-e-a-soma-dos-o-corrigidos-por-task" $? "fora do piso canonico=[${Z_PISO_FORA:- nenhum}]"
+
+# 8e. Reference e template dizem a MESMA regra. O template e o que o executor copia; contrato que
+#     mora so na reference vira faixa publicada por um arquivo e nao pelo outro.
+Z_NEUTRO_FORA=""
+for z_f in $Z_CONSOMEM; do
+  z_tem_re "$z_f" 'fator\(t\) *= *1($|[^0-9.])' || Z_NEUTRO_FORA="$Z_NEUTRO_FORA $(basename "$z_f")"
+done
+[ -z "$Z_NEUTRO_FORA" ]
+afirma "z8e-fator-neutro-por-task-declarado" $? "sem fator(t)=1=[${Z_NEUTRO_FORA:- nenhum}]"
+
+# 8f. O CLAMP vem antes do arredondamento a hora inteira, e as duas metades na mesma linha: qual
+#     estagio, e de que arredondamento se fala. Pisar depois de arredondar publica `min`
+#     fracionario (3,20 h no caso vinculante), e a faixa publicada e em hora inteira.
+z_clamp_antes() {
+  [ "$(z_txt "$1" | grep -iE 'antes d(o|e) (floor|arredond)' | grep -ciE 'hora inteira|floor\(min\)')" -gt 0 ]
+}
+z_prescreve_clamp_depois() {
+  local tot rec
+  tot="$(z_conta "$1" 'depois d(o|e) (floor|arredond)')"
+  rec="$(z_txt "$1" | grep -iE 'depois d(o|e) (floor|arredond)' | grep -ciE "$Z_RECUSA_PISO_RE")"
+  [ "$tot" -gt 0 ] && [ "$rec" -lt "$tot" ]
+}
+Z_CLAMP_FORA=""
+for z_f in $Z_CONSOMEM; do
+  z_clamp_antes "$z_f" || Z_CLAMP_FORA="$Z_CLAMP_FORA $(basename "$z_f"):sem-antes"
+  z_prescreve_clamp_depois "$z_f" && Z_CLAMP_FORA="$Z_CLAMP_FORA $(basename "$z_f"):prescreve-depois"
+done
+[ -z "$Z_CLAMP_FORA" ]
+afirma "z8f-clamp-antes-do-arredondamento" $? "fora do estagio=[${Z_CLAMP_FORA:- nenhum}]"
+
+# 8g. A SANIDADE do Passo 5 e do checklist usa os limites corrigidos task a task. Com fator abaixo
+#     de 1, o intervalo bruto reprova conta certa: no caso vinculante, min=3,7333 fica FORA de
+#     [4, 12] e dentro de [3,20, 9,60]. Verificacao que reprova o certo manda refazer o que estava
+#     pronto, e quem refaz converge para o numero errado.
+z_sanidade_lida() { # z_sanidade_lida <arquivo> -> corrigida | crua | ambas | nenhuma
+  local c=1 b=1
+  z_fml_tem "$1" "$Z_SAN_FML" && c=0
+  z_fml_tem "$1" "$Z_SAN_CRU_FML" && b=0
+  if   [ $c -eq 0 ] && [ $b -eq 0 ]; then printf 'ambas'
+  elif [ $c -eq 0 ];                 then printf 'corrigida'
+  elif [ $b -eq 0 ];                 then printf 'crua'
+  else printf 'nenhuma'; fi
+}
+Z_SAN_FORA=""
+for z_f in $Z_CONSOMEM; do
+  z_s="$(z_sanidade_lida "$z_f")"
+  [ "$z_s" = corrigida ] || Z_SAN_FORA="$Z_SAN_FORA $(basename "$z_f"):$z_s"
+done
+[ -z "$Z_SAN_FORA" ]
+afirma "z8g-sanidade-usa-o-intervalo-corrigido" $? "fora do intervalo corrigido=[${Z_SAN_FORA:- nenhum}]"
+
+# 8h. Dados literais que SEPARAM as leituras do piso, no caso vinculante: uma task `api`
+#     o=4 m=5 p=12 com o fator 0,80 do seu tipo. Media corrigida 4,80, desvio corrigido 1,0667,
+#     min cru 3,7333, max 5,8667. Piso corrigido 4 × 0,80 = 3,20, que 3,7333 nao fura: faixa
+#     publicada 3–6 h. Com o piso bruto (soma dos `o` sem fator, 4) o min e pisado em 4 e a faixa
+#     viraria 4–6 h — uma hora de esforco na base da faixa que o metodo nao calculou. Pisando
+#     depois do arredondamento, o min publicado e 3,2: nem hora inteira.
+z_faixa_t() { # z_faixa_t <piso:corrigido|cru|maior_o> <clamp:antes|depois> <fator_global|-> <o,m,p,fator>...
+  local piso="$1" clamp="$2" fg="$3"; shift 3
+  printf '%s\n' "$@" | awk -F, -v piso="$piso" -v clamp="$clamp" -v fg="$fg" '
+    { o=$1; m=$2; p=$3; f=(fg == "-" ? $4 : fg)
+      M += (o + 4*m + p)/6 * f; v = (p - o)/6 * f; V += v*v
+      soc += o*f; so += o; if (o > mo) mo = o }
+    END {
+      d = sqrt(V); mn = M - d; mx = M + d
+      ps = (piso == "corrigido" ? soc : (piso == "cru" ? so : mo))
+      fmx = (mx == int(mx) ? mx : int(mx) + 1)
+      if (clamp == "antes") { if (mn < ps) mn = ps; fmn = int(mn) }
+      else { fmn = int(mn); if (fmn < ps) fmn = ps }
+      printf "%g-%g", fmn, fmx
+    }'
+}
+Z_CASO_API='4,5,12,0.80'
+Z_FX_PISO_OK="$(z_faixa_t corrigido antes - $Z_CASO_API)"
+Z_FX_PISO_CRU="$(z_faixa_t cru antes - $Z_CASO_API)"
+Z_FX_PISO_TARDE="$(z_faixa_t corrigido depois - $Z_CASO_API)"
+[ "$Z_FX_PISO_OK" = "3-6" ] && [ "$Z_FX_PISO_CRU" = "4-6" ] && [ "$Z_FX_PISO_TARDE" = "3.2-6" ] \
+  && [ "$Z_FX_PISO_OK" != "$Z_FX_PISO_CRU" ] && [ "$Z_FX_PISO_OK" != "$Z_FX_PISO_TARDE" ]
+afirma "z8h-dados-separam-as-leituras-do-piso" $? \
+  "corrigido=$Z_FX_PISO_OK cru=$Z_FX_PISO_CRU pisado-depois=$Z_FX_PISO_TARDE"
+
+# 8i. A receita e LIDA de cada ponto que consome o fator e aplicada ao caso vinculante: o conjunto
+#     dos resultados tem de ser {3-6}. Era {indefinido} — o contrato nao respondia qual operando.
+Z_FX_PISO=""
+for z_f in $Z_CONSOMEM; do
+  case "$(z_piso_lido "$z_f")" in
+    corrigido) Z_FX_PISO="$Z_FX_PISO $(z_faixa_t corrigido antes - $Z_CASO_API)" ;;
+    cru)       Z_FX_PISO="$Z_FX_PISO $(z_faixa_t cru antes - $Z_CASO_API)" ;;
+    *)         Z_FX_PISO="$Z_FX_PISO indefinido" ;;
+  esac
+done
+Z_FX_PISO_UNICO="$(printf '%s\n' $Z_FX_PISO | sort -u | tr '\n' ' ' | sed 's/ $//')"
+[ "$Z_FX_PISO_UNICO" = "3-6" ]
+afirma "z8i-faixa-canonica-do-caso-vinculante" $? "faixa por ponto=[$Z_FX_PISO_UNICO] (esperado 3-6)"
+
+# 8j. CONJUNTO MISTO: o fator e por task, nunca um fator global do conjunto. `api` o=4 m=5 p=12
+#     com fator 0,80 mais `ui` o=3 m=4 p=5 sem fator ativo (fator 1) publicam 7–10 h. Aplicar
+#     0,80 ao conjunto inteiro publica 6–10 h; ignorar o fator publica 8–12 h. Tres faixas
+#     diferentes do mesmo plano, e so uma sai da regra.
+Z_CASO_MISTO="4,5,12,0.80 3,4,5,1"
+Z_FX_MISTO_T="$(z_faixa_t corrigido antes - $Z_CASO_MISTO)"
+Z_FX_MISTO_G="$(z_faixa_t corrigido antes 0.80 $Z_CASO_MISTO)"
+Z_FX_MISTO_N="$(z_faixa_t corrigido antes 1 $Z_CASO_MISTO)"
+[ "$Z_FX_MISTO_T" = "7-10" ] && [ "$Z_FX_MISTO_G" = "6-10" ] && [ "$Z_FX_MISTO_N" = "8-12" ] \
+  && [ "$Z_FX_MISTO_T" != "$Z_FX_MISTO_G" ] && [ "$Z_FX_MISTO_T" != "$Z_FX_MISTO_N" ]
+afirma "z8j-conjunto-misto-usa-o-fator-de-cada-task" $? \
+  "por task=$Z_FX_MISTO_T global=$Z_FX_MISTO_G sem fator=$Z_FX_MISTO_N"
+
+# 8k. E a sanidade do mesmo caso: o intervalo corrigido aprova a conta certa, o bruto a reprova.
+z_sanidade_aplica() { # z_sanidade_aplica <corrigido|cru> <o,m,p,fator>... -> aprova | reprova
+  local lim="$1"; shift
+  printf '%s\n' "$@" | awk -F, -v lim="$lim" '
+    { o=$1; m=$2; p=$3; f=$4
+      M += (o + 4*m + p)/6 * f; v = (p - o)/6 * f; V += v*v
+      soc += o*f; spc += p*f; so += o; sp += p }
+    END {
+      d = sqrt(V); lo = (lim == "corrigido" ? soc : so); hi = (lim == "corrigido" ? spc : sp)
+      printf "%s", (M - d >= lo && M + d <= hi) ? "aprova" : "reprova"
+    }'
+}
+Z_SAN_OK="$(z_sanidade_aplica corrigido $Z_CASO_API)"
+Z_SAN_CRU="$(z_sanidade_aplica cru $Z_CASO_API)"
+[ "$Z_SAN_OK" = aprova ] && [ "$Z_SAN_CRU" = reprova ]
+afirma "z8k-intervalo-bruto-reprovaria-a-conta-certa" $? \
+  "corrigido=$Z_SAN_OK bruto=$Z_SAN_CRU (min 3,7333 fora de [4, 12])"
+
+# 8l. A decisao esta registrada e e APPEND-ONLY: DS-163 entra estendendo a DS-41, e a DS-41 fica
+#     byte a byte como estava. Reescrever uma decisao antiga apaga o rastro de por que a nova
+#     existe — e o registro e onde a proxima sessao encontra o porque.
+Z_DS163="$(grep -F '| DS-163 |' "$Z_DS")"
+[ -n "$Z_DS163" ]
+afirma "z8l-ds163-registrada" $? "a decisao do piso existe no registro"
+[ "$(printf '%s' "$Z_DS163" | grep -cF 'DS-41')" -gt 0 ]; z_rc=$?
+afirma "z8m-ds163-declara-que-estende-ds41" "$z_rc" "DS-163 nomeia a DS-41 que ela estende"
+Z_DS163_F="$W/.z-ds163"; printf '%s\n' "$Z_DS163" > "$Z_DS163_F"
+z_fml_tem "$Z_DS163_F" "$Z_PISO_FML"
+afirma "z8n-ds163-traz-a-formula-do-piso" $? "DS-163 escreve $Z_PISO_FML"
+
+# A DS-41 intacta: conteudo e tamanho conferidos pelo cksum da propria linha (376 bytes, a linha
+# com o \n do grep). Qualquer reescrita, ate de uma virgula, muda o par.
+Z_DS41_CK_ESPERADO='2616782449 376'
+Z_DS41_CK="$(grep -F '| DS-41 |' "$Z_DS" | cksum)"
+[ "$(grep -cF '| DS-41 |' "$Z_DS")" -eq 1 ] && [ "$Z_DS41_CK" = "$Z_DS41_CK_ESPERADO" ]
+afirma "z8o-ds41-permanece-byte-a-byte" $? "cksum=[$Z_DS41_CK] esperado=[$Z_DS41_CK_ESPERADO]"
+
 # 9. A decisao esta registrada: DS-160 fixa a receita, e o registro e onde a proxima sessao
 #    encontra o PORQUE — sem ele, a convencao volta a ser escolha de quem executa.
 Z_DS160="$(grep -F '| DS-160 |' "$Z_DS")"
