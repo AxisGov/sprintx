@@ -4853,6 +4853,139 @@ X_ENUM="$(grep -F '| `tipo_task` |' "$X_SCH" | head -1)"
 [ -n "$X_ENUM" ] && ! printf '%s' "$X_ENUM" | grep -qE '—|n/a|null'; x_rc=$?
 afirma "x8-enum-tipo-task-sem-sentinela" "$x_rc" "enum=[$(printf '%s' "$X_ENUM" | cut -c1-60)...]"
 
+echo "== Y. o agregador da calibracao do HISTORICO.md e canonico: media, nunca mediana (D-09) =="
+# O contrato dizia as duas coisas sobre o MESMO numero. `desvio_medio` era definido como a media
+# dos `desvio_task` (06-execucao.md Passo 3, TEMPLATE-HISTORICO.md, 07-estimativa.md Passo 10, e o
+# proprio nome do campo persistido), e ao mesmo tempo duas frases mandavam a calibracao usar
+# mediana (06-execucao.md, 08-rastro.md, DS-37, README.md). A justificativa da mediana e sobre
+# tempo de parede com pausa — isto e, sobre `duracao_observada`, que o schema, o template e a
+# 07-estimativa declaram FORA do desvio e FORA da calibracao. Logo a premissa da mediana nao
+# alcanca o numero que calibra: o que a calibracao agrega e o `desvio_task`, construido sobre o
+# `real` anotado, que ja exclui pausa. Duas execucoes validas produziam 2,0 e 1,0 do mesmo
+# historico. Canonico: MEDIA. `duracao_observada` nao escolhe o agregador porque nao o alimenta.
+Y_EXE="$SK/references/06-execucao.md"
+Y_RAS="$SK/references/08-rastro.md"
+Y_TPL="$SK/assets/TEMPLATE-HISTORICO.md"
+Y_SCH="$SK/references/00-schema.md"
+Y_EST="$SK/references/07-estimativa.md"
+Y_DS="$SK/DECISOES-DA-SKILL.md"
+Y_RME="$H/../../README.md"
+
+# Os pontos que DEFINEM o agregador, e o conjunto maior onde a regra oposta nao pode reaparecer.
+Y_DEFINEM="$Y_EXE $Y_RAS $Y_TPL $Y_SCH $Y_EST"
+Y_TODOS="$Y_DEFINEM $Y_DS $Y_RME"
+
+# 1. Dados literais que SEPARAM os dois agregadores: sem isso, "media ou mediana" seria discussao
+#    sem consequencia observavel. Desvios [1,0 1,0 4,0]: media 2,00 e mediana 1,00.
+Y_DESVIOS='1.0 1.0 4.0'
+y_media()   { printf '%s\n' $1 | awk '{s+=$1;n++} END{ if (n) printf "%.2f", s/n }'; }
+y_mediana() { printf '%s\n' $1 | sort -g | awk '{v[NR]=$1} END{ if (NR%2) printf "%.2f", v[(NR+1)/2];
+              else printf "%.2f", (v[NR/2]+v[NR/2+1])/2 }'; }
+Y_MED="$(y_media "$Y_DESVIOS")"; Y_MDN="$(y_mediana "$Y_DESVIOS")"
+[ "$Y_MED" = "2.00" ] && [ "$Y_MDN" = "1.00" ] && [ "$Y_MED" != "$Y_MDN" ]
+afirma "y1-dados-separam-os-dois-agregadores" $? "desvios=[$Y_DESVIOS] media=$Y_MED mediana=$Y_MDN"
+
+# 2. O agregador e LIDO da documentacao, nao assumido pelo teste: cada ponto canonico declara um
+#    token, e o conjunto dos tokens tem de ser exatamente {media}. `ambos` e a contradicao D-09.
+y_diz_media()   { grep -qiE 'm[ée]dia(\*\*)? d(os|e) (`?desvio_task`?|desvios)' "$1"; }
+y_diz_mediana() { grep -qiE 'mediana(\*\*)? d(os|e) (`?desvio_task`?|desvios)|calibra[çc][ãa]o usa (\*\*)?mediana|mediana(\*\*)?, n[ãa]o m[ée]dia' "$1"; }
+y_agregador() { # y_agregador <arquivo> -> media | mediana | ambos | nenhum
+  local m=1 d=1
+  y_diz_media "$1" && m=0
+  y_diz_mediana "$1" && d=0
+  if   [ $m -eq 0 ] && [ $d -eq 0 ]; then printf 'ambos'
+  elif [ $m -eq 0 ]; then printf 'media'
+  elif [ $d -eq 0 ]; then printf 'mediana'
+  else printf 'nenhum'; fi
+}
+# 2a. Nenhum arquivo do contrato prescreve mediana, em ponto nenhum: a regra oposta reintroduzida
+#     em QUALQUER um deles mata este caso. E o detector da contradicao.
+Y_SUJOS=""
+for y_f in $Y_TODOS; do
+  case "$(y_agregador "$y_f")" in mediana|ambos) Y_SUJOS="$Y_SUJOS $(basename "$y_f")" ;; esac
+done
+[ -z "$Y_SUJOS" ]
+afirma "y2-nenhum-ponto-prescreve-mediana" $? "arquivos com mediana=[${Y_SUJOS:- nenhum}]"
+
+# 2b. E cada ponto que define o agregador diz `media`, nao `nenhum`: regra que so existe por
+#     ausencia da errada e regra que a sessao seguinte nao encontra.
+Y_MUDOS=""
+for y_f in $Y_DEFINEM; do
+  [ "$(y_agregador "$y_f")" = "media" ] || Y_MUDOS="$Y_MUDOS $(basename "$y_f"):$(y_agregador "$y_f")"
+done
+[ -z "$Y_MUDOS" ]
+afirma "y2b-todo-ponto-canonico-diz-media" $? "fora de media=[${Y_MUDOS:- nenhum}]"
+
+# 3. O agregador lido da documentacao, APLICADO aos desvios literais, da um valor unico — e e
+#    2,00. Trocar o calculo esperado para a mediana mata este caso.
+Y_VALORES=""
+for y_f in $Y_DEFINEM; do
+  case "$(y_agregador "$y_f")" in
+    media)   Y_VALORES="$Y_VALORES $(y_media "$Y_DESVIOS")" ;;
+    mediana) Y_VALORES="$Y_VALORES $(y_mediana "$Y_DESVIOS")" ;;
+    *)       Y_VALORES="$Y_VALORES indefinido" ;;
+  esac
+done
+Y_UNICO="$(printf '%s\n' $Y_VALORES | sort -u | tr '\n' ' ' | sed 's/ $//')"
+[ "$Y_UNICO" = "2.00" ]
+afirma "y3-um-valor-canonico-sobre-os-mesmos-dados" $? "valores por ponto canonico=[$Y_UNICO] (esperado 2.00)"
+
+# 4. A razao pela qual `duracao_observada` NAO decide o agregador esta escrita, e nos dois pontos
+#    que carregavam a frase errada: a justificativa da mediana era sobre tempo de parede, e tempo
+#    de parede nao entra na conta. Sem isto escrito, a regra oposta volta com a mesma aparencia
+#    de razao.
+for y_f in "$Y_EXE" "$Y_RAS"; do
+  tem "$y_f" 'não escolhe o agregador'; y_rc=$?
+  afirma "y4-duracao-observada-nao-escolhe-o-agregador-em-$(basename "$y_f")" "$y_rc" \
+    "a razao esta explicita onde estava a frase errada"
+done
+
+# 5. O que a calibracao agrega e nomeado: `desvio_task`, vindo do `real` anotado — nunca o tempo
+#    de parede. Permitir que `duracao_observada` alimente a calibracao mata este caso.
+y_exclui() { # y_exclui <arquivo> — o arquivo tira `duracao_observada` da calibracao
+  grep -qiE 'duração observada|`duracao_observada`' "$1" &&
+  grep -qiE 'n[ãa]o (entra|participa)[^.]*calibra|fora da `calibracao`|calibra[çc][ãa]o nunca a l[êe]' "$1"
+}
+Y_VAZADOS=""
+for y_f in $Y_DEFINEM; do
+  y_exclui "$y_f" || Y_VAZADOS="$Y_VAZADOS $(basename "$y_f")"
+done
+[ -z "$Y_VAZADOS" ]
+afirma "y5-duracao-observada-fora-da-calibracao-em-todo-ponto" $? "sem a exclusao=[${Y_VAZADOS:- nenhum}]"
+tem "$Y_EXE" '`desvio_task`'; afirma "y5b-execucao-nomeia-o-insumo-agregado" $? "o agregado e o desvio_task"
+tem "$Y_RAS" '`desvio_task`'; afirma "y5c-rastro-nomeia-o-insumo-agregado" $? "o rastro aponta para o desvio_task"
+
+# 6. O campo persistido nao e renomeado: `desvio_medio` continua a chave do YAML no schema e no
+#    template, e nenhuma variante `desvio_mediana` aparece. Compatibilidade de schema e parte do
+#    contrato — a correcao e de prosa, nao de formato.
+grep -qF 'desvio_medio:' "$Y_SCH" && grep -qF 'desvio_medio:' "$Y_TPL"
+afirma "y6-chave-desvio-medio-preservada" $? "a chave do YAML continua desvio_medio"
+Y_RENOMEIO="$(grep -rlE 'desvio_mediana|mediana_desvio' $Y_TODOS | tr '\n' ' ')"
+[ -z "$Y_RENOMEIO" ]
+afirma "y6b-nenhuma-chave-renomeada" $? "arquivos com chave renomeada=[${Y_RENOMEIO:- nenhum}]"
+
+# 7. A decisao que originou a contradicao foi corrigida no proprio registro: DS-37 nasceu com a
+#    frase da mediana (107dd95), e decisao nao corrigida e a contradicao esperando a proxima
+#    sessao reinstala-la como se fosse a regra.
+Y_DS37="$(grep -F '| DS-37 |' "$Y_DS")"
+[ -n "$Y_DS37" ] && ! printf '%s' "$Y_DS37" | grep -qiE 'usa (\*\*)?mediana|mediana(\*\*)?, n[ãa]o m[ée]dia'; y_rc=$?
+afirma "y7-ds37-sem-a-regra-oposta" "$y_rc" "DS-37 nao manda mais usar mediana"
+printf '%s' "$Y_DS37" | grep -qiE 'm[ée]dia(\*\*)? d(os|e) (`?desvio_task`?|desvios)'; y_rc=$?
+afirma "y7b-ds37-declara-o-agregador-canonico" "$y_rc" "DS-37 diz media dos desvio_task"
+
+# 8. Nenhum ponto diz que a duracao do rastro ALIMENTA a calibracao. Essa frase e a premissa de
+#    onde a mediana saiu: se o insumo fosse tempo de parede, trocar o agregador por causa da pausa
+#    faria sentido. Ela sobrevivia na vitrine (README.md), na SKILL.md e no comentario do hook que
+#    grava o evento — tres lugares onde a proxima sessao reconstroi a regra errada do zero.
+# O sujeito tem de ser a duracao/tempo de parede: o `real` alimenta a calibracao de verdade, e
+# dizer isso esta correto (Passo 2 da F6). `[^.|]` nao cruza ponto nem separador de celula — sem
+# isso a regra certa, escrita como "nem alimenta a calibracao", seria lida como a premissa errada.
+Y_ALIMENTA="$(grep -rnoE '(dura[çc][ãa]o|duracao_observada|tempo de parede)[^.|]*aliment(a|ando)[^.|]*calibra[çc][ãa]o' \
+  $Y_TODOS "$SK/SKILL.md" "$H/comum/rastro-post.sh" \
+  | grep -viE 'n[ãa]o aliment|nem aliment' | tr '\n' ' ')"
+[ -z "$Y_ALIMENTA" ]
+afirma "y8-duracao-nao-e-declarada-insumo-da-calibracao" $? "ocorrencias=[${Y_ALIMENTA:-nenhuma}]"
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"
 [ "$pulado" -eq 0 ] || echo "  ATENCAO: skip interno e buraco de cobertura da sprintx nesta plataforma, nao dependencia externa."

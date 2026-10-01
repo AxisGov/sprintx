@@ -226,7 +226,7 @@ Quando o agente não existe no harness em uso, a fase roda como sempre rodou —
 
 ### O rastro
 
-Hooks e skill gravam os eventos em `docs/eventos/<trabalho_id>.jsonl`, formato em `references/08-rastro.md`; a skill grava os dela pelo escritor `scripts/rastro.sh`, nunca montando a linha à mão. É o que dá ao painel a linha do tempo do trabalho, quem fez o quê, e a duração real por task — esta última alimentando a calibração da F3.5, sem ninguém anotar nada.
+Hooks e skill gravam os eventos em `docs/eventos/<trabalho_id>.jsonl`, formato em `references/08-rastro.md`; a skill grava os dela pelo escritor `scripts/rastro.sh`, nunca montando a linha à mão. É o que dá ao painel a linha do tempo do trabalho, quem fez o quê, e a duração de cada task — esta última entrando no `HISTORICO.md` da F3.5 como `duracao_observada`, sem ninguém anotar nada, e fora da calibração: tempo de parede não é esforço (`references/08-rastro.md`).
 
 ## Onde fica `docs/sprintx/features/<slug>/`
 
