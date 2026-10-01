@@ -558,9 +558,23 @@ Regras duras deste kind:
   (`[]` se nenhum).
 - `estimado_min`, `estimado_max`, `estimado_media` e `desvio` são `null` quando o trabalho
   rodou sem a F3.5; `real` é sempre preenchido.
+- **Entrada calibrável (DS-164).** É a entrada encerrada cujo `desvio` persistido é número — não
+  nulo. Entrada que rodou sem a F3.5 também encerra, com `real` e sem `desvio`: é entrada encerrada
+  que a calibração não tem como agregar. Por isso a cadeia inteira lê só as calibráveis —
+  `entradas` conta somente as entradas daquele tipo com `desvio` numérico (não nulo),
+  `desvio_medio` é a média somente dessas entradas elegíveis, e o limiar do `fator_ativo` conta
+  somente elas.
+  Entrada com `desvio: null` fica fora da contagem e nunca como zero: duas elegíveis
+  `1.20` e `1.30`, com duas entradas nulas do mesmo tipo ao lado, gravam `entradas: 2` com
+  `desvio_medio: 1.25` — nunca `entradas: 4` com `desvio_medio: 0.63`.
 - `desvio` é `real / estimado_media`, **arredondado a duas casas decimais com meio para cima
   (half-up)** — e é o valor **arredondado antes** de ser gravado que a chave carrega.
-  `fator_ativo` só é `true` com 3 ou mais entradas encerradas daquele tipo.
+  `fator_ativo` só é `true` com **3 ou mais entradas elegíveis** daquele tipo.
+- **Quantas calibráveis, qual forma (DS-164).** Com **1 ou 2 entradas elegíveis**, o item daquele
+  `tipo_task` existe na `calibracao`, com o contador já preenchido e `fator_ativo: false` — o
+  próximo fechamento o incrementa, e apagá-lo perderia a contagem.
+  `calibracao: []` é o estado de **nenhuma entrada elegível** em tipo nenhum, nunca o de
+  "poucas entradas".
 - **Precisão e desempate (DS-160).** `desvio` e `desvio_medio` têm
   **duas casas decimais**, com desempate **half-up**: quando a terceira casa é exatamente `5`, a
   segunda sobe. A razão `1,125` — o empate exato, de `real: 4.5` sobre `estimado_media: 4.0` —
@@ -570,7 +584,7 @@ Regras duras deste kind:
   vírgula — as duas formas do mesmo número, com as mesmas duas casas (regra universal 7); a única
   exceção é a sintaxe de fórmula, onde o contrato a indica explicitamente.
 - `desvio_medio` é a **média** dos `desvio_calibracao_task`, nunca o `desvio_padrao_task` — a
-  chave `desvio` de cada entrada encerrada daquele tipo, já **persistida** e portanto já
+  chave `desvio` de cada entrada elegível daquele tipo, já **persistida** e portanto já
   arredondada, nunca a média das razões brutas —, **arredondada de novo pela mesma regra**:
   duas casas, half-up. O agregador é **único** e a precisão também: dois executores que leiam
   este contrato gravam o mesmo número, dígito a dígito, a partir do mesmo histórico. Nem o
@@ -581,7 +595,8 @@ Regras duras deste kind:
   `references/07-estimativa.md`, que é o desvio-padrão PERT de uma estimativa, medido em
   **horas** e somado em quadratura. As duas grandezas **não são intercambiáveis**, e nenhum
   dos dois símbolos vira chave do YAML: em disco continuam valendo `desvio` e `desvio_medio`.
-- `calibracao` é `[]` enquanto não houver entrada suficiente para calcular desvio por tipo. Com
+- `calibracao` é `[]` enquanto não houver **nenhuma entrada elegível** em tipo nenhum — uma só já
+  cria o item do tipo, com `fator_ativo: false`. Com
   `calibracao: []`, a tabela `Calibração por tipo de task` da prosa fica **com cabeçalho e separador
   e sem nenhuma linha de dados** — regra universal 7 aplicada à lista vazia: o YAML diz `[]` e a
   prosa não mostra linha nenhuma. Cada linha de dados corresponde a **um** item de `calibracao` e

@@ -6017,6 +6017,324 @@ AB_VITRINE="$(grep -rlF 'desvio_task' "$H/../../README.md" "$SK/SKILL.md" 2>/dev
 [ -z "$AB_VITRINE" ]; ab_rc=$?
 afirma "ab-vitrine-sem-o-simbolo-colidente" "$ab_rc" "arquivos com o simbolo antigo=[${AB_VITRINE:-nenhum}]"
 
+echo "== AC. a calibracao conta so entradas com \`desvio\` numerico; \`desvio: null\` nao entra (B2) =="
+# A D-09 fixou o AGREGADOR, a D-10 a PRECISAO e a D-11 o NOME. O CONJUNTO AGREGADO continuava
+# indefinido. O mesmo schema diz as duas coisas:
+#   - `estimado_min`, `estimado_max`, `estimado_media` e `desvio` sao `null` quando o trabalho
+#     rodou sem a F3.5; `real` e sempre preenchido  (00-schema.md, kind estimativa_historico);
+#   - `fator_ativo` so e `true` com 3 ou mais entradas ENCERRADAS daquele tipo (mesmo arquivo),
+#     e `desvio_medio` e a media dos desvios persistidos das entradas ENCERRADAS daquele tipo
+#     (06-execucao.md Passo 3, TEMPLATE-HISTORICO.md).
+# Entrada sem F3.5 e entrada encerrada: ela tem `real`, nao tem `desvio`. Logo "entradas
+# encerradas" alcanca entradas cujo `desvio` e `null`, e o contrato nao diz o que fazer com elas —
+# nem no contador `entradas`, nem na media `desvio_medio`, nem no limiar do `fator_ativo`. Duas
+# execucoes honestas do MESMO historico gravam `entradas: 2 / desvio_medio: 1.25 /
+# fator_ativo: false` e `entradas: 4 / desvio_medio: 0.63 / fator_ativo: true`: contador, numero e
+# chave booleana diferentes, e um fator de correcao LIGADO sobre dois desvios reais.
+# Fica ambigua tambem a FORMA com 1 ou 2 entradas elegiveis: item presente com `fator_ativo:
+# false`, ou nenhum item? A D-08 fixou so o extremo (`calibracao: []` e a tabela sem linha de
+# dados), e apagar o item com poucas entradas perde o contador que o proximo fechamento incrementa.
+# Canonico a fixar: `entradas`, `desvio_medio` e `fator_ativo` leem SO as entradas com `desvio`
+# numerico (nao nulo); nulo nunca vale zero; item presente a partir de 1 elegivel; `calibracao: []`
+# so sem nenhuma elegivel.
+# Pontos que DEFINEM o conjunto agregado, os que definem o LIMIAR, e os que definem a FORMA.
+AC_REL_DEFINEM="references/00-schema.md references/06-execucao.md assets/TEMPLATE-HISTORICO.md"
+AC_REL_LIMIAR="references/00-schema.md references/06-execucao.md"
+AC_REL_FORMA="references/00-schema.md assets/TEMPLATE-HISTORICO.md"
+
+# Detectores sobre o texto SEM marcacao, contando linhas em vez de abortar na primeira: mesma
+# disciplina das secoes Z e AB (`grep -q` depois de um pipe derruba o pipeline com `pipefail`).
+ac_txt() { tr -d '*`' < "$1"; }
+ac_conta() { ac_txt "$1" | grep -ciE "$2"; }
+ac_tem_re() { [ -f "$1" ] && [ "$(ac_conta "$1" "$2")" -gt 0 ]; }
+
+# As politicas que o contrato tem de fixar, LIDAS do texto — nunca assumidas pelo teste.
+# `[^.]{0,N}` nao cruza ponto final: a regra tem de estar na MESMA frase, senao "entradas
+# encerradas" num paragrafo e "desvio numerico" noutro passariam por definicao.
+AC_RE_ELEG='(entradas|contador|contagem|contam|conta|elegív|elegiv)[^.]{0,160}desvio[^.]{0,80}(numéric|numeric|não nul|nao nul)|desvio[^.]{0,80}(numéric|numeric|não nul|nao nul)[^.]{0,160}(entradas|contador|contagem|contam)'
+AC_RE_ENC='entradas encerradas|a partir de [0-9]+ entradas'
+AC_RE_NULO_NAO_ZERO='(nunca|não|nao)[^.]{0,80}(como|igual a|vale) (zero|0)'
+AC_RE_ZERO='(como|igual a|vale) (zero|0)[^.]{0,40}(na média|na media|no cálculo|no calculo)|conta como (zero|0)'
+AC_RE_MEDIA_ELEG='(desvio_medio|média|media)[^.]{0,200}(elegív|elegiv|desvio numéric|desvio numeric|desvio não nul|desvio nao nul)|(elegív|elegiv|desvio numéric|desvio numeric)[^.]{0,200}(desvio_medio|média dos|media dos)'
+AC_RE_LIM_ELEG='[0-9]+ ou mais entradas (elegíveis|elegiveis)|a partir de [0-9]+ entradas (elegíveis|elegiveis)'
+AC_RE_LIM_ENC='[0-9]+ ou mais entradas encerradas|a partir de [0-9]+ entradas( |,|\.|$)'
+AC_RE_FORMA='(1 ou 2|uma ou duas) entradas (elegíveis|elegiveis)[^.]{0,200}(item|linha)|(o item|a linha)[^.]{0,200}(1 ou 2|uma ou duas) entradas (elegíveis|elegiveis)'
+AC_RE_VAZIA='calibracao: \[\][^.]{0,240}(nenhuma entrada elegív|nenhuma entrada elegiv|sem entrada elegív|zero entradas elegív)|(nenhuma entrada elegív|nenhuma entrada elegiv|sem entrada elegív|zero entradas elegív)[^.]{0,240}calibracao: \[\]'
+AC_RE_NULO_FORA='desvio: null[^.]{0,200}(não cont|nao cont|fora d|nunca entra|ignorad|não é elegív|nao e elegiv)|(não cont|nao cont|fora d|nunca entra|ignorad)[^.]{0,200}desvio: null'
+
+ac_pol_contador() { # -> numerico | encerradas | indefinido
+  if   ac_tem_re "$1" "$AC_RE_ELEG"; then printf 'numerico'
+  elif ac_tem_re "$1" "$AC_RE_ENC";  then printf 'encerradas'
+  else printf 'indefinido'; fi
+}
+ac_pol_media() { # -> fora | zero | indefinido  (o que o nulo faz na media)
+  if   ac_tem_re "$1" "$AC_RE_ZERO" && ! ac_tem_re "$1" "$AC_RE_NULO_NAO_ZERO"; then printf 'zero'
+  elif ac_tem_re "$1" "$AC_RE_MEDIA_ELEG"; then printf 'fora'
+  else printf 'indefinido'; fi
+}
+ac_pol_base() { # -> elegiveis | encerradas | indefinido  (o que o limiar conta)
+  if   ac_tem_re "$1" "$AC_RE_LIM_ELEG"; then printf 'elegiveis'
+  elif ac_tem_re "$1" "$AC_RE_LIM_ENC";  then printf 'encerradas'
+  else printf 'indefinido'; fi
+}
+ac_pol_limiar() { # -> o numero de elegiveis que liga o fator, ou indefinido
+  local v
+  v="$(ac_txt "$1" | grep -oE "$AC_RE_LIM_ELEG" | grep -oE '[0-9]+' | sort -u | tr '\n' ' ' | sed 's/ *$//')"
+  case "$v" in ''|*' '*) printf 'indefinido' ;; *) printf '%s' "$v" ;; esac
+}
+ac_pol_forma() { # -> por_contador | indefinido  (item presente decidido pelo contador)
+  if ac_tem_re "$1" "$AC_RE_FORMA"; then printf 'por_contador'; else printf 'indefinido'; fi
+}
+
+# A politica da ARVORE: valor unico entre os pontos que o declaram. Ponto calado nao vota (os casos
+# de texto cobram cada ponto um a um), mas DOIS pontos discordando da `indefinido` — contrato que se
+# contradiz nao fixa numero nenhum, e e exatamente a forma do defeito B2.
+ac_pol_arvore() { # ac_pol_arvore <dir> <contador|media|base|limiar|forma>
+  local d="$1" dim="$2" f v vals="" u
+  for f in $AC_REL_DEFINEM; do
+    [ -f "$d/$f" ] || continue
+    case "$dim" in
+      contador) v="$(ac_pol_contador "$d/$f")" ;;
+      media)    v="$(ac_pol_media "$d/$f")" ;;
+      base)     v="$(ac_pol_base "$d/$f")" ;;
+      limiar)   v="$(ac_pol_limiar "$d/$f")" ;;
+      forma)    v="$(ac_pol_forma "$d/$f")" ;;
+    esac
+    [ "$v" = indefinido ] || vals="$vals $v"
+  done
+  u="$(printf '%s\n' $vals | sort -u | tr '\n' ' ' | sed 's/^ *//; s/ *$//')"
+  case "$u" in ''|*' '*) printf 'indefinido' ;; *) printf '%s' "$u" ;; esac
+}
+
+# O ORACULO. Dada a lista de `desvio` de um tipo (`null` inclusive) e as politicas, devolve o que o
+# HISTORICO.md grava: contador, `desvio_medio` (duas casas, half-up — D-10), `fator_ativo` e a forma
+# do item. Politica indefinida produz `indefinido`, nunca um palpite: e assim que a ausencia de
+# contrato aparece como numero errado, e nao como palavra faltando.
+ac_num() { # ac_num <desvios> <contador> <media> <base> <limiar> <forma>
+  awk -v lista="$1" -v pc="$2" -v pm="$3" -v pb="$4" -v lim="$5" -v pf="$6" '
+    function arr(x,  s, i) { s = x * 100; i = int(s); if (s - i >= 0.5) i++; return sprintf("%.2f", i / 100) }
+    BEGIN {
+      n = split(lista, v, / +/)
+      for (i = 1; i <= n; i++) {
+        if (v[i] == "") continue
+        nt++                                         # encerradas: toda entrada da lista
+        if (v[i] != "null") { ne++; soma += v[i] }    # elegiveis: `desvio` numerico
+      }
+      # `ne + 0` e `nt + 0`: sem elegivel nenhuma, `ne` nunca foi atribuida e `%s` imprimiria a
+      # string vazia no lugar do contador `0` — o cenario da `calibracao: []`.
+      contador = (pc == "numerico") ? ne + 0 : ((pc == "encerradas") ? nt + 0 : "indefinido")
+      if      (pm == "fora") media = (ne > 0) ? arr(soma / ne) : "sem"
+      else if (pm == "zero") media = (nt > 0) ? arr(soma / nt) : "sem"
+      else                   media = "indefinido"
+      base = (pb == "elegiveis") ? ne : ((pb == "encerradas") ? nt : -1)
+      fator = (base < 0 || lim == "indefinido") ? "indefinido" : ((base >= lim + 0) ? "true" : "false")
+      if (pf != "por_contador" || contador == "indefinido") forma = "indefinido"
+      else forma = (contador + 0 >= 1) ? "item" : "vazia"
+      printf "%s %s %s %s", contador, media, fator, forma
+    }'
+}
+# Os quatro cenarios do defeito, todos do mesmo `tipo_task`, com nulas sempre presentes.
+AC_A='1.20 1.30 null null'        # 2 elegiveis + 2 nulas
+AC_B='1.20 1.30 1.30 null null'   # 3 elegiveis + 2 nulas
+AC_C='1.25 null'                  # 1 elegivel  + 1 nula
+AC_D='null null'                  # nenhuma elegivel
+AC_CANONICO='2 1.25 false item; 3 1.27 true item; 1 1.25 false item; 0 sem false vazia'
+ac_quatro() { # ac_quatro <contador> <media> <base> <limiar> <forma> -> as quatro ternas, A a D
+  printf '%s; %s; %s; %s' "$(ac_num "$AC_A" "$@")" "$(ac_num "$AC_B" "$@")" \
+                          "$(ac_num "$AC_C" "$@")" "$(ac_num "$AC_D" "$@")"
+}
+ac_cenarios() { # ac_cenarios <dir> -> as quatro ternas sob a politica LIDA daquela arvore
+  local d="$1"
+  ac_quatro "$(ac_pol_arvore "$d" contador)" "$(ac_pol_arvore "$d" media)" \
+            "$(ac_pol_arvore "$d" base)"     "$(ac_pol_arvore "$d" limiar)" \
+            "$(ac_pol_arvore "$d" forma)"
+}
+
+# 1. Dados literais que SEPARAM as duas leituras. Sem isto, "contar ou nao contar as nulas" seria
+#    discussao de vocabulario: nas MESMAS quatro entradas, a leitura elegivel grava
+#    `entradas: 2 / 1.25 / false` e a leitura "encerradas, nulo como zero" grava
+#    `entradas: 4 / 0.63 / true`. Contador, numero e chave booleana divergem, e o fator liga.
+AC_SO_ELEG="$(ac_quatro numerico fora elegiveis 3 por_contador)"
+AC_SO_ELEG_A="$(ac_num "$AC_A" numerico fora elegiveis 3 por_contador)"
+AC_COM_NULOS_A="$(ac_num "$AC_A" encerradas zero encerradas 3 por_contador)"
+[ "$AC_SO_ELEG_A" = '2 1.25 false item' ] && [ "$AC_COM_NULOS_A" = '4 0.63 true item' ] \
+  && [ "$AC_SO_ELEG_A" != "$AC_COM_NULOS_A" ]; ac_rc=$?
+afirma "ac1-nulos-mudam-contador-media-e-fator" "$ac_rc" \
+  "elegiveis=[$AC_SO_ELEG_A] contando nulas=[$AC_COM_NULOS_A] sobre [$AC_A]"
+
+# 1b. E o oraculo esta correto nos quatro cenarios, independentemente de qualquer texto: 2
+#     elegiveis -> 1,25 e fator desligado; 3 -> 1,27 e fator ligado; 1 -> item presente com fator
+#     desligado; nenhuma -> lista vazia. Este caso guarda a aritmetica; os seguintes, o contrato.
+[ "$AC_SO_ELEG" = "$AC_CANONICO" ]; ac_rc=$?
+afirma "ac1b-oraculo-dos-quatro-cenarios-correto" "$ac_rc" "calculado=[$AC_SO_ELEG]"
+
+# 1c. O limiar e lido, nao embutido: com limiar 2 o cenario A ligaria o fator. E o que o mutante 4
+#     faz, e a razao de o oraculo receber o numero em vez de o conhecer.
+AC_LIM2_A="$(ac_num "$AC_A" numerico fora elegiveis 2 por_contador)"
+[ "$AC_LIM2_A" = '2 1.25 true item' ] && [ "$AC_LIM2_A" != "$AC_SO_ELEG_A" ]; ac_rc=$?
+afirma "ac1c-limiar-e-parametro-do-oraculo" "$ac_rc" "limiar 2 no cenario A=[$AC_LIM2_A]"
+
+# A bateria, por ARVORE: a real roda em "$SK" e cada mutante roda a MESMA bateria numa copia.
+ac_caso() { # ac_caso <caso> <dir> -> 0 se o caso PASSA naquela arvore
+  local c="$1" d="$2" f sujo="" v
+  case "$c" in
+    # `entradas` conta SO as entradas com `desvio` numerico — a amarracao que o HEAD nao tem.
+    ac_entradas_so_desvio_numerico)
+      for f in $AC_REL_DEFINEM; do
+        v="$(ac_pol_contador "$d/$f")"; [ "$v" = numerico ] || sujo="$sujo $f:$v"
+      done
+      [ -z "$sujo" ] ;;
+    # `desvio_medio` e a media SO sobre essas entradas: o divisor e o numero de elegiveis.
+    ac_media_so_desvio_numerico)
+      for f in $AC_REL_DEFINEM; do
+        v="$(ac_pol_media "$d/$f")"; [ "$v" = fora ] || sujo="$sujo $f:$v"
+      done
+      [ -z "$sujo" ] ;;
+    # E `desvio: null` nunca vale zero: contar como zero e a leitura que produz 0,63 em vez de 1,25
+    # sem contrariar frase nenhuma do HEAD.
+    ac_nulo_nunca_vale_zero)
+      for f in $AC_REL_DEFINEM; do
+        ac_tem_re "$d/$f" "$AC_RE_NULO_NAO_ZERO" || sujo="$sujo $f"
+      done
+      [ -z "$sujo" ] ;;
+    # O estado nulo e nomeado como tal e posto fora da contagem. Regra escrita so pelo positivo
+    # ("conta as numericas") deixa o leitor da entrada sem F3.5 sem resposta: e ela que ele tem.
+    ac_nulo_fora_da_contagem)
+      for f in $AC_REL_DEFINEM; do
+        ac_tem_re "$d/$f" "$AC_RE_NULO_FORA" || sujo="$sujo $f"
+      done
+      [ -z "$sujo" ] ;;
+    # O limiar do `fator_ativo` conta elegiveis, nao encerradas...
+    ac_limiar_sobre_elegiveis)
+      for f in $AC_REL_LIMIAR; do
+        v="$(ac_pol_base "$d/$f")"; [ "$v" = elegiveis ] || sujo="$sujo $f:$v"
+      done
+      [ -z "$sujo" ] ;;
+    # ...e continua sendo 3: a regra do fator ja fixou o numero, e a B2 muda a BASE da contagem,
+    # nunca o numero.
+    ac_limiar_e_tres)
+      for f in $AC_REL_LIMIAR; do
+        v="$(ac_pol_limiar "$d/$f")"; [ "$v" = 3 ] || sujo="$sujo $f:$v"
+      done
+      [ -z "$sujo" ] ;;
+    # Item PRESENTE com 1 ou 2 elegiveis, com `fator_ativo: false`: a lista vazia e outro estado.
+    ac_item_presente_com_poucas_elegiveis)
+      for f in $AC_REL_FORMA; do
+        [ "$(ac_pol_forma "$d/$f")" = por_contador ] \
+          && ac_tem_re "$d/$f" 'fator_ativo: false|fator_ativo (fica|é|e) false' || sujo="$sujo $f"
+      done
+      [ -z "$sujo" ] ;;
+    # E `calibracao: []` so sem NENHUMA elegivel. A D-08 fixou a FORMA da lista vazia; aqui se fixa
+    # QUANDO ela ocorre — sem isso, "poucas entradas" e "nenhuma entrada" voltam a ser o mesmo caso.
+    ac_lista_vazia_so_sem_elegiveis)
+      for f in $AC_REL_FORMA; do
+        ac_tem_re "$d/$f" "$AC_RE_VAZIA" || sujo="$sujo $f"
+      done
+      [ -z "$sujo" ] ;;
+    # O caso semantico: a politica LIDA da arvore, aplicada aos quatro cenarios, produz exatamente
+    # o que o canonico grava. Contrato calado ou contraditorio devolve `indefinido`.
+    ac_oraculo_numerico)
+      v="$(ac_cenarios "$d")"; [ "$v" = "$AC_CANONICO" ] ;;
+    # Schema publico intacto: a B2 e correcao de contrato, nao de formato.
+    ac_chaves_publicas)
+      grep -qF 'entradas:' "$d/references/00-schema.md" \
+        && grep -qF 'desvio_medio:' "$d/references/00-schema.md" \
+        && grep -qF 'fator_ativo:' "$d/references/00-schema.md" \
+        && grep -qF 'entradas:' "$d/assets/TEMPLATE-HISTORICO.md" \
+        && grep -qF 'fator_ativo:' "$d/assets/TEMPLATE-HISTORICO.md" ;;
+    # E a decisao fica registrada: e onde a proxima sessao encontra o PORQUE de o conjunto agregado
+    # ser menor que o conjunto das entradas encerradas.
+    # O id e o proximo livre do registro append-only: a DS-163 ja e o piso da faixa agregada
+    # (secao Z / D-13), e a decisao da elegibilidade entrou como DS-164.
+    ac_ds164)
+      v="$(grep -F '| DS-164 |' "$d/DECISOES-DA-SKILL.md" 2>/dev/null)"
+      [ -n "$v" ] \
+        && printf '%s' "$v" | grep -qiE 'elegív|elegiv' \
+        && printf '%s' "$v" | grep -qF 'desvio' ;;
+    *) return 1 ;;
+  esac
+}
+AC_CASOS="ac_entradas_so_desvio_numerico ac_media_so_desvio_numerico ac_nulo_nunca_vale_zero
+ac_nulo_fora_da_contagem ac_limiar_sobre_elegiveis ac_limiar_e_tres
+ac_item_presente_com_poucas_elegiveis ac_lista_vazia_so_sem_elegiveis ac_oraculo_numerico
+ac_chaves_publicas ac_ds164"
+
+# 2 a 12. A bateria lida das referencias reais. Nome derivado ANTES da condicao e status capturado
+#         na linha seguinte (DS-161 / secao AA).
+for ac_c in $AC_CASOS; do
+  ac_nome="$(printf '%s' "$ac_c" | tr '_' '-')"
+  ac_caso "$ac_c" "$SK"; ac_rc=$?
+  ac_det="lido da arvore do contrato em $SK"
+  [ "$ac_c" = ac_oraculo_numerico ] && ac_det="politica lida=[$(ac_cenarios "$SK")] canonico=[$AC_CANONICO]"
+  afirma "$ac_nome" "$ac_rc" "$ac_det"
+done
+
+# 13. Mutantes. Mesma mecanica da secao AB: cada um nasce numa COPIA da skill — as referencias reais
+#     nunca sao tocadas — e so conta como morto quando TODOS os casos nomeados reprovam. `ac_muta`
+#     devolve 0 so quando o arquivo REALMENTE mudou: mutante que nao nasceu nao e mutante morto, e o
+#     caso falha dizendo isso.
+ACW="$(mktemp -d)"
+ac_copia() { rm -rf "$ACW/$1"; mkdir -p "$ACW/$1"; cp -R "$SK/." "$ACW/$1/"; printf '%s' "$ACW/$1"; }
+ac_muta() { # ac_muta <dir> <arquivo-rel> <expressao sed>
+  [ -f "$1/$2" ] || return 1
+  sed -i "$3" "$1/$2" || return 1
+  ! cmp -s "$SK/$2" "$1/$2"
+}
+ac_mata() { local c; for c in $AC_CASOS; do ac_caso "$c" "$1" || { printf '%s' "$c"; return; }; done; }
+ac_mutante() { # ac_mutante <nome> <rc da geracao> <dir> <caso que TEM de matar>...
+  local nome="$1" rcg="$2" d="$3" c vivos=""; shift 3
+  if [ "$rcg" -eq 0 ]; then for c in "$@"; do ac_caso "$c" "$d" && vivos="$vivos$c "; done; fi
+  [ "$rcg" -eq 0 ] && [ -z "$vivos" ]; local rc=$?
+  afirma "$nome" "$rc" "morto por: $* ${vivos:+— SOBREVIVEU a: $vivos}(rc geracao=$rcg)"
+}
+ac_equivalente() { # ac_equivalente <nome> <rc da geracao> <dir> — equivalente nao pode morrer
+  local nome="$1" rcg="$2" d="$3" m=""
+  [ "$rcg" -eq 0 ] && m="$(ac_mata "$d")"
+  [ "$rcg" -eq 0 ] && [ -z "$m" ]; local rc=$?
+  afirma "$nome" "$rc" "equivalente, nao conta como morto; reprovou=[${m:-nenhum}] (rc geracao=$rcg)"
+}
+AC_CTL="$(ac_copia controle)"
+AC_K="$(ac_mata "$AC_CTL")"; [ -z "$AC_K" ]; ac_rc=$?
+afirma "acm-controle-copia-intacta-sobrevive" "$ac_rc" "${AC_K:-nenhum caso reprova a copia sem mutacao}"
+
+# m1 — contar nulos no limiar: a base do `fator_ativo` volta a ser "entradas encerradas". E o
+#      defeito do HEAD isolado no limiar: com 2 elegiveis e 2 nulas, o fator LIGA.
+AC_M="$(ac_copia m1)"
+ac_muta "$AC_M" references/00-schema.md 's/ou mais entradas elegíveis/ou mais entradas encerradas/g'
+ac_mutante "acm-mutante-1-limiar-conta-nulos" $? "$AC_M" \
+  ac_limiar_sobre_elegiveis ac_limiar_e_tres ac_oraculo_numerico
+
+# m2 — nulo tratado como zero na media: o contador pode ate ficar certo, e `desvio_medio` cai de
+#      1,25 para 0,63. E a leitura que o HEAD permite sem contrariar frase nenhuma.
+AC_M="$(ac_copia m2)"
+ac_muta "$AC_M" references/06-execucao.md 's/nunca como zero/conta como zero/g'
+ac_mutante "acm-mutante-2-nulo-como-zero-na-media" $? "$AC_M" \
+  ac_media_so_desvio_numerico ac_nulo_nunca_vale_zero ac_oraculo_numerico
+
+# m3 — o item com 1 ou 2 elegiveis apagado: a forma do item presente desaparece do template e
+#      "poucas entradas" volta a se confundir com `calibracao: []`.
+AC_M="$(ac_copia m3)"
+ac_muta "$AC_M" assets/TEMPLATE-HISTORICO.md '/1 ou 2 entradas elegíveis/d'
+ac_mutante "acm-mutante-3-item-com-poucas-apagado" $? "$AC_M" \
+  ac_item_presente_com_poucas_elegiveis
+
+# m4 — fator ativo com 2 elegiveis: a base continua certa, o numero desce. Dois desvios reais
+#      passam a ligar o fator de correcao de um tipo inteiro.
+AC_M="$(ac_copia m4)"
+ac_muta "$AC_M" references/00-schema.md 's/3 ou mais entradas elegíveis/2 ou mais entradas elegíveis/g'
+ac_mutante "acm-mutante-4-fator-com-duas-elegiveis" $? "$AC_M" \
+  ac_limiar_e_tres ac_oraculo_numerico
+
+# Equivalentes: mudam a marcacao e nao a regra, e por isso NAO podem morrer — um oraculo que
+# dependesse da grafia de uma palavra passaria por discriminante sem ser.
+AC_M="$(ac_copia e1)"
+ac_muta "$AC_M" assets/TEMPLATE-HISTORICO.md 's/`desvio` numérico/**`desvio` numérico**/g'
+ac_equivalente "ace-equivalente-1-marcacao-do-desvio-numerico" $? "$AC_M"
+AC_M="$(ac_copia e2)"
+ac_muta "$AC_M" references/00-schema.md 's/entradas elegíveis/entradas **elegíveis**/g'
+ac_equivalente "ace-equivalente-2-marcacao-do-elegivel" $? "$AC_M"
+rm -rf "$ACW"
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"
 [ "$pulado" -eq 0 ] || echo "  ATENCAO: skip interno e buraco de cobertura da sprintx nesta plataforma, nao dependencia externa."

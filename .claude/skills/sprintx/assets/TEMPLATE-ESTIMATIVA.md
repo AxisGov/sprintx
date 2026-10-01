@@ -120,7 +120,7 @@ O que esta faixa deliberadamente não cobre:
 ## Calibração
 
 - Histórico consultado: {{`docs/sprintx/estimativas/HISTORICO.md` (N entradas) | "não existe neste projeto"}}
-- Fator de correção aplicado: {{ex.: "1,16× nas tasks de tipo `integracao_externa`, vindo de um desvio médio de 1,16 em 4 entradas encerradas" | "nenhum"}}
+- Fator de correção aplicado: {{ex.: "1,16× nas tasks de tipo `integracao_externa`, vindo de um desvio médio de 1,16 em 4 entradas elegíveis" | "nenhum"}}
 
 O fator de correção é sempre visível. Fator embutido em silêncio é indistinguível de número inventado.
 
