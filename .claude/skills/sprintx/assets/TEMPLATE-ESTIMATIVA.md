@@ -120,9 +120,11 @@ O que esta faixa deliberadamente não cobre:
 ## Calibração
 
 - Histórico consultado: {{`docs/sprintx/estimativas/HISTORICO.md` (N entradas) | "não existe neste projeto"}}
-- Fator de correção aplicado: {{ex.: "1,25× nas tasks de tipo `integracao_externa`, vindo de um desvio médio de 1,25 em 4 entradas encerradas" | "nenhum"}}
+- Fator de correção aplicado: {{ex.: "1,16× nas tasks de tipo `integracao_externa`, vindo de um desvio médio de 1,16 em 4 entradas encerradas" | "nenhum"}}
 
 O fator de correção é sempre visível. Fator embutido em silêncio é indistinguível de número inventado.
+
+O fator é o `desvio_medio` persistido do tipo, copiado do `HISTORICO.md` como está: duas casas decimais, meio para cima (half-up) — `1,16`, `1,20`, nunca `1,2` nem `1,157` (DS-160). Ele entra na faixa de cada task daquele tipo **antes da agregação**; o arredondamento à hora inteira da faixa agregada vem depois, por último. `fator_correcao_aplicado` no frontmatter leva o mesmo número com ponto (`1.16`).
 
 ## Como a conta foi feita
 
@@ -140,10 +142,14 @@ Por conjunto (fase, sprint, trabalho, caminho crítico):
 ```
 media_conjunto  = soma das media_task
 desvio_conjunto = raiz_quadrada( soma dos (desvio_task)^2 )
-min = media_conjunto - desvio_conjunto      (piso: soma dos o)
+piso_conjunto   = soma( o(t) * fator(t) )
+fator(t) = 1                                # quando o tipo da task t nao tem fator ativo
+min = media_conjunto - desvio_conjunto      # se min < piso_conjunto, entao min = piso_conjunto
 max = media_conjunto + desvio_conjunto
 ```
 
-Somar variâncias em quadratura faz o intervalo crescer menos que a soma linear: os desvios se compensam entre tasks, e supor que tudo dá errado ao mesmo tempo superestimaria grosseiramente. Por construção, a faixa agregada é sempre mais estreita que `[soma dos o, soma dos p]`.
+O piso é a soma dos otimistas **já corrigidos pelo fator do tipo de cada task** — nunca a maior `o`, nunca um fator único do conjunto —, e o gatilho compara contra o mesmo `piso_conjunto` que atribui. O clamp acontece **antes** do arredondamento `floor(min)`/`ceil(max)` à hora inteira, que é o último passo (DS-163, que estende DS-41).
+
+Somar variâncias em quadratura faz o intervalo crescer menos que a soma linear: os desvios se compensam entre tasks, e supor que tudo dá errado ao mesmo tempo superestimaria grosseiramente. Por construção, a faixa agregada é sempre mais estreita que `[ soma( o(t) * fator(t) ), soma( p(t) * fator(t) ) ]` — os limites corrigidos task a task, pelos mesmos fatores que entraram na agregação.
 
 O **caminho crítico** usa as mesmas fórmulas, mas apenas sobre as tasks da cadeia de dependências mais longa: {{lista dos ids da cadeia}}. Tasks paralelizáveis somam no esforço total e não somam aqui.

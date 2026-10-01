@@ -51,7 +51,7 @@ A **duração observada** é outra coisa: o tempo de parede entre `task_iniciada
 
 ## Calibração por tipo de task
 
-`desvio_medio` é a média dos desvios das entradas encerradas daquele tipo. `1,0` é o alvo; `1,4` significa que aquele tipo de task leva, em média, 40% a mais que o estimado.
+`desvio_medio` é a média dos desvios **persistidos** das entradas encerradas daquele tipo — a coluna `Desvio` da tabela acima, nunca a média das razões brutas. `1,00` é o alvo; `1,40` significa que aquele tipo de task leva, em média, 40% a mais que o estimado.
 
 | Tipo de task | Entradas | Desvio médio | Fator ativo? |
 |---|---|---|---|
@@ -64,9 +64,25 @@ A **duração observada** é outra coisa: o tempo de parede entre `task_iniciada
 ## Como se calcula o desvio
 
 ```
-desvio_task = real / media_task_estimada          # media_task = (o + 4m + p) / 6
-desvio_medio_do_tipo = media dos desvio_task daquele tipo
+desvio_task  = arredonda( real / media_task_estimada )     # media_task = (o + 4m + p) / 6
+desvio_medio_do_tipo = arredonda( media dos desvio_task PERSISTIDOS daquele tipo )
+arredonda(x)         = duas casas decimais, meio para cima (half-up)
 ```
+
+> **Precisão e desempate.** São **duas casas decimais**, com desempate **half-up**: terceira casa exatamente `5`, a segunda sobe. A razão `1,125` vira `1,13`, nunca `1,12`. As duas casas são **fixas**, não "até duas": a razão `1,2` grava-se `1.20` no YAML e escreve-se `1,20` na prosa. O YAML usa ponto, a prosa em pt-BR usa vírgula, e as duas carregam as mesmas duas casas (regra universal 7); só a sintaxe de fórmula do bloco acima fica fora disso. Número com uma casa, ou com três, é número fora do contrato (DS-160).
+>
+> **O arredondamento tem estágio.** Cada `desvio` é arredondado **antes** de ser persistido, e é o valor persistido que entra na média — a média das razões brutas é outro número. A média é então arredondada de novo pela mesma regra. Sem a ordem fixa, dois executores honestos gravam `1,16` e `1,15` do mesmo histórico.
+
+**Exemplo completo.** Quatro entradas encerradas de `integracao_externa`:
+
+| `estimado_media` | `real` | razão | `desvio` persistido |
+|---|---|---|---|
+| 4.0 | 4.5 | 1,125 | `1.13` — empate exato, half-up sobe |
+| 4.0 | 4.5 | 1,125 | `1.13` |
+| 3.0 | 3.5 | 1,1666… | `1.17` |
+| 1.0 | 1.2 | 1,2 | `1.20` — duas casas fixas, nunca `1.2` |
+
+A média dos quatro persistidos é `(1,13 + 1,13 + 1,17 + 1,20) / 4 = 1,1575`, que arredonda para **`desvio_medio: 1.16`**. Com `entradas: 4`, `fator_ativo: true`. Se a média saísse das razões brutas, ou se o empate descesse, o número gravado seria `1,15` — e as estimativas seguintes publicariam outra faixa.
 
 ## Como esta tabela é alimentada
 

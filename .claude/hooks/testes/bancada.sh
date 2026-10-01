@@ -4986,6 +4986,479 @@ Y_ALIMENTA="$(grep -rnoE '(dura[çc][ãa]o|duracao_observada|tempo de parede)[^.
 [ -z "$Y_ALIMENTA" ]
 afirma "y8-duracao-nao-e-declarada-insumo-da-calibracao" $? "ocorrencias=[${Y_ALIMENTA:-nenhuma}]"
 
+echo "== Z. precisao e desempate do desvio da calibracao sao canonicos (D-10) =="
+# A D-09 tornou o AGREGADOR unico (media, nunca mediana). O numero continuava nao sendo unico:
+# nenhum ponto do contrato fixava quantas casas decimais o `desvio` persistido carrega, o que
+# fazer no empate exato, se a media e tirada dos `desvio` JA PERSISTIDOS ou das razoes brutas, nem
+# se a forma gravada e `1.2` ou `1.20`. Cinco contextos frescos, lendo o contrato ao pe da letra,
+# responderam "a documentacao nao fixa" (5/5) e dividiram a forma persistida entre `1.2` (3) e
+# `1.20` (2) — a convergencia em half-up foi coincidencia declarada como escolha propria, e um
+# deles mostrou que half-even daria `desvio_medio` 1,15 em vez de 1,16 sobre o mesmo historico.
+# Decisao humana: half-up, duas casas fixas, sobre os `desvio` persistidos. O fator canonico entra
+# na faixa da task/tipo ANTES da agregacao; floor(min)/ceil(max) a hora inteira continua o ultimo
+# passo da faixa agregada.
+Z_SCH="$SK/references/00-schema.md"
+Z_TPL="$SK/assets/TEMPLATE-HISTORICO.md"
+Z_EXE="$SK/references/06-execucao.md"
+Z_EST="$SK/references/07-estimativa.md"
+Z_TES="$SK/assets/TEMPLATE-ESTIMATIVA.md"
+Z_DS="$SK/DECISOES-DA-SKILL.md"
+
+# Os pontos que DEFINEM o numero persistido, e os que o CONSOMEM como fator.
+Z_DEFINEM="$Z_SCH $Z_TPL $Z_EXE $Z_EST"
+Z_CONSOMEM="$Z_EST $Z_TES"
+Z_TODOS="$Z_DEFINEM $Z_TES $Z_DS"
+
+# 1. Dados literais que SEPARAM as convencoes. As quatro entradas da amostra base
+#    (real/estimado_media): 4.5/4.0, 4.5/4.0, 3.5/3.0 e 1.2/1.0 — razoes 1,125, 1,125, 1,1666... e
+#    1,2. O empate exato em 1,125 e o que separa half-up de half-even; a terceira razao e o que
+#    separa duas casas de uma; a quarta e o que separa `1.2` de `1.20`.
+z_calc() { # z_calc <casas> <desempate:hup|hev> <operandos:persistidos|brutas> -> desvio_medio
+  awk -v n="$1" -v d="$2" -v op="$3" '
+    function rnd(x, nn, dd,   s, i, f) {
+      s = x * (10 ^ nn); i = int(s); f = s - i
+      if (dd == "hup") { if (f >= 0.5) i++ }
+      else { if (f > 0.5) i++; else if (f == 0.5 && i % 2 != 0) i++ }
+      return i / (10 ^ nn)
+    }
+    BEGIN {
+      split("4.5 4.5 3.5 1.2", R, " "); split("4.0 4.0 3.0 1.0", E, " "); s = 0
+      for (k = 1; k <= 4; k++) {
+        r = R[k] / E[k]
+        s += (op == "persistidos") ? rnd(r, n, d) : r
+      }
+      printf "%." n "f", rnd(s / 4, n, d)
+    }'
+}
+Z_CANON="$(z_calc 2 hup persistidos)"      # a receita decidida
+Z_HEV="$(z_calc 2 hev persistidos)"        # half-even
+Z_BRUTAS="$(z_calc 2 hup brutas)"          # media das razoes brutas
+Z_1CASA="$(z_calc 1 hup persistidos)"      # uma casa
+Z_3CASAS="$(z_calc 3 hup persistidos)"     # tres casas
+[ "$Z_CANON" = "1.16" ] && [ "$Z_HEV" = "1.15" ] && [ "$Z_BRUTAS" = "1.15" ] \
+  && [ "$Z_1CASA" = "1.2" ] && [ "$Z_3CASAS" = "1.154" ] \
+  && [ "$Z_CANON" != "$Z_HEV" ] && [ "$Z_CANON" != "$Z_BRUTAS" ] \
+  && [ "$Z_CANON" != "$Z_1CASA" ] && [ "$Z_CANON" != "$Z_3CASAS" ]
+afirma "z1-dados-separam-as-convencoes" $? \
+  "canonico=$Z_CANON half-even=$Z_HEV brutas=$Z_BRUTAS 1casa=$Z_1CASA 3casas=$Z_3CASAS"
+
+# 2. O desempate e LIDO da documentacao, nao assumido pelo teste: cada ponto que define o numero
+#    declara um token, e o conjunto dos tokens tem de ser exatamente {hup}. `ambos` e contradicao.
+# Os detectores de regra leem o texto SEM marcacao: `**antes**` e `antes` sao a mesma regra, e um
+# caso que depende de onde cai o negrito testa formatacao, nao contrato.
+z_txt() { tr -d '*`' < "$1"; }
+# Todo casamento aqui CONTA linhas (`-c`) em vez de abortar na primeira (`-q`): depois de um pipe,
+# `grep -q` fecha a entrada no primeiro casamento, o `tr` a montante leva SIGPIPE e, com
+# `pipefail` ligado (linha 9), o status do pipeline fica nao-zero mesmo tendo casado. Isso faz o
+# caso passar ou falhar por corrida de escalonamento — verde no foco, vermelho na suite inteira.
+z_conta() { z_txt "$1" | grep -ciE "$2"; }
+z_tem_re() { [ "$(z_conta "$1" "$2")" -gt 0 ]; }
+z_diz_hup() { z_tem_re "$1" 'half-up|meio para cima'; }
+# Nomear a convencao rejeitada nao e prescreve-la: a linha que traz o token tem de estar livre de
+# marca de recusa. Sem isso, a frase que explica POR QUE nao e half-even se leria como a prescricao
+# do half-even — o mesmo cuidado que a y8 (D-09) tomou com "nao alimenta a calibracao". Por isso a
+# recusa mora na MESMA linha do token: o caso e por linha, nao por janela de caracteres.
+Z_HEV_RE='half-even|banker|arredondamento para o par|meio para o par|meio para baixo'
+Z_RECUSA_RE='nunca|em vez de|n[ãa]o aceita|n[ãa]o canonic|n[ãa]o can[õô]nic|seria|daria|correto em estat'
+z_diz_hev() { # prescreve half-even sse alguma linha com o token NAO traz marca de recusa
+  local tot rec
+  tot="$(z_conta "$1" "$Z_HEV_RE")"
+  rec="$(z_txt "$1" | grep -iE "$Z_HEV_RE" | grep -ciE "$Z_RECUSA_RE")"
+  [ "$tot" -gt 0 ] && [ "$rec" -lt "$tot" ]
+}
+z_desempate() { # z_desempate <arquivo> -> hup | hev | ambos | nenhum
+  local u=1 e=1
+  z_diz_hup "$1" && u=0
+  z_diz_hev "$1" && e=0
+  if   [ $u -eq 0 ] && [ $e -eq 0 ]; then printf 'ambos'
+  elif [ $u -eq 0 ]; then printf 'hup'
+  elif [ $e -eq 0 ]; then printf 'hev'
+  else printf 'nenhum'; fi
+}
+Z_SUJOS=""
+for z_f in $Z_TODOS; do
+  case "$(z_desempate "$z_f")" in hev|ambos) Z_SUJOS="$Z_SUJOS $(basename "$z_f")" ;; esac
+done
+[ -z "$Z_SUJOS" ]
+afirma "z2-nenhum-ponto-prescreve-outro-desempate" $? "arquivos com desempate nao canonico=[${Z_SUJOS:- nenhum}]"
+
+Z_MUDOS=""
+for z_f in $Z_DEFINEM; do
+  [ "$(z_desempate "$z_f")" = "hup" ] || Z_MUDOS="$Z_MUDOS $(basename "$z_f"):$(z_desempate "$z_f")"
+done
+[ -z "$Z_MUDOS" ]
+afirma "z2b-todo-ponto-que-define-o-numero-diz-half-up" $? "fora de half-up=[${Z_MUDOS:- nenhum}]"
+
+# 3. As casas tambem sao LIDAS, e sao DUAS em todo ponto que define o numero. Regra que existe so
+#    por ausencia da errada e regra que a sessao seguinte nao encontra.
+z_casas() { # z_casas <arquivo> -> 2 | 1 | 3 | ambiguo | nenhum
+  local c=""
+  z_tem_re "$1" 'duas casas decimais' && c="$c 2"
+  z_tem_re "$1" 'uma casa decimal' && c="$c 1"
+  z_tem_re "$1" 'tr[êe]s casas decimais' && c="$c 3"
+  case "$(printf '%s' "$c" | tr -d ' ')" in
+    2) printf '2' ;; 1) printf '1' ;; 3) printf '3' ;; '') printf 'nenhum' ;; *) printf 'ambiguo' ;;
+  esac
+}
+Z_CASAS_FORA=""
+for z_f in $Z_DEFINEM; do
+  [ "$(z_casas "$z_f")" = "2" ] || Z_CASAS_FORA="$Z_CASAS_FORA $(basename "$z_f"):$(z_casas "$z_f")"
+done
+[ -z "$Z_CASAS_FORA" ]
+afirma "z3-duas-casas-em-todo-ponto-que-define-o-numero" $? "fora de 2 casas=[${Z_CASAS_FORA:- nenhum}]"
+
+# 4. O ESTAGIO esta escrito: cada `desvio` e arredondado ANTES de ser persistido, e a media sai dos
+#    `desvio` persistidos — nunca das razoes brutas —, arredondada de novo pela mesma regra.
+z_diz_persistidos() { # nomeia o operando certo E recusa o errado
+  z_tem_re "$1" 'persistid[oa]s?' &&
+  z_tem_re "$1" 'nunca (a m[ée]dia )?d(as|a) raz([õo]es|[ãa]o) brutas?|n[ãa]o (é|e) a m[ée]dia das raz[õo]es'
+}
+Z_SEM_OPERANDO=""
+for z_f in $Z_DEFINEM; do
+  z_diz_persistidos "$z_f" || Z_SEM_OPERANDO="$Z_SEM_OPERANDO $(basename "$z_f")"
+done
+[ -z "$Z_SEM_OPERANDO" ]
+afirma "z4-operandos-sao-os-desvios-persistidos" $? "sem os operandos=[${Z_SEM_OPERANDO:- nenhum}]"
+
+z_diz_estagio() { z_tem_re "$1" 'arredondado antes|antes de ser persistido|antes de entrar na m[ée]dia'; }
+Z_SEM_ESTAGIO=""
+for z_f in $Z_DEFINEM; do
+  z_diz_estagio "$z_f" || Z_SEM_ESTAGIO="$Z_SEM_ESTAGIO $(basename "$z_f")"
+done
+[ -z "$Z_SEM_ESTAGIO" ]
+afirma "z4b-estagio-do-arredondamento-esta-escrito" $? "sem o estagio=[${Z_SEM_ESTAGIO:- nenhum}]"
+
+z_tem_re "$Z_SCH" 'arredondad[ao] de novo' && z_tem_re "$Z_SCH" 'pela mesma regra'
+afirma "z4c-media-e-arredondada-de-novo" $? "o desvio_medio passa pela mesma regra"
+
+# 5. A receita LIDA do contrato, APLICADA a amostra base, da um valor unico — e e 1,16. Trocar
+#    casas, desempate ou operandos na documentacao muda este valor e mata o caso.
+Z_VALORES=""
+for z_f in $Z_DEFINEM; do
+  z_c="$(z_casas "$z_f")"; z_d="$(z_desempate "$z_f")"
+  z_o=persistidos; z_diz_persistidos "$z_f" || z_o=brutas
+  case "$z_c:$z_d" in
+    2:hup|1:hup|3:hup|2:hev|1:hev|3:hev) Z_VALORES="$Z_VALORES $(z_calc "$z_c" "$z_d" "$z_o")" ;;
+    *) Z_VALORES="$Z_VALORES indefinido" ;;
+  esac
+done
+Z_UNICO="$(printf '%s\n' $Z_VALORES | sort -u | tr '\n' ' ' | sed 's/ $//')"
+[ "$Z_UNICO" = "1.16" ]
+afirma "z5-um-numero-canonico-sobre-a-mesma-amostra" $? "valores por ponto=[$Z_UNICO] (esperado 1.16)"
+
+# 6. O exemplo canonico do empate esta escrito, com o resultado certo e o errado nomeado: sem o
+#    caso trabalhado, "half-up" e uma palavra que cada leitor resolve de um jeito.
+Z_SEM_EXEMPLO=""
+for z_f in $Z_DEFINEM; do
+  grep -qF '1,125' "$z_f" && grep -qF '1,13' "$z_f" || Z_SEM_EXEMPLO="$Z_SEM_EXEMPLO $(basename "$z_f")"
+done
+[ -z "$Z_SEM_EXEMPLO" ]
+afirma "z6-exemplo-canonico-do-empate-presente" $? "sem 1,125 -> 1,13=[${Z_SEM_EXEMPLO:- nenhum}]"
+grep -qF '1,12' "$Z_SCH"
+afirma "z6b-a-resposta-errada-do-empate-e-nomeada" $? "o schema nomeia 1,12 como o que nao se grava"
+
+# 7. REPRESENTACAO. As duas casas sao FIXAS, nao "ate duas": `1,2` grava-se `1.20` no YAML e
+#    escreve-se `1,20` na prosa. Sem isso, o mesmo numero tem duas formas em disco — foi a divisao
+#    medida nas amostras (3 escreveram `1.2`, 2 escreveram `1.20`).
+Z_SEM_FIXAS=""
+for z_f in $Z_DEFINEM; do
+  grep -qF '1.20' "$z_f" && grep -qF '1,20' "$z_f" || Z_SEM_FIXAS="$Z_SEM_FIXAS $(basename "$z_f")"
+done
+[ -z "$Z_SEM_FIXAS" ]
+afirma "z7-par-yaml-prosa-do-mesmo-numero-presente" $? "sem o par 1.20/1,20=[${Z_SEM_FIXAS:- nenhum}]"
+
+# 7b. E nenhum valor das chaves da calibracao aparece em disco com uma casa ou com tres: o contrato
+#     nao modela a forma que ele proibe. Varre as linhas YAML dos pontos canonicos.
+Z_FORA_FORMA="$(grep -rnE '^[[:space:]]*(desvio|desvio_medio|fator_correcao_aplicado):[[:space:]]*[0-9]+(\.[0-9]+)?[[:space:]]*$' \
+  $Z_DEFINEM "$Z_TES" | grep -vE ':[[:space:]]*[0-9]+\.[0-9][0-9][[:space:]]*$' | tr '\n' ' ')"
+[ -z "$Z_FORA_FORMA" ]
+afirma "z7b-nenhum-valor-yaml-fora-de-duas-casas" $? "linhas fora da forma=[${Z_FORA_FORMA:-nenhuma}]"
+
+# 7c. A prosa dos pontos canonicos tambem: o alvo e `1,00` e o exemplo de 40% e `1,40`. `1,0` e
+#     o alvo` e a forma de uma casa reaparecendo exatamente onde o leitor aprende o numero. A
+#     RAZAO bruta pode ter qualquer numero de casas — ela nao e valor persistido —, e nomear a
+#     forma proibida ("nunca `1.2`") e a propria regra; por isso o caso acusa so a prosa que
+#     ENSINA o numero, nao toda aparicao de um decimal curto.
+Z_PROSA_1CASA="$(grep -rnE '`1[.,][04]`[^`]*(é o alvo|significa que)' $Z_DEFINEM "$Z_TES" | tr '\n' ' ')"
+[ -z "$Z_PROSA_1CASA" ]
+afirma "z7c-alvo-nunca-ensinado-com-uma-casa" $? "ocorrencias=[${Z_PROSA_1CASA:-nenhuma}]"
+
+# 7e. E a proibicao do fator neutro (DS-46) passa a citar a forma canonica: `1.00`, nao `1.0`.
+#     Um contrato que proibe `1.0` modela, na propria proibicao, o valor de uma casa que ele acabou
+#     de banir — e e dessa modelagem que a forma errada volta.
+Z_NEUTRO_1CASA="$(grep -rnE 'nunca `1\.0`|Nunca `1\.0`' $Z_DEFINEM "$Z_TES" | tr '\n' ' ')"
+[ -z "$Z_NEUTRO_1CASA" ]
+afirma "z7e-proibicao-do-neutro-na-forma-canonica" $? "ocorrencias=[${Z_NEUTRO_1CASA:-nenhuma}]"
+Z_SEM_NEUTRO=""
+for z_f in "$Z_SCH" "$Z_EST"; do
+  grep -qF 'nunca `1.00`' "$z_f" || grep -qF 'Nunca `1.00`' "$z_f" || Z_SEM_NEUTRO="$Z_SEM_NEUTRO $(basename "$z_f")"
+done
+[ -z "$Z_SEM_NEUTRO" ]
+afirma "z7f-neutro-proibido-com-duas-casas" $? "sem a proibicao em 1.00=[${Z_SEM_NEUTRO:- nenhum}]"
+Z_SEM_ALVO=""
+for z_f in "$Z_TPL" "$Z_EXE" "$Z_EST"; do
+  grep -qF '`1,00`' "$z_f" && grep -qF '`1,40`' "$z_f" || Z_SEM_ALVO="$Z_SEM_ALVO $(basename "$z_f")"
+done
+[ -z "$Z_SEM_ALVO" ]
+afirma "z7d-alvo-e-exemplo-na-forma-canonica" $? "sem 1,00/1,40=[${Z_SEM_ALVO:- nenhum}]"
+
+# 8. CONSUMIDOR. O fator e o `desvio_medio` persistido, aplicado a faixa da task/tipo ANTES da
+#    agregacao; floor(min)/ceil(max) a hora inteira continua o ULTIMO passo da faixa agregada.
+#    Sem a ordem escrita, o consumidor arredonda em estagio proprio e a faixa publicada muda.
+# As duas metades da regra tem de estar na MESMA linha — isto e, no mesmo paragrafo: qual numero e
+# o fator, e em que momento ele entra. Conferir arquivo por arquivo nao basta, porque a Passo 5
+# tambem fala de "antes da agregacao" para dizer que o fator ja entrou, e essa frase mascarava a
+# retirada da regra de onde o consumidor age (o Passo 1). Mutante m8 passava por aqui.
+z_diz_fator_antes() {
+  [ "$(z_txt "$1" | grep -iE 'antes da agrega[çc][ãa]o|antes de agregar' \
+        | grep -ciE 'desvio_medio persistido|fator (é|e) o desvio_medio')" -gt 0 ]
+}
+Z_SEM_ORDEM=""
+for z_f in $Z_CONSOMEM; do
+  z_diz_fator_antes "$z_f" || Z_SEM_ORDEM="$Z_SEM_ORDEM $(basename "$z_f")"
+done
+[ -z "$Z_SEM_ORDEM" ]
+afirma "z8-consumidor-aplica-o-fator-antes-da-agregacao" $? "sem a ordem=[${Z_SEM_ORDEM:- nenhum}]"
+
+# Tambem na mesma linha: e o arredondamento A HORA INTEIRA que e o ultimo passo. "ultimo passo"
+# solto casaria com qualquer outra frase do arquivo que use a expressao.
+[ "$(z_txt "$Z_EST" | grep -iE 'hora inteira' | grep -ciE '[úu]ltimo passo')" -gt 0 ]
+afirma "z8b-hora-inteira-e-o-ultimo-passo" $? "floor/ceil a hora inteira e o ultimo passo da faixa"
+
+# 8c. O efeito e observavel: duas tasks `integracao_externa` (o=4 m=5 p=12 e o=3 m=4 p=5) com o
+#     fator canonico 1,16 publicam 10–14 h; com o half-even 1,15, 9–14 h. O piso dos `o` tambem
+#     recebe o fator, porque o fator entra antes da agregacao.
+z_faixa() { # z_faixa <fator> -> "min-max" em horas inteiras
+  awk -v f="$1" 'BEGIN {
+    mA = (4 + 4*5 + 12)/6; dA = (12 - 4)/6
+    mB = (3 + 4*4 +  5)/6; dB = ( 5 - 3)/6
+    m = (mA + mB) * f; d = sqrt(dA*dA + dB*dB) * f
+    mn = m - d; mx = m + d; piso = (4 + 3) * f
+    if (mn < piso) mn = piso
+    printf "%d-%d", int(mn), (mx == int(mx) ? mx : int(mx) + 1)
+  }'
+}
+Z_FX_CANON="$(z_faixa "$Z_CANON")"; Z_FX_HEV="$(z_faixa "$Z_HEV")"
+[ "$Z_FX_CANON" = "10-14" ] && [ "$Z_FX_HEV" = "9-14" ] && [ "$Z_FX_CANON" != "$Z_FX_HEV" ]
+afirma "z8c-fator-canonico-muda-a-faixa-publicada" $? \
+  "fator $Z_CANON -> $Z_FX_CANON h; fator $Z_HEV -> $Z_FX_HEV h"
+
+# 8d. O PISO da faixa agregada (DS-163, que estende a DS-41). A DS-41 fixou "min nunca abaixo do
+#     melhor caso somado", e o Passo 5 a escrevia com DOIS operandos diferentes: comparava `min`
+#     contra "a maior `o` do conjunto" e atribuia "a soma dos `o`". Sao grandezas distintas, e o
+#     piso ficava sem definicao justamente onde ha fator de correcao abaixo de 1 — permitido e
+#     alcancavel (tipo cujo historico mostra que o projeto estima para cima). A regra canonica tem
+#     um operando so, corrigido task a task: piso_conjunto = soma( o(t) * fator(t) ), com
+#     fator(t) = 1 quando o tipo da task nao tem fator ativo.
+#
+# Os detectores de formula leem o texto sem backtick, sem negrito e sem espaco em branco, mas
+# PRESERVAM o `*`: aqui o operador de multiplicacao e contrato, nao marcacao. `**` sempre vem em
+# par (negrito) e cai antes; `×` e `*` sao a mesma multiplicacao. Assim um mutante de espacamento
+# ou de marcacao sobrevive, e um mutante de operando morre.
+z_fml() { sed -e 's/\*\*//g' -e 's/`//g' -e 's/×/*/g' -e 's/[[:space:]]//g' "$1"; }
+z_fml_tem() { [ "$(z_fml "$1" | grep -cF "$2")" -gt 0 ]; }
+
+Z_PISO_FML='piso_conjunto=soma(o(t)*fator(t))'
+Z_PISO_CRU_FML='piso_conjunto=soma(o(t))'
+Z_SAN_FML='[soma(o(t)*fator(t)),soma(p(t)*fator(t))]'
+Z_SAN_CRU_FML='[somadoso,somadosp]'
+# A forma antiga, em prosa: gatilho na maior `o`, atribuicao na soma crua dos `o`.
+Z_MAIOR_O_RE='maior .?o.? do conjunto|maior dos .?o.?|soma dos .?o.? como piso|piso: soma dos .?o.?'
+# Nomear a forma recusada nao e prescreve-la (mesmo cuidado da z2 e da y8): a linha que traz o
+# token tem de estar livre de marca de recusa para contar como prescricao.
+Z_RECUSA_PISO_RE="$Z_RECUSA_RE|publica|fracion|reprova|viraria|deixam? o piso sem|grandezas diferentes"
+z_prescreve_maior_o() {
+  local tot rec
+  tot="$(z_conta "$1" "$Z_MAIOR_O_RE")"
+  rec="$(z_txt "$1" | grep -iE "$Z_MAIOR_O_RE" | grep -ciE "$Z_RECUSA_PISO_RE")"
+  [ "$tot" -gt 0 ] && [ "$rec" -lt "$tot" ]
+}
+z_piso_lido() { # z_piso_lido <arquivo> -> corrigido | cru | contraditorio | indefinido
+  local f=1 g=1 a=1 w=1
+  z_fml_tem "$1" "$Z_PISO_FML" && f=0
+  # O gatilho compara e atribui o MESMO operando, na mesma linha: `min < piso_conjunto` entao
+  # `min = piso_conjunto`. Conferir so a formula nao basta — era exatamente o par comparacao/
+  # atribuicao que divergia.
+  [ "$(z_fml "$1" | grep -cE 'min<piso_conjunto.*min=piso_conjunto')" -gt 0 ] && g=0
+  z_fml_tem "$1" "$Z_PISO_CRU_FML" && a=0
+  z_prescreve_maior_o "$1" && w=0
+  if   [ $w -eq 0 ];                   then printf 'contraditorio'
+  elif [ $f -eq 0 ] && [ $g -eq 0 ];   then printf 'corrigido'
+  elif [ $a -eq 0 ];                   then printf 'cru'
+  else printf 'indefinido'; fi
+}
+Z_PISO_FORA=""
+for z_f in $Z_CONSOMEM; do
+  z_p="$(z_piso_lido "$z_f")"
+  [ "$z_p" = corrigido ] || Z_PISO_FORA="$Z_PISO_FORA $(basename "$z_f"):$z_p"
+done
+[ -z "$Z_PISO_FORA" ]
+afirma "z8d-piso-e-a-soma-dos-o-corrigidos-por-task" $? "fora do piso canonico=[${Z_PISO_FORA:- nenhum}]"
+
+# 8e. Reference e template dizem a MESMA regra. O template e o que o executor copia; contrato que
+#     mora so na reference vira faixa publicada por um arquivo e nao pelo outro.
+Z_NEUTRO_FORA=""
+for z_f in $Z_CONSOMEM; do
+  z_tem_re "$z_f" 'fator\(t\) *= *1($|[^0-9.])' || Z_NEUTRO_FORA="$Z_NEUTRO_FORA $(basename "$z_f")"
+done
+[ -z "$Z_NEUTRO_FORA" ]
+afirma "z8e-fator-neutro-por-task-declarado" $? "sem fator(t)=1=[${Z_NEUTRO_FORA:- nenhum}]"
+
+# 8f. O CLAMP vem antes do arredondamento a hora inteira, e as duas metades na mesma linha: qual
+#     estagio, e de que arredondamento se fala. Pisar depois de arredondar publica `min`
+#     fracionario (3,20 h no caso vinculante), e a faixa publicada e em hora inteira.
+z_clamp_antes() {
+  [ "$(z_txt "$1" | grep -iE 'antes d(o|e) (floor|arredond)' | grep -ciE 'hora inteira|floor\(min\)')" -gt 0 ]
+}
+z_prescreve_clamp_depois() {
+  local tot rec
+  tot="$(z_conta "$1" 'depois d(o|e) (floor|arredond)')"
+  rec="$(z_txt "$1" | grep -iE 'depois d(o|e) (floor|arredond)' | grep -ciE "$Z_RECUSA_PISO_RE")"
+  [ "$tot" -gt 0 ] && [ "$rec" -lt "$tot" ]
+}
+Z_CLAMP_FORA=""
+for z_f in $Z_CONSOMEM; do
+  z_clamp_antes "$z_f" || Z_CLAMP_FORA="$Z_CLAMP_FORA $(basename "$z_f"):sem-antes"
+  z_prescreve_clamp_depois "$z_f" && Z_CLAMP_FORA="$Z_CLAMP_FORA $(basename "$z_f"):prescreve-depois"
+done
+[ -z "$Z_CLAMP_FORA" ]
+afirma "z8f-clamp-antes-do-arredondamento" $? "fora do estagio=[${Z_CLAMP_FORA:- nenhum}]"
+
+# 8g. A SANIDADE do Passo 5 e do checklist usa os limites corrigidos task a task. Com fator abaixo
+#     de 1, o intervalo bruto reprova conta certa: no caso vinculante, min=3,7333 fica FORA de
+#     [4, 12] e dentro de [3,20, 9,60]. Verificacao que reprova o certo manda refazer o que estava
+#     pronto, e quem refaz converge para o numero errado.
+z_sanidade_lida() { # z_sanidade_lida <arquivo> -> corrigida | crua | ambas | nenhuma
+  local c=1 b=1
+  z_fml_tem "$1" "$Z_SAN_FML" && c=0
+  z_fml_tem "$1" "$Z_SAN_CRU_FML" && b=0
+  if   [ $c -eq 0 ] && [ $b -eq 0 ]; then printf 'ambas'
+  elif [ $c -eq 0 ];                 then printf 'corrigida'
+  elif [ $b -eq 0 ];                 then printf 'crua'
+  else printf 'nenhuma'; fi
+}
+Z_SAN_FORA=""
+for z_f in $Z_CONSOMEM; do
+  z_s="$(z_sanidade_lida "$z_f")"
+  [ "$z_s" = corrigida ] || Z_SAN_FORA="$Z_SAN_FORA $(basename "$z_f"):$z_s"
+done
+[ -z "$Z_SAN_FORA" ]
+afirma "z8g-sanidade-usa-o-intervalo-corrigido" $? "fora do intervalo corrigido=[${Z_SAN_FORA:- nenhum}]"
+
+# 8h. Dados literais que SEPARAM as leituras do piso, no caso vinculante: uma task `api`
+#     o=4 m=5 p=12 com o fator 0,80 do seu tipo. Media corrigida 4,80, desvio corrigido 1,0667,
+#     min cru 3,7333, max 5,8667. Piso corrigido 4 × 0,80 = 3,20, que 3,7333 nao fura: faixa
+#     publicada 3–6 h. Com o piso bruto (soma dos `o` sem fator, 4) o min e pisado em 4 e a faixa
+#     viraria 4–6 h — uma hora de esforco na base da faixa que o metodo nao calculou. Pisando
+#     depois do arredondamento, o min publicado e 3,2: nem hora inteira.
+z_faixa_t() { # z_faixa_t <piso:corrigido|cru|maior_o> <clamp:antes|depois> <fator_global|-> <o,m,p,fator>...
+  local piso="$1" clamp="$2" fg="$3"; shift 3
+  printf '%s\n' "$@" | awk -F, -v piso="$piso" -v clamp="$clamp" -v fg="$fg" '
+    { o=$1; m=$2; p=$3; f=(fg == "-" ? $4 : fg)
+      M += (o + 4*m + p)/6 * f; v = (p - o)/6 * f; V += v*v
+      soc += o*f; so += o; if (o > mo) mo = o }
+    END {
+      d = sqrt(V); mn = M - d; mx = M + d
+      ps = (piso == "corrigido" ? soc : (piso == "cru" ? so : mo))
+      fmx = (mx == int(mx) ? mx : int(mx) + 1)
+      if (clamp == "antes") { if (mn < ps) mn = ps; fmn = int(mn) }
+      else { fmn = int(mn); if (fmn < ps) fmn = ps }
+      printf "%g-%g", fmn, fmx
+    }'
+}
+Z_CASO_API='4,5,12,0.80'
+Z_FX_PISO_OK="$(z_faixa_t corrigido antes - $Z_CASO_API)"
+Z_FX_PISO_CRU="$(z_faixa_t cru antes - $Z_CASO_API)"
+Z_FX_PISO_TARDE="$(z_faixa_t corrigido depois - $Z_CASO_API)"
+[ "$Z_FX_PISO_OK" = "3-6" ] && [ "$Z_FX_PISO_CRU" = "4-6" ] && [ "$Z_FX_PISO_TARDE" = "3.2-6" ] \
+  && [ "$Z_FX_PISO_OK" != "$Z_FX_PISO_CRU" ] && [ "$Z_FX_PISO_OK" != "$Z_FX_PISO_TARDE" ]
+afirma "z8h-dados-separam-as-leituras-do-piso" $? \
+  "corrigido=$Z_FX_PISO_OK cru=$Z_FX_PISO_CRU pisado-depois=$Z_FX_PISO_TARDE"
+
+# 8i. A receita e LIDA de cada ponto que consome o fator e aplicada ao caso vinculante: o conjunto
+#     dos resultados tem de ser {3-6}. Era {indefinido} — o contrato nao respondia qual operando.
+Z_FX_PISO=""
+for z_f in $Z_CONSOMEM; do
+  case "$(z_piso_lido "$z_f")" in
+    corrigido) Z_FX_PISO="$Z_FX_PISO $(z_faixa_t corrigido antes - $Z_CASO_API)" ;;
+    cru)       Z_FX_PISO="$Z_FX_PISO $(z_faixa_t cru antes - $Z_CASO_API)" ;;
+    *)         Z_FX_PISO="$Z_FX_PISO indefinido" ;;
+  esac
+done
+Z_FX_PISO_UNICO="$(printf '%s\n' $Z_FX_PISO | sort -u | tr '\n' ' ' | sed 's/ $//')"
+[ "$Z_FX_PISO_UNICO" = "3-6" ]
+afirma "z8i-faixa-canonica-do-caso-vinculante" $? "faixa por ponto=[$Z_FX_PISO_UNICO] (esperado 3-6)"
+
+# 8j. CONJUNTO MISTO: o fator e por task, nunca um fator global do conjunto. `api` o=4 m=5 p=12
+#     com fator 0,80 mais `ui` o=3 m=4 p=5 sem fator ativo (fator 1) publicam 7–10 h. Aplicar
+#     0,80 ao conjunto inteiro publica 6–10 h; ignorar o fator publica 8–12 h. Tres faixas
+#     diferentes do mesmo plano, e so uma sai da regra.
+Z_CASO_MISTO="4,5,12,0.80 3,4,5,1"
+Z_FX_MISTO_T="$(z_faixa_t corrigido antes - $Z_CASO_MISTO)"
+Z_FX_MISTO_G="$(z_faixa_t corrigido antes 0.80 $Z_CASO_MISTO)"
+Z_FX_MISTO_N="$(z_faixa_t corrigido antes 1 $Z_CASO_MISTO)"
+[ "$Z_FX_MISTO_T" = "7-10" ] && [ "$Z_FX_MISTO_G" = "6-10" ] && [ "$Z_FX_MISTO_N" = "8-12" ] \
+  && [ "$Z_FX_MISTO_T" != "$Z_FX_MISTO_G" ] && [ "$Z_FX_MISTO_T" != "$Z_FX_MISTO_N" ]
+afirma "z8j-conjunto-misto-usa-o-fator-de-cada-task" $? \
+  "por task=$Z_FX_MISTO_T global=$Z_FX_MISTO_G sem fator=$Z_FX_MISTO_N"
+
+# 8k. E a sanidade do mesmo caso: o intervalo corrigido aprova a conta certa, o bruto a reprova.
+z_sanidade_aplica() { # z_sanidade_aplica <corrigido|cru> <o,m,p,fator>... -> aprova | reprova
+  local lim="$1"; shift
+  printf '%s\n' "$@" | awk -F, -v lim="$lim" '
+    { o=$1; m=$2; p=$3; f=$4
+      M += (o + 4*m + p)/6 * f; v = (p - o)/6 * f; V += v*v
+      soc += o*f; spc += p*f; so += o; sp += p }
+    END {
+      d = sqrt(V); lo = (lim == "corrigido" ? soc : so); hi = (lim == "corrigido" ? spc : sp)
+      printf "%s", (M - d >= lo && M + d <= hi) ? "aprova" : "reprova"
+    }'
+}
+Z_SAN_OK="$(z_sanidade_aplica corrigido $Z_CASO_API)"
+Z_SAN_CRU="$(z_sanidade_aplica cru $Z_CASO_API)"
+[ "$Z_SAN_OK" = aprova ] && [ "$Z_SAN_CRU" = reprova ]
+afirma "z8k-intervalo-bruto-reprovaria-a-conta-certa" $? \
+  "corrigido=$Z_SAN_OK bruto=$Z_SAN_CRU (min 3,7333 fora de [4, 12])"
+
+# 8l. A decisao esta registrada e e APPEND-ONLY: DS-163 entra estendendo a DS-41, e a DS-41 fica
+#     byte a byte como estava. Reescrever uma decisao antiga apaga o rastro de por que a nova
+#     existe — e o registro e onde a proxima sessao encontra o porque.
+Z_DS163="$(grep -F '| DS-163 |' "$Z_DS")"
+[ -n "$Z_DS163" ]
+afirma "z8l-ds163-registrada" $? "a decisao do piso existe no registro"
+[ "$(printf '%s' "$Z_DS163" | grep -cF 'DS-41')" -gt 0 ]; z_rc=$?
+afirma "z8m-ds163-declara-que-estende-ds41" "$z_rc" "DS-163 nomeia a DS-41 que ela estende"
+Z_DS163_F="$W/.z-ds163"; printf '%s\n' "$Z_DS163" > "$Z_DS163_F"
+z_fml_tem "$Z_DS163_F" "$Z_PISO_FML"
+afirma "z8n-ds163-traz-a-formula-do-piso" $? "DS-163 escreve $Z_PISO_FML"
+
+# A DS-41 intacta: conteudo e tamanho conferidos pelo cksum da propria linha (376 bytes, a linha
+# com o \n do grep). Qualquer reescrita, ate de uma virgula, muda o par.
+Z_DS41_CK_ESPERADO='2616782449 376'
+Z_DS41_CK="$(grep -F '| DS-41 |' "$Z_DS" | cksum)"
+[ "$(grep -cF '| DS-41 |' "$Z_DS")" -eq 1 ] && [ "$Z_DS41_CK" = "$Z_DS41_CK_ESPERADO" ]
+afirma "z8o-ds41-permanece-byte-a-byte" $? "cksum=[$Z_DS41_CK] esperado=[$Z_DS41_CK_ESPERADO]"
+
+# 9. A decisao esta registrada: DS-160 fixa a receita, e o registro e onde a proxima sessao
+#    encontra o PORQUE — sem ele, a convencao volta a ser escolha de quem executa.
+Z_DS160="$(grep -F '| DS-160 |' "$Z_DS")"
+[ -n "$Z_DS160" ]
+afirma "z9-ds160-registrada" $? "a decisao da precisao existe no registro"
+[ "$(printf '%s' "$Z_DS160" | grep -ciE 'half-up|meio para cima')" -gt 0 ]; z_rc=$?
+afirma "z9b-ds160-fixa-o-desempate" "$z_rc" "DS-160 diz half-up"
+[ "$(printf '%s' "$Z_DS160" | grep -ciE 'duas casas')" -gt 0 ]; z_rc=$?
+afirma "z9c-ds160-fixa-as-casas" "$z_rc" "DS-160 diz duas casas"
+
+# 10. A chave e o schema nao mudam: a correcao e da precisao do valor, nao do formato. Nenhum
+#     parser afetado, nenhuma chave nova, e `desvio`/`desvio_medio` continuam numeros no YAML
+#     (nunca string com casas embutidas, que e como se fabrica "duas casas" a forca).
+grep -qF 'desvio_medio:' "$Z_SCH" && grep -qF 'desvio_medio:' "$Z_TPL"
+afirma "z10-chaves-preservadas" $? "desvio e desvio_medio continuam as chaves"
+Z_STRINGS="$(grep -rnE '^[[:space:]]*(desvio|desvio_medio|fator_correcao_aplicado):[[:space:]]*["'"'"']' \
+  $Z_DEFINEM "$Z_TES" | tr '\n' ' ')"
+[ -z "$Z_STRINGS" ]
+afirma "z10b-nenhum-valor-virou-string" $? "ocorrencias=[${Z_STRINGS:-nenhuma}]"
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"
 [ "$pulado" -eq 0 ] || echo "  ATENCAO: skip interno e buraco de cobertura da sprintx nesta plataforma, nao dependencia externa."
