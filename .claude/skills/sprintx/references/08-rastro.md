@@ -132,5 +132,5 @@ Um cuidado que não é opcional:
 Por isso:
 
 1. O valor entra como **`duracao_observada`**, nunca como `real`, e nunca substitui o `real` anotado por quem executou.
-2. A calibração usa **mediana**, não média — um intervalo com pausa no meio distorce uma média e quase não move uma mediana.
+2. A `duracao_observada` **não entra na calibração**, e por isso **não escolhe o agregador** dela: o que a calibração agrega é o `desvio_task`, que vem do `real` anotado — já sem a pausa. O agregado por tipo é a **média** dos `desvio_task` daquele tipo, gravada em `desvio_medio`, nunca a mediana (`references/06-execucao.md`, `references/00-schema.md`).
 3. Divergência grande entre `duracao_observada` e `real` é sinal de interrupção, e vale registrar como tal em vez de "corrigir" um dos dois.

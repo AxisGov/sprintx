@@ -269,7 +269,7 @@ desvio_task = real / estimado_media          # estimado_media = (o + 4m + p) / 6
 
 Por isso a duração vinda do rastro entra no `HISTORICO.md` como `duracao_observada`, um campo distinto de `real`, e **nunca a substitui**. Quando as duas divergirem muito, vale o `real` — e a divergência é, ela própria, um sinal de que a task teve interrupção.
 
-Pela mesma razão, a calibração usa **mediana**, não média: um único intervalo com pausa no meio distorce uma média e quase não move uma mediana.
+Pela mesma razão, a `duracao_observada` **não entra na calibração** — e, por não alimentá-la, **não escolhe o agregador** dela. O que a calibração agrega é o `desvio_task`, calculado sobre o `real` anotado por quem executou, que já deixa pausa, reunião e espera de fora: a pausa que distorceria uma média de tempo de parede não chega ao número que calibra, porque tempo de parede não entra nele. Por isso o agregado por tipo é a **média** dos `desvio_task`, nunca a mediana.
 
 Se a F3.5 não rodou (não existe `00-ESTIMATIVA.md`), registre o real mesmo assim, com `estimado_min`, `estimado_max`, `estimado_media` e `desvio` em `null`: o real continua alimentando a comparabilidade por tipo e área nas estimativas futuras.
 

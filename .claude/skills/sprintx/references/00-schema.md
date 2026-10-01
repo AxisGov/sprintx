@@ -557,6 +557,10 @@ Regras duras deste kind:
   rodou sem a F3.5; `real` é sempre preenchido.
 - `desvio` é `real / estimado_media`. `fator_ativo` só é `true` com 3 ou mais entradas
   encerradas daquele tipo.
+- `desvio_medio` é a **média** dos `desvio_task` — a chave `desvio` de cada entrada encerrada
+  daquele tipo —, nunca a mediana. O agregador é **único**: dois executores que leiam este
+  contrato gravam o mesmo número a partir do mesmo histórico. Ele não depende de
+  `duracao_observada`, que a `calibracao` não lê (DS-37).
 - `calibracao` é `[]` enquanto não houver entrada suficiente para calcular desvio por tipo. Com
   `calibracao: []`, a tabela `Calibração por tipo de task` da prosa fica **com cabeçalho e separador
   e sem nenhuma linha de dados** — regra universal 7 aplicada à lista vazia: o YAML diz `[]` e a
