@@ -258,8 +258,8 @@ Uma entrada por task **concluída**, com: `trabalho_id`, `task_id`, `tipo_task`,
 **O desvio.** Se `docs/sprintx/features/<slug>/00-ESTIMATIVA.md` existe, cada entrada traz o estimado daquela task e o desvio entre estimado e real:
 
 ```
-desvio_task  = arredonda( real / estimado_media )    # estimado_media = (o + 4m + p) / 6
-arredonda(x) = duas casas decimais, meio para cima (half-up)
+desvio_calibracao_task = arredonda( real / estimado_media )   # estimado_media = (o + 4m + p) / 6
+arredonda(x)           = duas casas decimais, meio para cima (half-up)
 ```
 
 `1,00` é o alvo; `1,40` significa que levou 40% a mais que o previsto.
@@ -272,11 +272,11 @@ arredonda(x) = duas casas decimais, meio para cima (half-up)
 
 Por isso a duração vinda do rastro entra no `HISTORICO.md` como `duracao_observada`, um campo distinto de `real`, e **nunca a substitui**. Quando as duas divergirem muito, vale o `real` — e a divergência é, ela própria, um sinal de que a task teve interrupção.
 
-Pela mesma razão, a `duracao_observada` **não entra na calibração** — e, por não alimentá-la, **não escolhe o agregador** dela. O que a calibração agrega é o `desvio_task`, calculado sobre o `real` anotado por quem executou, que já deixa pausa, reunião e espera de fora: a pausa que distorceria uma média de tempo de parede não chega ao número que calibra, porque tempo de parede não entra nele. Por isso o agregado por tipo é a **média** dos `desvio_task`, nunca a mediana.
+Pela mesma razão, a `duracao_observada` **não entra na calibração** — e, por não alimentá-la, **não escolhe o agregador** dela. O que a calibração agrega é o `desvio_calibracao_task`, nunca o `desvio_padrao_task` — razão adimensional, não dispersão em horas —, calculado sobre o `real` anotado por quem executou, que já deixa pausa, reunião e espera de fora: a pausa que distorceria uma média de tempo de parede não chega ao número que calibra, porque tempo de parede não entra nele. Por isso o agregado por tipo é a **média** dos `desvio_calibracao_task`, nunca a mediana.
 
 Se a F3.5 não rodou (não existe `00-ESTIMATIVA.md`), registre o real mesmo assim, com `estimado_min`, `estimado_max`, `estimado_media` e `desvio` em `null`: o real continua alimentando a comparabilidade por tipo e área nas estimativas futuras.
 
-**Recalcule a tabela de calibração por tipo** ao acrescentar as entradas: para cada `tipo_task`, `desvio_medio` é a média dos `desvio_task` **já persistidos** de todas as entradas encerradas daquele tipo — a chave `desvio` como ela está gravada, nunca a média das razões brutas —, **arredondada de novo** a duas casas com half-up; e `fator_ativo` é `true` a partir de 3 entradas. Exemplo: `desvio` persistidos `1.13`, `1.13`, `1.17` e `1.20` dão média `1,1575`, que se grava `desvio_medio: 1.16`. Esse desvio é o que vira fator de correção nas estimativas seguintes — e ele é sempre declarado na saída da estimativa, nunca embutido em silêncio (`references/07-estimativa.md`).
+**Recalcule a tabela de calibração por tipo** ao acrescentar as entradas: para cada `tipo_task`, `desvio_medio` é a média dos `desvio_calibracao_task` **já persistidos** de todas as entradas encerradas daquele tipo — a chave `desvio` como ela está gravada, nunca a média das razões brutas —, **arredondada de novo** a duas casas com half-up; e `fator_ativo` é `true` a partir de 3 entradas. Exemplo: `desvio` persistidos `1.13`, `1.13`, `1.17` e `1.20` dão média `1,1575`, que se grava `desvio_medio: 1.16`. Esse desvio é o que vira fator de correção nas estimativas seguintes — e ele é sempre declarado na saída da estimativa, nunca embutido em silêncio (`references/07-estimativa.md`).
 
 **Calibração vazia tem forma própria.** Se o recálculo não produzir nenhum tipo com desvio — o caso do primeiro trabalho do projeto, e de todo trabalho que rodou sem a F3.5, em que `desvio` é `null` em cada entrada —, grave `calibracao: []` e a tabela `Calibração por tipo de task` **só com cabeçalho e separador, sem nenhuma linha de dados**. Uma linha de dados por item de `calibracao`, e nenhuma linha fabricada para a tabela não ficar vazia: `—` é a regra de célula ausente de uma linha real (`assets/TEMPLATE-HISTORICO.md`), e `| — | — | — | — |` declara um `tipo_task` fora do enum — tabela sem linha de dados é o que diz a verdade sobre `calibracao: []`.
 

@@ -4862,14 +4862,16 @@ afirma "x8-enum-tipo-task-sem-sentinela" "$x_rc" "enum=[$(printf '%s' "$X_ENUM" 
 
 echo "== Y. o agregador da calibracao do HISTORICO.md e canonico: media, nunca mediana (D-09) =="
 # O contrato dizia as duas coisas sobre o MESMO numero. `desvio_medio` era definido como a media
-# dos `desvio_task` (06-execucao.md Passo 3, TEMPLATE-HISTORICO.md, 07-estimativa.md Passo 10, e o
-# proprio nome do campo persistido), e ao mesmo tempo duas frases mandavam a calibracao usar
-# mediana (06-execucao.md, 08-rastro.md, DS-37, README.md). A justificativa da mediana e sobre
-# tempo de parede com pausa — isto e, sobre `duracao_observada`, que o schema, o template e a
-# 07-estimativa declaram FORA do desvio e FORA da calibracao. Logo a premissa da mediana nao
-# alcanca o numero que calibra: o que a calibracao agrega e o `desvio_task`, construido sobre o
-# `real` anotado, que ja exclui pausa. Duas execucoes validas produziam 2,0 e 1,0 do mesmo
-# historico. Canonico: MEDIA. `duracao_observada` nao escolhe o agregador porque nao o alimenta.
+# dos `desvio_task` — a notacao da epoca, que a D-11 desfez em `desvio_padrao_task` e
+# `desvio_calibracao_task` (06-execucao.md Passo 3, TEMPLATE-HISTORICO.md, 07-estimativa.md
+# Passo 10, e o proprio nome do campo persistido) —, e ao mesmo tempo duas frases mandavam a
+# calibracao usar mediana (06-execucao.md, 08-rastro.md, DS-37, README.md). A justificativa da
+# mediana e sobre tempo de parede com pausa — isto e, sobre `duracao_observada`, que o schema,
+# o template e a 07-estimativa declaram FORA do desvio e FORA da calibracao. Logo a premissa da
+# mediana nao alcanca o numero que calibra: o que a calibracao agrega e o
+# `desvio_calibracao_task`, construido sobre o `real` anotado, que ja exclui pausa. Duas
+# execucoes validas produziam 2,0 e 1,0 do mesmo historico. Canonico: MEDIA.
+# `duracao_observada` nao escolhe o agregador porque nao o alimenta.
 Y_EXE="$SK/references/06-execucao.md"
 Y_RAS="$SK/references/08-rastro.md"
 Y_TPL="$SK/assets/TEMPLATE-HISTORICO.md"
@@ -4894,8 +4896,12 @@ afirma "y1-dados-separam-os-dois-agregadores" $? "desvios=[$Y_DESVIOS] media=$Y_
 
 # 2. O agregador e LIDO da documentacao, nao assumido pelo teste: cada ponto canonico declara um
 #    token, e o conjunto dos tokens tem de ser exatamente {media}. `ambos` e a contradicao D-09.
-y_diz_media()   { grep -qiE 'm[ée]dia(\*\*)? d(os|e) (`?desvio_task`?|desvios)' "$1"; }
-y_diz_mediana() { grep -qiE 'mediana(\*\*)? d(os|e) (`?desvio_task`?|desvios)|calibra[çc][ãa]o usa (\*\*)?mediana|mediana(\*\*)?, n[ãa]o m[ée]dia' "$1"; }
+# O simbolo do insumo agregado e o `desvio_calibracao_task` (D-11/DS-162); `desvio_task` fica na
+# alternancia porque o registro e append-only e a DS-37 do item 7 conserva a notacao da epoca. Os
+# dois detectores aceitam exatamente o mesmo conjunto de nomes: afrouxar so o lado da media
+# deixaria "mediana dos `desvio_calibracao_task`" passar sem ser vista.
+y_diz_media()   { grep -qiE 'm[ée]dia(\*\*)? d(os|e) (`?desvio(_calibracao)?_task`?|desvios)' "$1"; }
+y_diz_mediana() { grep -qiE 'mediana(\*\*)? d(os|e) (`?desvio(_calibracao)?_task`?|desvios)|calibra[çc][ãa]o usa (\*\*)?mediana|mediana(\*\*)?, n[ãa]o m[ée]dia' "$1"; }
 y_agregador() { # y_agregador <arquivo> -> media | mediana | ambos | nenhum
   local m=1 d=1
   y_diz_media "$1" && m=0
@@ -4947,8 +4953,8 @@ for y_f in "$Y_EXE" "$Y_RAS"; do
     "a razao esta explicita onde estava a frase errada"
 done
 
-# 5. O que a calibracao agrega e nomeado: `desvio_task`, vindo do `real` anotado — nunca o tempo
-#    de parede. Permitir que `duracao_observada` alimente a calibracao mata este caso.
+# 5. O que a calibracao agrega e nomeado: `desvio_calibracao_task`, vindo do `real` anotado —
+#    nunca o tempo de parede. Permitir que `duracao_observada` alimente a calibracao mata este caso.
 y_exclui() { # y_exclui <arquivo> — o arquivo tira `duracao_observada` da calibracao
   grep -qiE 'duração observada|`duracao_observada`' "$1" &&
   grep -qiE 'n[ãa]o (entra|participa)[^.]*calibra|fora da `calibracao`|calibra[çc][ãa]o nunca a l[êe]' "$1"
@@ -4959,8 +4965,8 @@ for y_f in $Y_DEFINEM; do
 done
 [ -z "$Y_VAZADOS" ]
 afirma "y5-duracao-observada-fora-da-calibracao-em-todo-ponto" $? "sem a exclusao=[${Y_VAZADOS:- nenhum}]"
-tem "$Y_EXE" '`desvio_task`'; afirma "y5b-execucao-nomeia-o-insumo-agregado" $? "o agregado e o desvio_task"
-tem "$Y_RAS" '`desvio_task`'; afirma "y5c-rastro-nomeia-o-insumo-agregado" $? "o rastro aponta para o desvio_task"
+tem "$Y_EXE" '`desvio_calibracao_task`'; afirma "y5b-execucao-nomeia-o-insumo-agregado" $? "o agregado e o desvio_calibracao_task"
+tem "$Y_RAS" '`desvio_calibracao_task`'; afirma "y5c-rastro-nomeia-o-insumo-agregado" $? "o rastro aponta para o desvio_calibracao_task"
 
 # 6. O campo persistido nao e renomeado: `desvio_medio` continua a chave do YAML no schema e no
 #    template, e nenhuma variante `desvio_mediana` aparece. Compatibilidade de schema e parte do
@@ -5502,6 +5508,318 @@ afirma "aa5b-ds161-nomeia-a-causa" "$aa_rc" "DS-161 diz que a substituicao de co
 [ "$(printf '%s' "$AA_L161" | grep -cE 'rc=\$\?|variavel')" -gt 0 ]; aa_rc=$?
 afirma "aa5c-ds161-fixa-a-forma-canonica" "$aa_rc" "DS-161 diz capturar o status e passar por variavel"
 rm -rf "$AA_T"
+
+echo "== AB. \`desvio_task\` nomeava duas grandezas incompativeis; os dois simbolos sao canonicos (D-11) =="
+# A D-09 fixou o AGREGADOR do numero que calibra e a D-10 a sua PRECISAO. O NOME continuava
+# ambiguo, e no MESMO arquivo: na 07-estimativa.md, `desvio_task` era
+#   Passo 5  (linha 139 em f917fe0): (p - o) / 6                 — desvio-padrao PERT, em HORAS,
+#                                                                  dispersao de uma estimativa;
+#   Passo 10 (linha 295 em f917fe0): real / media_task_estimada  — razao de calibracao,
+#                                                                  ADIMENSIONAL, quanto o real
+#                                                                  excedeu o estimado.
+# 06-execucao.md, TEMPLATE-HISTORICO.md, 00-schema.md e 08-rastro.md usavam o nome na segunda
+# acepcao; TEMPLATE-ESTIMATIVA.md na primeira. A consequencia e em hora cobrada: quem le "o fator
+# multiplica `media_task` e `desvio_task`" (Passo 1) e procura o simbolo encontra as duas
+# definicoes, e somar em quadratura a razao de calibracao em vez do desvio-padrao publica 9-14 h
+# onde o canonico publica 10-14 h.
+# Canonico (DS-162): `desvio_padrao_task` SO para (p - o) / 6; `desvio_calibracao_task` SO para
+# real / estimado_media. As chaves persistidas nao mudam: `desvio` e `desvio_medio` (D-10).
+# O REGISTRO e append-only ("nada acima e revisto", declarado em cada secao D do arquivo): DS-37,
+# DS-40, DS-160 e DS-161 seguem como nasceram — a DS-37 e a DS-160 com `desvio_task`, a DS-40 com
+# `desvio` sem sufixo —, e e a DS-162 que declara o mapeamento para o par canonico. Por
+# isso os casos de colisao varrem a arvore VIVA do contrato — referencias e assets —, nunca o
+# registro; o registro responde pelos seus proprios casos.
+AB_PERT_RE='\(p[[:space:]]*-[[:space:]]*o\)[[:space:]]*/[[:space:]]*6'
+AB_CAL_RE='real[[:space:]]*/[[:space:]]*(estimado_media|media_task_estimada)'
+# Pontos que LIGAM cada simbolo a sua formula, os que o NOMEIAM, e a arvore viva inteira.
+AB_REL_PERT="references/07-estimativa.md assets/TEMPLATE-ESTIMATIVA.md"
+AB_REL_CAL="references/07-estimativa.md references/06-execucao.md assets/TEMPLATE-HISTORICO.md"
+AB_REL_NOMEIA_CAL="$AB_REL_CAL references/00-schema.md references/08-rastro.md"
+AB_REL_VIVOS="references/00-schema.md references/06-execucao.md references/07-estimativa.md
+references/08-rastro.md assets/TEMPLATE-ESTIMATIVA.md assets/TEMPLATE-HISTORICO.md"
+
+# Os detectores leem o texto SEM marcacao: `**antes**` e `antes` sao a mesma regra (mesma
+# disciplina da secao Z). E contam linhas (`-c`) em vez de abortar na primeira (`-q`): depois de
+# um pipe, `grep -q` fecha a entrada no primeiro casamento, o `tr` a montante leva SIGPIPE e, com
+# `pipefail` ligado (linha 9), o pipeline devolve status nao-zero mesmo tendo casado.
+ab_txt() { tr -d '*`' < "$1"; }
+ab_conta() { ab_txt "$1" | grep -ciE "$2"; }
+ab_tem_re() { [ "$(ab_conta "$1" "$2")" -gt 0 ]; }
+
+# ab_lig <arquivo> <regex-da-formula> -> os simbolos ligados AQUELA formula, um por linha.
+# A ligacao e `<simbolo> = <...formula...>`, em bloco de codigo ou inline numa celula de tabela.
+# `[^=|]{0,40}` aceita o prefixo `arredonda( ` e nao cruza outro `=` nem separador de celula, para
+# nao colar o simbolo de uma ligacao na formula da ligacao seguinte da mesma linha.
+ab_lig() {
+  ab_txt "$1" \
+    | grep -ohE "(desvio|media|variancia)[a-z_]*[[:space:]]*=[[:space:]]*[^=|]{0,40}($2)" \
+    | sed 's/[[:space:]]*=.*//' | sort -u
+}
+ab_simbolos() { # ab_simbolos <dir> <regex> -> simbolos daquela formula na arvore viva inteira
+  local d="$1" re="$2" f
+  for f in $AB_REL_VIVOS; do [ -f "$d/$f" ] && ab_lig "$d/$f" "$re"; done | sort -u
+}
+
+# O caso e por ARVORE, nao por caminho fixo: a bateria real roda em "$SK" e cada mutante roda a
+# MESMA bateria numa copia, sem nunca tocar as referencias reais.
+ab_caso() { # ab_caso <caso> <dir> -> 0 se o caso PASSA naquela arvore
+  local c="$1" d="$2" f sujo="" v
+  case "$c" in
+    # O simbolo colidente nao existe mais em ponto nenhum da arvore viva. E o detector direto da
+    # D-11: enquanto `desvio_task` existir ali, as duas definicoes continuam alcancaveis pelo
+    # mesmo nome. Busca literal — nem `desvio_padrao_task` nem `desvio_calibracao_task` o contem.
+    ab_sem_simbolo_colidente)
+      for f in $AB_REL_VIVOS; do
+        [ -f "$d/$f" ] && grep -qF 'desvio_task' "$d/$f" && sujo="$sujo $f"
+      done
+      [ -z "$sujo" ] ;;
+    # Nenhum simbolo esta ligado as DUAS formulas. E a colisao medida, e vale para QUALQUER nome:
+    # trocar o par canonico por outro par disjunto nao reabre o defeito; usar um nome para as duas
+    # grandezas reabre. Interseccao vazia e a regra. Cada lista ja vem unica, logo o que aparece
+    # duas vezes na concatenacao e exatamente a interseccao.
+    ab_sem_intersecao)
+      v="$({ ab_simbolos "$d" "$AB_PERT_RE"; ab_simbolos "$d" "$AB_CAL_RE"; } \
+            | sort | uniq -d | tr '\n' ' ')"
+      [ -z "$v" ] ;;
+    # Cada formula esta ligada a EXATAMENTE um simbolo, e e o canonico.
+    ab_pert_canonica)
+      for f in $AB_REL_PERT; do
+        [ "$(ab_lig "$d/$f" "$AB_PERT_RE" | tr '\n' ' ' | sed 's/ $//')" = "desvio_padrao_task" ] \
+          || sujo="$sujo $f"
+      done
+      [ -z "$sujo" ] ;;
+    ab_cal_canonica)
+      for f in $AB_REL_CAL; do
+        [ "$(ab_lig "$d/$f" "$AB_CAL_RE" | tr '\n' ' ' | sed 's/ $//')" = "desvio_calibracao_task" ] \
+          || sujo="$sujo $f"
+      done
+      [ -z "$sujo" ] ;;
+    # Cada ponto de ENTRADA marca a fronteira contra a outra grandeza. Regra que existe so onde as
+    # duas se encontram e regra que a sessao seguinte nao encontra: ela chega pelo arquivo da
+    # calibracao, ou pelo da estimativa, e nunca le o outro.
+    ab_fronteira_pert)
+      for f in $AB_REL_PERT; do
+        ab_tem_re "$d/$f" 'desvio_padrao_task' \
+          && ab_tem_re "$d/$f" 'nunca o desvio_calibracao_task|n[ãa]o (é|e) o desvio_calibracao_task' \
+          || sujo="$sujo $f"
+      done
+      [ -z "$sujo" ] ;;
+    ab_fronteira_cal)
+      for f in $AB_REL_NOMEIA_CAL; do
+        ab_tem_re "$d/$f" 'desvio_calibracao_task' \
+          && ab_tem_re "$d/$f" 'nunca o desvio_padrao_task|n[ãa]o (é|e) o desvio_padrao_task' \
+          || sujo="$sujo $f"
+      done
+      [ -z "$sujo" ] ;;
+    # As chaves PERSISTIDAS da calibracao nunca sao ligadas a formula PERT na arvore viva. A
+    # interseccao nao pega este caso — `desvio` nao aparece ligado a razao com `=`, so em prosa —,
+    # e e a forma que a DS-40 carregava: a chave do numero adimensional definida como dispersao
+    # em horas. No registro ela fica como historia; aqui, nunca.
+    ab_chave_fora_do_pert)
+      v="$(ab_simbolos "$d" "$AB_PERT_RE" | grep -xE 'desvio|desvio_medio' | tr '\n' ' ')"
+      [ -z "$v" ] ;;
+    # Schema publico intacto: a correcao e de vocabulario matematico interno, nao de formato.
+    ab_chaves_publicas)
+      grep -qF 'desvio:' "$d/references/00-schema.md" \
+        && grep -qF 'desvio_medio:' "$d/references/00-schema.md" \
+        && grep -qF 'desvio:' "$d/assets/TEMPLATE-HISTORICO.md" \
+        && grep -qF 'desvio_medio:' "$d/assets/TEMPLATE-HISTORICO.md" \
+        && grep -qF 'fator_correcao_aplicado' "$d/references/00-schema.md" ;;
+    # E o simbolo interno NAO vira chave: ele nomeia a grandeza no contrato matematico, nunca um
+    # campo em disco. Chave nova seria quebra de schema disfarcada de clareza.
+    ab_simbolo_interno_nao_persiste)
+      v="$(grep -rnE '^[[:space:]]*(desvio_padrao_task|desvio_calibracao_task|desvio_padrao_medio|desvio_calibracao_medio):' \
+        "$d/references/00-schema.md" "$d/assets/TEMPLATE-HISTORICO.md" "$d/assets/TEMPLATE-ESTIMATIVA.md" \
+        2>/dev/null | tr '\n' ' ')"
+      [ -z "$v" ] ;;
+    # A incompatibilidade esta DECLARADA onde as duas grandezas se encontram (a 07-estimativa.md
+    # define as duas). Sem a frase, o proximo leitor acha os dois nomes sinonimos e os funde de
+    # volta — foi assim que o nome unico sobreviveu a D-09 e a D-10.
+    ab_incompatibilidade)
+      f=references/07-estimativa.md
+      ab_tem_re "$d/$f" 'duas grandezas (diferentes|incompat[íi]veis)|grandezas incompat[íi]veis' \
+        && ab_tem_re "$d/$f" 'desvio_padrao_task' \
+        && ab_tem_re "$d/$f" 'desvio_calibracao_task' \
+        && ab_tem_re "$d/$f" 'n[ãa]o s[ãa]o intercambi|nunca intercambi' \
+        && ab_tem_re "$d/$f" 'adimensional' ;;
+    # A decisao esta registrada: e onde a proxima sessao encontra o PORQUE do par de nomes. E ela
+    # nomeia a notacao SUPERADA, que o registro append-only conserva nas decisoes antigas — sem
+    # isso, quem le a DS-37 ou a DS-160 nao tem como saber qual das duas grandezas e aquela.
+    ab_ds162)
+      v="$(grep -F '| DS-162 |' "$d/DECISOES-DA-SKILL.md")"
+      [ -n "$v" ] \
+        && printf '%s' "$v" | grep -qF 'desvio_padrao_task' \
+        && printf '%s' "$v" | grep -qF 'desvio_calibracao_task' \
+        && printf '%s' "$v" | grep -qF 'desvio_medio' \
+        && printf '%s' "$v" | grep -qF 'desvio_task' ;;
+    # E o registro continua append-only: as decisoes que nasceram com a notacao antiga seguem
+    # inteiras, inclusive a DS-161 da D-12. Reescrever o registro para "limpar" o vocabulario
+    # apagaria a historia que explica por que o par de nomes existe.
+    ab_registro_append_only)
+      for f in DS-37 DS-40 DS-160 DS-161; do
+        grep -qF "| $f |" "$d/DECISOES-DA-SKILL.md" || sujo="$sujo $f"
+      done
+      [ -z "$sujo" ] ;;
+    *) return 1 ;;
+  esac
+}
+AB_CASOS="ab_sem_simbolo_colidente ab_sem_intersecao ab_pert_canonica ab_cal_canonica
+ab_fronteira_pert ab_fronteira_cal ab_chave_fora_do_pert ab_chaves_publicas
+ab_simbolo_interno_nao_persiste ab_incompatibilidade ab_ds162 ab_registro_append_only"
+
+# 1. Dados literais que SEPARAM as duas grandezas na MESMA task. Sem isto, "dois nomes" seria
+#    discussao de estilo: duas tasks `integracao_externa` (o=4 m=5 p=12 com real 6.8; o=3 m=4 p=5
+#    com real 4.8) tem desvio-padrao PERT 1,33 h e 0,33 h — dispersao, em hora — e razao de
+#    calibracao 1,13 e 1,20 — adimensional, e os `desvio` persistidos da D-10. Quatro numeros,
+#    duas grandezas, um nome so no contrato da base.
+ab_num() { # ab_num <o> <m> <p> <real> <grandeza:padrao|calibracao>
+  awk -v o="$1" -v m="$2" -v p="$3" -v r="$4" -v g="$5" 'BEGIN {
+    med = (o + 4*m + p) / 6
+    x = (g == "padrao") ? (p - o) / 6 : r / med
+    s = x * 100; i = int(s); if (s - i >= 0.5) i++      # duas casas, half-up (D-10)
+    printf "%.2f", i / 100
+  }'
+}
+AB_PA="$(ab_num 4 5 12 6.8 padrao)";     AB_CA="$(ab_num 4 5 12 6.8 calibracao)"
+AB_PB="$(ab_num 3 4  5 4.8 padrao)";     AB_CB="$(ab_num 3 4  5 4.8 calibracao)"
+[ "$AB_PA" = "1.33" ] && [ "$AB_CA" = "1.13" ] && [ "$AB_PB" = "0.33" ] && [ "$AB_CB" = "1.20" ] \
+  && [ "$AB_PA" != "$AB_CA" ] && [ "$AB_PB" != "$AB_CB" ]; ab_rc=$?
+afirma "ab1-grandezas-separadas-na-mesma-task" "$ab_rc" \
+  "A: padrao=$AB_PA h razao=$AB_CA | B: padrao=$AB_PB h razao=$AB_CB"
+
+# 1b. E a troca de uma pela outra e observavel em HORA PUBLICADA: somar em quadratura as razoes de
+#     calibracao, em vez dos desvios-padrao, com o mesmo fator canonico 1,16 da D-10, publica
+#     9-14 h onde o canonico publica 10-14 h. E a mesma divergencia que a D-10 mediu, agora pelo
+#     nome e nao pelo arredondamento.
+ab_faixa() { # ab_faixa <fator> <grandeza na quadratura:padrao|calibracao>
+  awk -v f="$1" -v g="$2" 'BEGIN {
+    mA = (4 + 4*5 + 12)/6; mB = (3 + 4*4 + 5)/6
+    if (g == "padrao") { dA = (12 - 4)/6; dB = (5 - 3)/6 } else { dA = 1.13; dB = 1.20 }
+    m = (mA + mB) * f; d = sqrt(dA*dA + dB*dB) * f
+    mn = m - d; mx = m + d; piso = (4 + 3) * f
+    if (mn < piso) mn = piso
+    printf "%d-%d", int(mn), (mx == int(mx) ? mx : int(mx) + 1)
+  }'
+}
+AB_FX_OK="$(ab_faixa 1.16 padrao)"; AB_FX_COL="$(ab_faixa 1.16 calibracao)"
+[ "$AB_FX_OK" = "10-14" ] && [ "$AB_FX_COL" = "9-14" ] && [ "$AB_FX_OK" != "$AB_FX_COL" ]; ab_rc=$?
+afirma "ab1b-colisao-muda-a-faixa-publicada" "$ab_rc" \
+  "desvio_padrao_task -> $AB_FX_OK h; razao de calibracao na quadratura -> $AB_FX_COL h"
+
+# 2 a 13. A bateria, lida das referencias reais. O nome do caso e derivado ANTES da condicao e o
+#         status e capturado na linha seguinte: substituicao de comando antes do `$?` apagaria o
+#         status da condicao (DS-161 / secao AA).
+for ab_c in $AB_CASOS; do
+  ab_nome="$(printf '%s' "$ab_c" | tr '_' '-')"
+  ab_caso "$ab_c" "$SK"; ab_rc=$?
+  afirma "$ab_nome" "$ab_rc" "lido da arvore do contrato em $SK"
+done
+
+# 14. Mutantes. Cada um nasce numa COPIA da skill — as referencias reais nunca sao tocadas — e tem
+#     de morrer pelos casos nomeados, nao de carona: o caso nomeado e verificado um a um, e o
+#     mutante so e considerado morto quando TODOS eles reprovam. `ab_muta` so devolve 0 quando o
+#     arquivo REALMENTE mudou em relacao a arvore real.
+ABW="$(mktemp -d)"
+ab_copia() { rm -rf "$ABW/$1"; mkdir -p "$ABW/$1"; cp -R "$SK/." "$ABW/$1/"; printf '%s' "$ABW/$1"; }
+ab_muta() { # ab_muta <dir> <arquivo-rel> <expressao sed>
+  [ -f "$1/$2" ] || return 1
+  sed -i "$3" "$1/$2" || return 1
+  ! cmp -s "$SK/$2" "$1/$2"
+}
+ab_mata() { local c; for c in $AB_CASOS; do ab_caso "$c" "$1" || { printf '%s' "$c"; return; }; done; }
+ab_mutante() { # ab_mutante <nome> <rc da geracao> <dir> <caso que TEM de matar>...
+  local nome="$1" rcg="$2" d="$3" c vivos=""; shift 3
+  if [ "$rcg" -eq 0 ]; then for c in "$@"; do ab_caso "$c" "$d" && vivos="$vivos$c "; done; fi
+  [ "$rcg" -eq 0 ] && [ -z "$vivos" ]; local rc=$?
+  afirma "$nome" "$rc" "morto por: $* ${vivos:+— SOBREVIVEU a: $vivos}(rc geracao=$rcg)"
+}
+ab_equivalente() { # ab_equivalente <nome> <rc da geracao> <dir> — equivalente nao pode morrer
+  local nome="$1" rcg="$2" d="$3" m=""
+  [ "$rcg" -eq 0 ] && m="$(ab_mata "$d")"
+  [ "$rcg" -eq 0 ] && [ -z "$m" ]; local rc=$?
+  afirma "$nome" "$rc" "equivalente, nao conta como morto; reprovou=[${m:-nenhum}] (rc geracao=$rcg)"
+}
+AB_CTL="$(ab_copia controle)"
+AB_K="$(ab_mata "$AB_CTL")"; [ -z "$AB_K" ]; ab_rc=$?
+afirma "abm-controle-copia-intacta-sobrevive" "$ab_rc" "${AB_K:-nenhum caso reprova a copia sem mutacao}"
+
+# m1 — a colisao da base, restaurada: um nome para as duas formulas no mesmo arquivo.
+AB_M="$(ab_copia m1)"
+ab_muta "$AB_M" references/07-estimativa.md 's/desvio_padrao_task/desvio_task/g; s/desvio_calibracao_task/desvio_task/g'
+ab_mutante "abm-mutante-1-colisao-restaurada" $? "$AB_M" \
+  ab_sem_simbolo_colidente ab_sem_intersecao ab_pert_canonica ab_cal_canonica
+
+# m2 — so o lado PERT volta ao nome antigo. Nao ha interseccao (a calibracao mantem o seu nome),
+#      e por isso este mutante prova que o caso do simbolo ausente e independente do da
+#      interseccao: o nome ambiguo de volta e defeito mesmo sem as duas acepcoes no mesmo nome.
+AB_M="$(ab_copia m2)"
+ab_muta "$AB_M" assets/TEMPLATE-ESTIMATIVA.md 's/desvio_padrao_task/desvio_task/g'
+ab_mutante "abm-mutante-2-so-o-lado-pert-reverte" $? "$AB_M" \
+  ab_sem_simbolo_colidente ab_pert_canonica ab_fronteira_pert
+ab_caso ab_sem_intersecao "$AB_M"; ab_rc=$?
+afirma "abm-mutante-2-nao-produz-interseccao" "$ab_rc" "os dois casos sao independentes, como projetado"
+
+# m3 — a forma da DS-40 trazida para a arvore viva: a chave PERSISTIDA da calibracao definida como
+#      a dispersao PERT. A interseccao nao a ve; o caso da chave, sim.
+AB_M="$(ab_copia m3)"
+ab_muta "$AB_M" assets/TEMPLATE-ESTIMATIVA.md 's/^desvio_padrao_task = (p - o) \/ 6/desvio = (p - o) \/ 6/'
+ab_mutante "abm-mutante-3-chave-persistida-vira-formula-pert" $? "$AB_M" \
+  ab_chave_fora_do_pert ab_pert_canonica
+
+# m4 — as formulas trocadas: o simbolo do desvio-padrao ligado a razao de calibracao. O defeito
+#      sob os nomes NOVOS — a prova de que o oraculo e sobre as grandezas, nao sobre a grafia.
+AB_M="$(ab_copia m4)"
+ab_muta "$AB_M" references/06-execucao.md 's/^desvio_calibracao_task = arredonda/desvio_padrao_task = arredonda/'
+ab_mutante "abm-mutante-4-formulas-trocadas-sob-os-nomes-novos" $? "$AB_M" \
+  ab_sem_intersecao ab_cal_canonica
+
+# m5 — a chave publica renomeada a pretexto de clareza. Schema quebrado, parser quebrado.
+AB_M="$(ab_copia m5)"
+ab_muta "$AB_M" references/00-schema.md 's/desvio_medio:/desvio_calibracao_medio:/g'
+ab_mutante "abm-mutante-5-chave-publica-renomeada" $? "$AB_M" ab_chaves_publicas
+
+# m6 — a declaracao da incompatibilidade removida: os dois nomes ficam, a razao de serem dois sai.
+AB_M="$(ab_copia m6)"
+ab_muta "$AB_M" references/07-estimativa.md '/^> \*\*Dois nomes, duas grandezas\.\*\*/d'
+ab_mutante "abm-mutante-6-incompatibilidade-apagada" $? "$AB_M" ab_incompatibilidade ab_fronteira_pert
+
+# m7 — o simbolo interno promovido a chave em disco, sem remover a antiga.
+AB_M="$(ab_copia m7)"
+ab_muta "$AB_M" assets/TEMPLATE-HISTORICO.md '/^    desvio: /a\    desvio_calibracao_task: 1.13'
+ab_mutante "abm-mutante-7-simbolo-interno-vira-chave" $? "$AB_M" ab_simbolo_interno_nao_persiste
+
+# m8 — a fronteira apagada de um ponto de entrada da calibracao: a 08-rastro.md deixa de dizer que
+#      o que a calibracao agrega nao e o desvio-padrao. Quem chega por ela volta a poder confundir.
+AB_M="$(ab_copia m8)"
+ab_muta "$AB_M" references/08-rastro.md 's/, nunca o `desvio_padrao_task`//g'
+ab_mutante "abm-mutante-8-fronteira-apagada-no-rastro" $? "$AB_M" ab_fronteira_cal
+
+# m9 — a DS-162 apagada do registro: a regra fica nas referencias e perde o porque.
+AB_M="$(ab_copia m9)"
+ab_muta "$AB_M" DECISOES-DA-SKILL.md '/^| DS-162 |/d'
+ab_mutante "abm-mutante-9-ds162-apagada" $? "$AB_M" ab_ds162
+
+# m10 — o registro "limpo": a DS-161 da D-12 removida junto com a notacao antiga. E o oposto do
+#       append-only, e o jeito mais facil de a correcao de vocabulario apagar historia alheia.
+AB_M="$(ab_copia m10)"
+ab_muta "$AB_M" DECISOES-DA-SKILL.md '/^| DS-161 |/d'
+ab_mutante "abm-mutante-10-registro-reescrito" $? "$AB_M" ab_registro_append_only
+
+# Equivalentes: mudam a forma e nao a regra, e por isso NAO podem morrer. Sem eles, um oraculo que
+# casasse espaco em branco ou marcacao passaria por discriminante sem ser.
+AB_M="$(ab_copia e1)"
+ab_muta "$AB_M" assets/TEMPLATE-ESTIMATIVA.md 's/^desvio_padrao_task = (p - o) \/ 6/desvio_padrao_task   =  (p-o)\/6/'
+ab_equivalente "abe-equivalente-1-espacamento-da-formula" $? "$AB_M"
+AB_M="$(ab_copia e2)"
+ab_muta "$AB_M" references/08-rastro.md 's/`desvio_calibracao_task`/**desvio_calibracao_task**/g'
+ab_equivalente "abe-equivalente-2-marcacao-do-simbolo" $? "$AB_M"
+rm -rf "$ABW"
+
+# 15. E a vitrine e a SKILL.md tambem nao carregam o simbolo colidente: sao os lugares de onde a
+#     proxima sessao reconstroi o vocabulario errado sem nunca abrir uma reference.
+AB_VITRINE="$(grep -rlF 'desvio_task' "$H/../../README.md" "$SK/SKILL.md" 2>/dev/null | tr '\n' ' ')"
+[ -z "$AB_VITRINE" ]; ab_rc=$?
+afirma "ab-vitrine-sem-o-simbolo-colidente" "$ab_rc" "arquivos com o simbolo antigo=[${AB_VITRINE:-nenhum}]"
 
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"

@@ -39,7 +39,7 @@ Uma entrada é comparável quando bate no tipo **e** em pelo menos um dos outros
 
 **Fator de correção.** O histórico traz, por tipo de task, o desvio médio entre estimado e real (ver Passo 8). Quando existir desvio calculado para um tipo com **3 ou mais** entradas encerradas, aplique-o como fator multiplicativo à faixa das tasks daquele tipo, e **declare o fator na saída, task a task e no total**. Fator de correção nunca é aplicado em silêncio: um número corrigido sem o fator visível é indistinguível de um número inventado.
 
-**O fator é o `desvio_medio` persistido**, lido do `HISTORICO.md` como está — duas casas decimais, half-up (DS-160) —, sem recalcular nada a partir das entradas e sem reduzir ou ampliar as casas. Ele entra na faixa da task daquele tipo **antes da agregação**: multiplica `media_task` e `desvio_task` de cada task do tipo, e só então o Passo 5 agrega. O arredondamento `floor(min)`/`ceil(max)` à hora inteira é o **último passo** da faixa agregada, nunca um estágio intermediário — arredondar antes do fator, ou arredondar o fator, publica outra faixa.
+**O fator é o `desvio_medio` persistido**, lido do `HISTORICO.md` como está — duas casas decimais, half-up (DS-160) —, sem recalcular nada a partir das entradas e sem reduzir ou ampliar as casas. Ele entra na faixa da task daquele tipo **antes da agregação**: multiplica `media_task` e `desvio_padrao_task` de cada task do tipo, e só então o Passo 5 agrega. O arredondamento `floor(min)`/`ceil(max)` à hora inteira é o **último passo** da faixa agregada, nunca um estágio intermediário — arredondar antes do fator, ou arredondar o fator, publica outra faixa.
 
 **Exemplo de impacto.** Duas tasks `integracao_externa` — `o=4 m=5 p=12` (média 6,00, desvio 1,33) e `o=3 m=4 p=5` (média 4,00, desvio 0,33) — com o fator canônico `1.16`: média agregada `11,60`, desvio agregado `1,59`, faixa `10,01–13,19`, publicada **10–14 h**. Com `1,15`, o número que sai de um arredondamento não canônico do mesmo histórico, a faixa publicada vira **9–14 h**. A casa decimal do fator não é detalhe de apresentação: ela muda a hora que se cobra.
 
@@ -135,15 +135,17 @@ O método abaixo é o método oficial da skill. Ele é aritmética simples, repr
 Para cada task estimada:
 
 ```
-media_task    = (o + 4m + p) / 6          # PERT: favorece o provável
-desvio_task   = (p - o) / 6               # desvio-padrão aproximado
+media_task         = (o + 4m + p) / 6     # PERT: favorece o provável
+desvio_padrao_task = (p - o) / 6          # desvio-padrão PERT da task, em HORAS
 ```
+
+> **Dois nomes, duas grandezas.** O `desvio_padrao_task = (p - o) / 6` acima é a **dispersão de uma estimativa, medida em horas**, e é só ele que entra na quadratura — nunca o `desvio_calibracao_task`. O `desvio_calibracao_task = real / estimado_media` do Passo 10 é a **razão de calibração**, **adimensional**, e diz quanto o real excedeu o estimado — nunca o `desvio_padrao_task`. São **duas grandezas incompatíveis** e **não são intercambiáveis**: somar em quadratura a razão de calibração, em vez do desvio-padrão, publica 9–14 h onde o canônico publica 10–14 h. A notação antiga chamava as duas pelo mesmo símbolo (DS-162).
 
 Para um conjunto de N tasks (uma fase, uma sprint, o trabalho inteiro):
 
 ```
 media_conjunto  = soma das media_task
-desvio_conjunto = raiz_quadrada( soma dos (desvio_task)^2 )     # quadratura
+desvio_conjunto = raiz_quadrada( soma dos (desvio_padrao_task)^2 )     # quadratura
 ```
 
 E a faixa publicada do conjunto:
@@ -292,15 +294,15 @@ Ao fim de um trabalho, `docs/sprintx/estimativas/HISTORICO.md` recebe uma linha 
 O **desvio** de uma task é calculado contra a média PERT que a originou:
 
 ```
-desvio_task  = arredonda( real / media_task_estimada )
-arredonda(x) = duas casas decimais, meio para cima (half-up)
+desvio_calibracao_task = arredonda( real / media_task_estimada )
+arredonda(x)           = duas casas decimais, meio para cima (half-up)
 ```
 
 `1,00` é o alvo; `1,40` significa que levou 40% a mais que o previsto.
 
 **Precisão e desempate (DS-160).** São **duas casas decimais**, com desempate **half-up**: terceira casa exatamente `5`, a segunda sobe. A razão `1,125` vira `1,13`, nunca `1,12`. As duas casas são **fixas**: a razão `1,2` grava-se `1.20` no YAML e escreve-se `1,20` na prosa. Cada `desvio` é arredondado **antes** de ser persistido — é o valor persistido que participa da calibração.
 
-O **desvio por tipo** é a média dos `desvio_task` **já persistidos** de todas as entradas encerradas daquele tipo — nunca a média das razões brutas —, arredondada de novo pela mesma regra. Ele é gravado na tabela de calibração do próprio `HISTORICO.md` e é o que vira **fator de correção** no Passo 1 — a partir de 3 entradas do tipo, e sempre declarado na saída, nunca embutido em silêncio.
+O **desvio por tipo** é a média dos `desvio_calibracao_task` **já persistidos** de todas as entradas encerradas daquele tipo — nunca a média das razões brutas, e nunca o `desvio_padrao_task`, que é dispersão em horas e não razão —, arredondada de novo pela mesma regra. Ele é gravado na tabela de calibração do próprio `HISTORICO.md` e é o que vira **fator de correção** no Passo 1 — a partir de 3 entradas do tipo, e sempre declarado na saída, nunca embutido em silêncio.
 
 **Exemplo completo.** Quatro entradas de `integracao_externa` com `estimado_media` 4.0, 4.0, 3.0 e 1.0 e `real` 4.5, 4.5, 3.5 e 1.2 dão razões `1,125`, `1,125`, `1,1666…` e `1,2`, persistidas como `desvio: 1.13`, `1.13`, `1.17` e `1.20`. A média dos quatro persistidos é `1,1575`, gravada como `desvio_medio: 1.16` com `fator_ativo: true`. Esse `1.16` é o fator que o Passo 1 aplica. Pelas convenções que o contrato **não** aceita, o mesmo histórico daria `1,15` — e a faixa publicada mudaria (ver o exemplo do Passo 1).
 
