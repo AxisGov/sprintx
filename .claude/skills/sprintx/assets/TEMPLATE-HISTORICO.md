@@ -57,6 +57,8 @@ A **duração observada** é outra coisa: o tempo de parede entre `task_iniciada
 |---|---|---|---|
 | {{tipo_task}} | {{n}} | {{desvio}} | {{sim, aplicado como fator ×{{desvio}} | não — menos de 3 entradas}} |
 
+> **Calibração vazia.** `calibracao: []` no YAML — nenhum tipo com desvio calculável ainda, o caso normal do primeiro trabalho do projeto e de todo trabalho que rodou sem a F3.5 — renderiza esta tabela com cabeçalho e separador e **sem nenhuma linha de dados**. Há exatamente uma linha de dados por item de `calibracao`, e o primeiro campo dela é sempre um valor do enum `tipo_task`: linha de dados sem item correspondente no frontmatter é proibida. Nunca fabrique uma linha para a tabela não ficar vazia, e nunca use `—`, `n/a`, célula vazia ou qualquer outra sentinela como se fosse linha — a regra da **Célula sem valor** acima vale para célula de uma linha real, nunca para a linha inteira, e `| — | — | — | — |` anuncia um `tipo_task` que não existe no enum, o que se lê como tabela corrompida e não como ausência de calibração. Tabela só com cabeçalho e separador é a forma correta, e fiel ao YAML, de dizer que ainda não há calibração.
+
 **Regra do fator.** O desvio de um tipo só vira fator de correção nas estimativas seguintes a partir de **3 entradas encerradas** daquele tipo — abaixo disso é ruído. Quando aplicado, o fator é **sempre declarado na saída da estimativa**, nunca embutido em silêncio.
 
 ## Como se calcula o desvio

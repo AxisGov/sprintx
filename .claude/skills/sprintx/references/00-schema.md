@@ -557,7 +557,14 @@ Regras duras deste kind:
   rodou sem a F3.5; `real` é sempre preenchido.
 - `desvio` é `real / estimado_media`. `fator_ativo` só é `true` com 3 ou mais entradas
   encerradas daquele tipo.
-- `calibracao` é `[]` enquanto não houver entrada suficiente para calcular desvio por tipo.
+- `calibracao` é `[]` enquanto não houver entrada suficiente para calcular desvio por tipo. Com
+  `calibracao: []`, a tabela `Calibração por tipo de task` da prosa fica **com cabeçalho e separador
+  e sem nenhuma linha de dados** — regra universal 7 aplicada à lista vazia: o YAML diz `[]` e a
+  prosa não mostra linha nenhuma. Cada linha de dados corresponde a **um** item de `calibracao` e
+  começa por um valor do enum `tipo_task`. Linha sem item correspondente é linha fabricada, e
+  sentinela no lugar da linha — `—`, `n/a`, `null` ou célula vazia no campo do tipo — é tabela
+  corrompida, nunca "calibração vazia": o leitor do arquivo recusa a linha cujo primeiro campo não
+  está no enum, e está certo em recusar.
 - `duracao_observada` é **opcional**: o tempo de parede da task, derivado do par
   `task_iniciada`/`task_concluida` do rastro (`references/08-rastro.md`). Vale
   `null` quando o par `task_iniciada`/`task_concluida` do rastro não existe — rastro desligado,

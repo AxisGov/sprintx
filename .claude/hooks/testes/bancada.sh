@@ -4774,6 +4774,85 @@ cmp -s "$W_DIR/u4-sem.txt" "$W_DIR/u4-com.txt"
 afirma "w7b-paridade-total-dos-escapes" $? "BMP + controle + par substituto + \\n: igual byte a byte"
 rm -rf "$W_DIR"
 
+echo "== X. calibracao vazia tem forma canonica na tabela do HISTORICO.md (D-08) =="
+# `calibracao: []` e estado valido e inevitavel do `kind: estimativa_historico` — o primeiro
+# trabalho do projeto, e todo trabalho que rodou sem a F3.5, fecham com desvio nenhum por tipo.
+# O template tinha a linha de dados parametrizada da tabela de calibracao, mas nenhum ponto
+# canonico dizia como a tabela humana fica com a lista vazia. A regra generica de celula ausente
+# manda `—`, e a execucao produziu honestamente `| — | — | — | — |`: uma linha de dados anunciando
+# um `tipo_task` fora do enum, que o leitor limitado recusa como tabela corrompida. A forma
+# canonica e a tabela com cabecalho e separador e NENHUMA linha de dados.
+X_TPL="$SK/assets/TEMPLATE-HISTORICO.md"
+X_SCH="$SK/references/00-schema.md"
+X_EXE="$SK/references/06-execucao.md"
+
+# Bloco `calibracao:` do frontmatter, e a tabela de calibracao da prosa (do cabecalho ate a
+# primeira linha que nao e de tabela). Helpers proprios: a secao se le sozinha.
+x_calibracao() { awk '/^calibracao:/{f=1;next} f && /^---/{f=0} f' "$1"; }
+x_tabela() { awk '/^\| Tipo de task \| Entradas \|/{f=1} f && !/^\|/{exit} f' "$1"; }
+x_linhas_de_dados() { x_tabela "$1" | awk 'NR>2'; }
+
+# 1. A tabela existe com cabecalho e separador — a forma que sobrevive a lista vazia.
+X_CAB="$(x_tabela "$X_TPL" | sed -n 1p)"
+X_SEP="$(x_tabela "$X_TPL" | sed -n 2p)"
+[ -n "$X_CAB" ] && printf '%s' "$X_SEP" | grep -qE '^\|[-:| ]+\|$'
+afirma "x1-tabela-tem-cabecalho-e-separador" $? "separador=[$X_SEP]"
+
+# 2. Uma linha de dados por item de `calibracao`, nunca mais, nunca menos: linha de dados sem
+#    item correspondente no frontmatter e linha fabricada, e e o que a tabela vazia dispensa.
+X_ITENS=$(x_calibracao "$X_TPL" | grep -cE '^[[:space:]]*-[[:space:]]+tipo_task:')
+X_DADOS=$(x_linhas_de_dados "$X_TPL" | grep -c '^|')
+[ "$X_ITENS" = "$X_DADOS" ]
+afirma "x2-uma-linha-de-dados-por-item" $? "itens em calibracao=$X_ITENS linhas de dados=$X_DADOS"
+
+# 3. Nenhuma linha de dados por sentinela: `—`, `n/a`, celula vazia ou `null` no primeiro campo
+#    nao e linha de dados — e um `tipo_task` fora do enum.
+x_sentinela() { # x_sentinela <arquivo> — linhas de dados cujo primeiro campo e sentinela
+  x_linhas_de_dados "$1" | awk -F'|' '{ c=$2; gsub(/^[[:space:]]+|[[:space:]]+$/, "", c)
+    if (c == "" || c == "—" || c == "-" || c == "null" || tolower(c) == "n/a") print }'
+}
+X_SENT="$(x_sentinela "$X_TPL" | tr '\n' ' ')"
+[ -z "$X_SENT" ]
+afirma "x3-nenhuma-linha-sentinela-na-tabela" $? "linhas sentinela=[$X_SENT]"
+# 3b. E em nenhum dos tres pontos canonicos existe linha de tabela comecando por sentinela:
+#     `| — | — | — | — |` reintroduzido como forma permitida e o defeito que isto mata.
+X_SENT_ALL="$(grep -nE '^\|[[:space:]]*(—|-|n/a|N/A|null)?[[:space:]]*\|' "$X_TPL" "$X_SCH" "$X_EXE" | tr '\n' ' ')"
+[ -z "$X_SENT_ALL" ]
+afirma "x3b-sentinela-nao-e-forma-permitida" $? "ocorrencias=[$X_SENT_ALL]"
+
+# 4. A regra da calibracao vazia esta escrita nos tres pontos canonicos: o template que gera o
+#    arquivo, o contrato do kind e o passo da F6 que recalcula a tabela. Regra em um ponto so e
+#    regra que a sessao seguinte nao encontra.
+for x_f in "$X_TPL" "$X_SCH" "$X_EXE"; do
+  tem "$x_f" 'sem nenhuma linha de dados'; x_rc=$?
+  afirma "x4-regra-da-calibracao-vazia-em-$(basename "$x_f")" "$x_rc" "a tabela vazia esta prescrita"
+done
+tem "$X_TPL" '`calibracao: []`'; afirma "x4b-template-nomeia-o-estado-do-yaml" $? 'a regra cita calibracao: []'
+tem "$X_EXE" '`calibracao: []`'; afirma "x4c-execucao-nomeia-o-estado-do-yaml" $? 'o Passo 3 cita calibracao: []'
+tem "$X_EXE" 'cabeçalho e separador'; afirma "x4d-checklist-da-f6-cobra-a-forma" $? "06-execucao.md descreve a forma vazia"
+
+# 5. Linha fabricada e proibida explicitamente: sem isso, "nao ficar com tabela vazia" volta a
+#    parecer uma licenca para inventar uma linha.
+tem "$X_TPL" 'linha de dados sem item correspondente no frontmatter é proibida'
+afirma "x5-template-proibe-linha-fabricada" $? "nunca fabricar linha para a tabela nao ficar vazia"
+
+# 6. As sentinelas invalidas sao nomeadas uma a uma — `—`, `n/a`, celula vazia, e qualquer outra.
+tem "$X_TPL" 'nunca use `—`, `n/a`, célula vazia ou qualquer outra sentinela como se fosse linha'
+afirma "x6-template-nomeia-as-sentinelas" $? "as quatro formas invalidas estao escritas"
+
+# 7. A regra da celula ausente continua de pe (v11), e continua sendo de CELULA: ela vale para
+#    celula de linha real e nunca autoriza uma linha inteira de `—`. Confundir as duas e a causa.
+tem "$X_TPL" 'a célula correspondente da tabela leva `—`, nunca `null` e nunca `null h`'
+afirma "x7-regra-da-celula-ausente-preservada" $? 'o travessao continua valendo para celula de linha real'
+tem "$X_TPL" 'vale para célula de uma linha real, nunca para a linha inteira'
+afirma "x7b-celula-ausente-nao-vira-linha" $? "a regra de celula nao se estende a linha"
+
+# 8. O vocabulario do enum nao e afrouxado para acomodar a sentinela: o primeiro campo de uma
+#    linha de dados sai do enum `tipo_task`, e `—` nao esta nele.
+X_ENUM="$(grep -F '| `tipo_task` |' "$X_SCH" | head -1)"
+[ -n "$X_ENUM" ] && ! printf '%s' "$X_ENUM" | grep -qE '—|n/a|null'; x_rc=$?
+afirma "x8-enum-tipo-task-sem-sentinela" "$x_rc" "enum=[$(printf '%s' "$X_ENUM" | cut -c1-60)...]"
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"
 [ "$pulado" -eq 0 ] || echo "  ATENCAO: skip interno e buraco de cobertura da sprintx nesta plataforma, nao dependencia externa."
