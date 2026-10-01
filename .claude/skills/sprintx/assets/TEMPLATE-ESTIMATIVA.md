@@ -120,9 +120,11 @@ O que esta faixa deliberadamente não cobre:
 ## Calibração
 
 - Histórico consultado: {{`docs/sprintx/estimativas/HISTORICO.md` (N entradas) | "não existe neste projeto"}}
-- Fator de correção aplicado: {{ex.: "1,25× nas tasks de tipo `integracao_externa`, vindo de um desvio médio de 1,25 em 4 entradas encerradas" | "nenhum"}}
+- Fator de correção aplicado: {{ex.: "1,16× nas tasks de tipo `integracao_externa`, vindo de um desvio médio de 1,16 em 4 entradas encerradas" | "nenhum"}}
 
 O fator de correção é sempre visível. Fator embutido em silêncio é indistinguível de número inventado.
+
+O fator é o `desvio_medio` persistido do tipo, copiado do `HISTORICO.md` como está: duas casas decimais, meio para cima (half-up) — `1,16`, `1,20`, nunca `1,2` nem `1,157` (DS-160). Ele entra na faixa de cada task daquele tipo **antes da agregação**; o arredondamento à hora inteira da faixa agregada vem depois, por último. `fator_correcao_aplicado` no frontmatter leva o mesmo número com ponto (`1.16`).
 
 ## Como a conta foi feita
 

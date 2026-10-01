@@ -503,8 +503,11 @@ Regras duras deste kind:
 - `esforco_total_*` cobre TODAS as tasks estimadas (paralelas ou não); `caminho_critico_*`
   cobre apenas a cadeia de dependências mais longa. Os dois são normalmente diferentes — é o
   paralelismo declarado no plano que os separa.
-- `fator_correcao_aplicado` é `null` quando não houve calibração; um número (ex.: `1.25`)
-  quando um desvio histórico foi aplicado. Nunca `1.0` para disfarçar ausência de histórico.
+- `fator_correcao_aplicado` é `null` quando não houve calibração; quando um desvio histórico foi
+  aplicado, é o `desvio_medio` persistido daquele tipo, copiado como está — número com as mesmas
+  **duas casas decimais** do `kind: estimativa_historico` (ex.: `1.25`, e `1.20` para o desvio de
+  `1,2`). Nunca `1.00` para disfarçar ausência de histórico (DS-46): neutro declarado é
+  indistinguível de fator inventado, e a ausência se diz com `null`.
 - `confianca` segue o enum `confianca`; `confianca_motivo` é uma linha derivada dos sinais.
   Sem `docs/sprintx/estimativas/HISTORICO.md`, `confianca` nunca é `alta`.
 - `premissas`, `invalidadores` e `nao_incluido` são listas de strings de uma linha e não são
@@ -555,11 +558,22 @@ Regras duras deste kind:
   (`[]` se nenhum).
 - `estimado_min`, `estimado_max`, `estimado_media` e `desvio` são `null` quando o trabalho
   rodou sem a F3.5; `real` é sempre preenchido.
-- `desvio` é `real / estimado_media`. `fator_ativo` só é `true` com 3 ou mais entradas
-  encerradas daquele tipo.
+- `desvio` é `real / estimado_media`, **arredondado a duas casas decimais com meio para cima
+  (half-up)** — e é o valor **arredondado antes** de ser gravado que a chave carrega.
+  `fator_ativo` só é `true` com 3 ou mais entradas encerradas daquele tipo.
+- **Precisão e desempate (DS-160).** `desvio` e `desvio_medio` têm
+  **duas casas decimais**, com desempate **half-up**: quando a terceira casa é exatamente `5`, a
+  segunda sobe. A razão `1,125` — o empate exato, de `real: 4.5` sobre `estimado_media: 4.0` —
+  vira `1,13`, nunca `1,12`; no YAML, `desvio: 1.13`. As duas casas são
+  **fixas**, não "até duas": a razão `1,2` grava-se `1.20` no YAML e escreve-se `1,20` na prosa, e
+  número com uma casa ou com três é número fora do contrato. O YAML usa ponto e a prosa em pt-BR usa
+  vírgula — as duas formas do mesmo número, com as mesmas duas casas (regra universal 7); a única
+  exceção é a sintaxe de fórmula, onde o contrato a indica explicitamente.
 - `desvio_medio` é a **média** dos `desvio_task` — a chave `desvio` de cada entrada encerrada
-  daquele tipo —, nunca a mediana. O agregador é **único**: dois executores que leiam este
-  contrato gravam o mesmo número a partir do mesmo histórico. Ele não depende de
+  daquele tipo, já **persistida** e portanto já arredondada, nunca a média das razões brutas —,
+  **arredondada de novo pela mesma regra**: duas casas, half-up. O agregador é **único** e a
+  precisão também: dois executores que leiam este contrato gravam o mesmo número, dígito a
+  dígito, a partir do mesmo histórico. Nem o agregador nem a precisão dependem de
   `duracao_observada`, que a `calibracao` não lê (DS-37).
 - `calibracao` é `[]` enquanto não houver entrada suficiente para calcular desvio por tipo. Com
   `calibracao: []`, a tabela `Calibração por tipo de task` da prosa fica **com cabeçalho e separador
