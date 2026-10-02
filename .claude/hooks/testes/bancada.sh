@@ -5433,6 +5433,130 @@ Z_SAN_CRU="$(z_sanidade_aplica cru $Z_CASO_API)"
 afirma "z8k-intervalo-bruto-reprovaria-a-conta-certa" $? \
   "corrigido=$Z_SAN_OK bruto=$Z_SAN_CRU (min 3,7333 fora de [4, 12])"
 
+# 8k2. DS-169: a sanidade e sobre o decimal do Passo 5 (pos-piso, pre-arredondamento), nunca
+#      sobre a faixa PUBLICADA (ja arredondada a hora inteira por floor/ceil). floor/ceil
+#      arredonda para FORA (alarga), entao a faixa publicada pode deixar de estar contida no
+#      intervalo corrigido mesmo numa conta certa — no caso Z_CASO_API, publicada "3-6 h" contra
+#      corrigido "[3,20, 9,60]": 3 nao fica acima de 3,20. O par abaixo mostra as duas leituras
+#      do MESMO caso: so a decimal aprova; a publicada reprovaria, e e exatamente por isso que o
+#      contrato tem de nomear qual das duas vale.
+z_sanidade_publicada() { # z_sanidade_publicada <faixa "min-max"> <soc> <spc> -> aprova | reprova
+  local fx="$1" soc="$2" spc="$3" fmn fmx
+  fmn="${fx%-*}"; fmx="${fx#*-}"
+  awk -v fmn="$fmn" -v fmx="$fmx" -v soc="$soc" -v spc="$spc" \
+    'BEGIN { printf "%s", (fmn > soc && fmx < spc) ? "aprova" : "reprova" }'
+}
+Z_SAN_PUB="$(z_sanidade_publicada "$Z_FX_PISO_OK" 3.20 9.60)"
+[ "$Z_SAN_OK" = aprova ] && [ "$Z_SAN_PUB" = reprova ]
+afirma "z8k2a-decimal-aprova-publicada-reprovaria-o-mesmo-caso" $? \
+  "decimal(Z_SAN_OK, de 8k)=$Z_SAN_OK publicada($Z_FX_PISO_OK)=$Z_SAN_PUB"
+
+# O paragrafo da verificacao (07-estimativa.md) tem de nomear o estagio explicitamente: cita o
+# Passo 5, o arredondamento/floor do Passo 6, e adverte contra comparar com a faixa publicada.
+Z_SAN_TXT="$(grep -F 'Verificação obrigatória de sanidade' "$Z_EST")"
+z_tem_822() { printf '%s' "$Z_SAN_TXT" | grep -qi "$1"; }
+z_tem_822 'Passo 5'; Z_822_P5=$?
+z_tem_822 'floor'; Z_822_FLOOR=$?
+z_tem_822 'publicada'; Z_822_PUB=$?
+[ -n "$Z_SAN_TXT" ] && [ "$Z_822_P5" -eq 0 ] && [ "$Z_822_FLOOR" -eq 0 ] && [ "$Z_822_PUB" -eq 0 ]
+afirma "z8k2b-paragrafo-nomeia-o-estagio-decimal-vs-publicada" $? \
+  "Passo5=$Z_822_P5 floor=$Z_822_FLOOR publicada=$Z_822_PUB (0=presente)"
+
+# O item do checklist do Passo 5 repete a mesma regra, pelo mesmo motivo que a DS-160/DS-163 ja
+# valem para dois pontos canonicos: quem le so o checklist nao pode reproduzir o erro antigo.
+Z_CHK_LINHA="$(grep -F 'contido em' "$Z_EST")"
+printf '%s' "$Z_CHK_LINHA" | grep -qi 'decimal'; Z_CHK_DEC=$?
+printf '%s' "$Z_CHK_LINHA" | grep -qi 'publicada'; Z_CHK_PUB=$?
+[ -n "$Z_CHK_LINHA" ] && [ "$Z_CHK_DEC" -eq 0 ] && [ "$Z_CHK_PUB" -eq 0 ]
+afirma "z8k2c-checklist-nomeia-o-estagio-decimal-vs-publicada" $? \
+  "linha=[$Z_CHK_LINHA]"
+
+# A decisao esta registrada, append-only, e estende a DS-163 (mesmo piso, novo estagio de leitura).
+Z_DS169="$(grep -F '| DS-169 |' "$Z_DS")"
+[ -n "$Z_DS169" ]
+afirma "z8k2d-ds169-registrada" $? "a decisao da sanidade decimal existe no registro"
+printf '%s' "$Z_DS169" | grep -qF 'DS-163'; z_rc=$?
+afirma "z8k2e-ds169-declara-que-estende-ds163" "$z_rc" "DS-169 nomeia a DS-163 que ela estende"
+
+# 8k3. A celula do placeholder "Fator ativo?" tem um `|` literal dentro do texto condicional
+#      ("...x{{desvio}} | nao..."). Markdown le qualquer `|` fora de code span como separador de
+#      coluna — esse pipe tem de vir escapado (`\|`), senao a linha de dados renderiza com uma
+#      coluna a mais e corrompe a tabela. Conta os pipes QUE SEPARAM coluna (a substituicao via
+#      parametro do bash, nao sed, porque `\|` em BRE do GNU sed e alternancia, nao literal):
+#      a linha Markdown tem pipe inicial e final alem dos separadores entre colunas: o cabecalho
+#      de 4 colunas tem 5 pipes (NF=6 por awk -F'|'); a linha de dados, com o pipe interno
+#      escapado, tem de dar o mesmo NF=6 depois de neutralizar o `\|` escapado.
+Z_TPL_CABECALHO="$(grep -F 'Tipo de task' "$Z_TPL")"
+Z_TPL_CAMPOS_CABECALHO="$(printf '%s' "$Z_TPL_CABECALHO" | awk -F'|' '{print NF}')"
+Z_TPL_LINHA_DADOS="$(grep -F '{{tipo_task}} | {{n}}' "$Z_TPL")"
+Z_TPL_SEM_ESCAPE="${Z_TPL_LINHA_DADOS//\\|/@PIPE_ESCAPADO@}"
+Z_TPL_CAMPOS_DADOS="$(printf '%s' "$Z_TPL_SEM_ESCAPE" | awk -F'|' '{print NF}')"
+[ "$Z_TPL_CAMPOS_DADOS" -eq "$Z_TPL_CAMPOS_CABECALHO" ]
+afirma "z8k3-pipe-interno-da-celula-fator-ativo-esta-escapado" $? \
+  "linha=[$Z_TPL_LINHA_DADOS] campos(pipes separadores, pipe interno neutralizado)=$Z_TPL_CAMPOS_DADOS cabecalho=$Z_TPL_CAMPOS_CABECALHO"
+Z_DS170="$(grep -F '| DS-170 |' "$Z_DS")"
+[ -n "$Z_DS170" ]
+afirma "z8k3a-ds170-registrada" $? "a decisao do escape do pipe existe no registro"
+
+# 8k4. Mutantes que RESTAURAM cada defeito corrigido nesta secao, numa COPIA da skill — a arvore
+#      real nunca e tocada — e tem de morrer exatamente pelo caso nomeado.
+ZM_A="$(mktemp -d)"; cp -R "$SK/." "$ZM_A/"
+sed -i 's/×{{desvio}} \\| não/×{{desvio}} | não/' "$ZM_A/assets/TEMPLATE-HISTORICO.md"
+! cmp -s "$Z_TPL" "$ZM_A/assets/TEMPLATE-HISTORICO.md"; Z_MA_GEROU=$?
+ZM_A_LINHA="$(grep -F '{{tipo_task}} | {{n}}' "$ZM_A/assets/TEMPLATE-HISTORICO.md")"
+ZM_A_SEM_ESCAPE="${ZM_A_LINHA//\\|/@PIPE_ESCAPADO@}"
+ZM_A_CAMPOS="$(printf '%s' "$ZM_A_SEM_ESCAPE" | awk -F'|' '{print NF}')"
+[ "$Z_MA_GEROU" -eq 0 ] && [ "$ZM_A_CAMPOS" -ne "$Z_TPL_CAMPOS_CABECALHO" ]
+afirma "z8k4a-mutante-reintroduz-pipe-sem-escape-morto-por-z8k3" $? \
+  "mutacao gerada=$Z_MA_GEROU campos apos mutacao=$ZM_A_CAMPOS (esperado != $Z_TPL_CAMPOS_CABECALHO)"
+
+ZM_B="$(mktemp -d)"; cp -R "$SK/." "$ZM_B/"
+python3 - "$ZM_B/references/07-estimativa.md" <<'PYEOF'
+import sys
+p = sys.argv[1]
+s = open(p, encoding='utf-8').read()
+novo_par = ("**Verificação obrigatória de sanidade:** a checagem é sobre o `[min, max]` do Passo 5 "
+    "— decimal, com o fator de cada task e o `piso_conjunto` já aplicados, mas **antes** do "
+    "arredondamento à hora inteira do Passo 6 — e esse intervalo tem de estar **contido** em "
+    "`[ soma( o(t) * fator(t) ), soma( p(t) * fator(t) ) ]`, os limites corrigidos task a task "
+    "pelos mesmos fatores que entraram na agregação. Se não estiver, você errou a conta — refaça. "
+    "Comparar com o intervalo bruto (sem fator) reprova conta certa sempre que algum fator é "
+    "abaixo de 1: no exemplo acima, o `min` decimal e já pisado `3,7333` fica fora de `[4, 12]` e "
+    "dentro de `[3,20, 9,60]`. Nunca compare essa sanidade contra a faixa **publicada** — já "
+    "arredondada por `floor(min)`/`ceil(max)` à hora inteira: o arredondamento alarga a faixa para "
+    "fora, nunca para dentro, então a publicada pode deixar de estar contida no intervalo "
+    "corrigido mesmo numa conta certa — no mesmo exemplo ela é `3–6 h`, e `3` não fica acima de "
+    "`3,20`. A sanidade é sempre sobre o decimal do Passo 5, nunca sobre o arredondado do Passo 6.")
+velho_par = ("**Verificação obrigatória de sanidade:** a faixa agregada de qualquer conjunto tem "
+    "de ser **mais estreita** que `[ soma( o(t) * fator(t) ), soma( p(t) * fator(t) ) ]` — os "
+    "limites corrigidos task a task, pelos mesmos fatores que entraram na agregação. Se não for, "
+    "você errou a conta — refaça. Comparar com o intervalo bruto reprova conta certa sempre que "
+    "algum fator é abaixo de 1: no exemplo acima, `min` `3,7333` fica fora de `[4, 12]` e dentro "
+    "de `[3,20, 9,60]`.")
+assert novo_par in s, "paragrafo corrigido nao encontrado — ajuste o mutante"
+s = s.replace(novo_par, velho_par)
+novo_chk = ("- [ ] O `[min, max]` decimal do Passo 5 — já com o fator por task e o piso "
+    "`piso_conjunto` aplicados, ainda antes do arredondamento à hora inteira do Passo 6 — está "
+    "contido em `[ soma( o(t) * fator(t) ), soma( p(t) * fator(t) ) ]` (senão a quadratura foi "
+    "feita errado). Nunca compare a faixa já publicada, em hora inteira, contra esse intervalo "
+    "decimal — o arredondamento alarga a faixa e reprovaria conta certa.")
+velho_chk = ("- [ ] A faixa agregada é mais estreita que `[ soma( o(t) * fator(t) ), soma( p(t) * "
+    "fator(t) ) ]` (senão a quadratura foi feita errado), e o piso aplicado a `min` foi "
+    "`piso_conjunto`, antes do arredondamento à hora inteira.")
+assert novo_chk in s, "checklist corrigido nao encontrado — ajuste o mutante"
+s = s.replace(novo_chk, velho_chk)
+open(p, "w", encoding="utf-8").write(s)
+PYEOF
+Z_MB_RC=$?
+! cmp -s "$Z_EST" "$ZM_B/references/07-estimativa.md"; Z_MB_GEROU=$?
+ZM_B_SAN_TXT="$(grep -F 'Verificação obrigatória de sanidade' "$ZM_B/references/07-estimativa.md")"
+printf '%s' "$ZM_B_SAN_TXT" | grep -qi 'publicada'; ZM_B_PAR_PUB=$?
+ZM_B_CHK_LINHA="$(grep -F 'estreita' "$ZM_B/references/07-estimativa.md" | grep -F '- [ ]')"
+printf '%s' "$ZM_B_CHK_LINHA" | grep -qi 'decimal'; ZM_B_CHK_DEC=$?
+[ "$Z_MB_RC" -eq 0 ] && [ "$Z_MB_GEROU" -eq 0 ] && [ "$ZM_B_PAR_PUB" -ne 0 ] && [ "$ZM_B_CHK_DEC" -ne 0 ]
+afirma "z8k4b-mutante-reverte-sanidade-para-faixa-publicada-morto-por-z8k2" $? \
+  "geracao rc=$Z_MB_RC mudou=$Z_MB_GEROU paragrafo cita publicada=$ZM_B_PAR_PUB checklist cita decimal=$ZM_B_CHK_DEC"
+
 # 8l. A decisao esta registrada e e APPEND-ONLY: DS-163 entra estendendo a DS-41, e a DS-41 fica
 #     byte a byte como estava. Reescrever uma decisao antiga apaga o rastro de por que a nova
 #     existe — e o registro e onde a proxima sessao encontra o porque.

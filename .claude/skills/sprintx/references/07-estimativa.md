@@ -207,7 +207,7 @@ Esse arredondamento à hora inteira é o **último passo** da faixa agregada. Qu
 
 **Por que a quadratura.** Somar desvios em quadratura (raiz da soma dos quadrados) é o que faz o intervalo crescer **menos** que a soma linear: dez tasks com desvio 1 h cada dão desvio agregado de `√10 ≈ 3,2 h`, não 10 h. É exatamente o efeito de compensação descrito acima, e é a razão de a faixa da fase ser mais estreita, em proporção, que a faixa de uma task isolada.
 
-**Verificação obrigatória de sanidade:** a faixa agregada de qualquer conjunto tem de ser **mais estreita** que `[ soma( o(t) * fator(t) ), soma( p(t) * fator(t) ) ]` — os limites corrigidos task a task, pelos mesmos fatores que entraram na agregação. Se não for, você errou a conta — refaça. Comparar com o intervalo bruto reprova conta certa sempre que algum fator é abaixo de 1: no exemplo acima, `min` `3,7333` fica fora de `[4, 12]` e dentro de `[3,20, 9,60]`.
+**Verificação obrigatória de sanidade:** a checagem é sobre o `[min, max]` do Passo 5 — decimal, com o fator de cada task e o `piso_conjunto` já aplicados, mas **antes** do arredondamento à hora inteira do Passo 6 — e esse intervalo tem de estar **contido** em `[ soma( o(t) * fator(t) ), soma( p(t) * fator(t) ) ]`, os limites corrigidos task a task pelos mesmos fatores que entraram na agregação. Se não estiver, você errou a conta — refaça. Comparar com o intervalo bruto (sem fator) reprova conta certa sempre que algum fator é abaixo de 1: no exemplo acima, o `min` decimal e já pisado `3,7333` fica fora de `[4, 12]` e dentro de `[3,20, 9,60]`. Nunca compare essa sanidade contra a faixa **publicada** — já arredondada por `floor(min)`/`ceil(max)` à hora inteira: o arredondamento alarga a faixa para fora, nunca para dentro, então a publicada pode deixar de estar contida no intervalo corrigido mesmo numa conta certa — no mesmo exemplo ela é `3–6 h`, e `3` não fica acima de `3,20`. A sanidade é sempre sobre o decimal do Passo 5, nunca sobre o arredondado do Passo 6.
 
 ### Esforço total × caminho crítico
 
@@ -366,7 +366,7 @@ A **`duracao_observada`** vem do rastro (`references/08-rastro.md`), é opcional
 - [ ] Nenhuma conversão de esforço em data, prazo, dia útil, semana ou sprint de calendário.
 - [ ] A frase "esforço não é prazo" está na saída e no arquivo.
 - [ ] Esforço total e caminho crítico são números **diferentes**, e a diferença está explicada em uma frase que nomeia o que roda em paralelo.
-- [ ] A faixa agregada é mais estreita que `[ soma( o(t) * fator(t) ), soma( p(t) * fator(t) ) ]` (senão a quadratura foi feita errado), e o piso aplicado a `min` foi `piso_conjunto`, antes do arredondamento à hora inteira.
+- [ ] O `[min, max]` decimal do Passo 5 — já com o fator por task e o piso `piso_conjunto` aplicados, ainda antes do arredondamento à hora inteira do Passo 6 — está contido em `[ soma( o(t) * fator(t) ), soma( p(t) * fator(t) ) ]` (senão a quadratura foi feita errado). Nunca compare a faixa já publicada, em hora inteira, contra esse intervalo decimal — o arredondamento alarga a faixa e reprovaria conta certa.
 - [ ] O método de agregação está documentado na saída, com as fórmulas.
 - [ ] Toda task tem seus sinais declarados ao lado dela.
 - [ ] Toda task com `p > 4 × o` está em `tasks_a_quebrar`, **não** foi estimada e **não** entrou nos totais.
