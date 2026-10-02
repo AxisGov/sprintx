@@ -159,9 +159,19 @@ desvio_padrao_task = (p - o) / 6          # desvio-padrão PERT da task, em HORA
 Para um conjunto de N tasks (uma fase, uma sprint, o trabalho inteiro):
 
 ```
-media_conjunto  = soma das media_task
-desvio_conjunto = raiz_quadrada( soma dos (desvio_padrao_task)^2 )     # quadratura
+media_conjunto  = soma de ( media_task(t) * fator(t) )
+desvio_conjunto = raiz_quadrada( soma de ( desvio_padrao_task(t) * fator(t) )^2 )     # quadratura
 ```
+
+**A agregação soma e quadratura já corrigidos, nunca os valores crus (DS-167).** `media_task(t)`
+e `desvio_padrao_task(t)` são os valores crus do Passo 4, sem fator nenhum — o `fator(t)` entra
+aqui, na soma e na quadratura, e não depois: `media_conjunto` e `desvio_conjunto` já saem
+corrigidos, e por isso `min` e `max`, calculados a partir deles, também saem corrigidos — os
+dois, não só o `min` pelo piso. Corrigir só o piso e agregar os valores crus no resto deixaria
+o `max` sem fator nenhum, publicando uma faixa com o fator aplicado apenas parcialmente — o
+defeito que esta regra fecha. `fator(t)` é o mesmo da DS-166: `1` quando o tipo da task `t` não
+tem fator ativo, e o canônico daquele tipo quando tem — nunca um fator único do conjunto, nem
+mesmo quando todas as tasks do conjunto são do mesmo tipo.
 
 E a faixa publicada do conjunto:
 
@@ -323,7 +333,7 @@ A saída na conversa espelha o arquivo. Nesta ordem:
 7. **Tasks a quebrar**, se houver — com o que esclarecer em cada uma.
 8. **Premissas**, **Invalidadores**, **Não incluído**.
 9. **Confiança** e o motivo derivado dos sinais.
-10. **Fator de correção aplicado**, se houver — com o desvio histórico que o originou, a origem da calibração (`persistido` | `recomputado` | `nenhum — canônico sem fator ativo`) e a divergência encontrada (confere | diverge com valores | `não se aplica — HISTORICO.md ausente`) (DS-165).
+10. **Fator de correção aplicado**, por `tipo_task` presente — para cada um, o desvio histórico que o originou, a origem da calibração (`persistido` | `recomputado` | `nenhum — canônico sem fator ativo`) e a divergência encontrada (confere | diverge com valores | `não se aplica — HISTORICO.md ausente`) (DS-165). Com um único tipo presente, repita também o escalar `fator_correcao_aplicado`, a origem e a divergência como valores do trabalho inteiro — eles coincidem com os do tipo único. Com mais de um tipo presente, não há origem nem divergência agregada do trabalho (DS-168): a saída não anuncia uma delas; cada tipo leva a sua, e nenhuma linha extra finge um resumo que não existe.
 
 ## Passo 10 — Registrar o real e calibrar (ao fim do trabalho)
 

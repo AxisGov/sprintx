@@ -137,8 +137,11 @@ tem o seu próprio canônico de calibração (DS-165); misturar tipos nunca prod
 
 - Histórico consultado: {{`docs/sprintx/estimativas/HISTORICO.md` (N entradas) | "não existe neste projeto"}}
 - `fator_correcao_aplicado`: {{o número, quando todos os tipos presentes concordam no mesmo fator ativo | "null", quando nenhum tipo presente tem fator ativo | "por_tipo", em qualquer mistura — ver a tabela acima}}
-- Origem da calibração (DS-165): {{persistido | recomputado | nenhum — canônico sem fator ativo}} — válido tal qual quando só há um `tipo_task` neste trabalho; com mais de um tipo presente, a origem de cada tipo está na coluna "Origem" da tabela "Calibração por tipo de task", acima.
+{{Com um único `tipo_task` presente neste trabalho, declare também as duas linhas abaixo — repetem o item único de `calibracao_por_tipo`, para quem só lê o escalar legado:}}
+- Origem da calibração (DS-165): {{persistido | recomputado | nenhum — canônico sem fator ativo}}
 - Divergência encontrada (DS-165): {{"nenhuma — o bloco `calibracao` gravado confere com o canônico" | "o bloco `calibracao` gravado trazia <valor stale>; o canônico recomputado das entradas elegíveis é <valor canônico>" | "não se aplica — HISTORICO.md ausente"}}
+
+{{Com mais de um `tipo_task` presente (DS-168): não existe origem nem divergência agregada para o trabalho inteiro — cada tipo tem a sua própria, só na tabela "Calibração por tipo de task" acima. Omita as duas linhas acima; nunca escolha uma entre os tipos, nunca escreva "misto" ou "vários" no lugar de um valor do enum — a mesma regra de fail-closed da DS-166 vale aqui: sem agregado definido, não se inventa um.}}
 
 O fator de correção é sempre visível. Fator embutido em silêncio é indistinguível de número inventado.
 
@@ -166,15 +169,15 @@ desvio_padrao_task = (p - o) / 6
 Por conjunto (fase, sprint, trabalho, caminho crítico):
 
 ```
-media_conjunto  = soma das media_task
-desvio_conjunto = raiz_quadrada( soma dos (desvio_padrao_task)^2 )
+media_conjunto  = soma de ( media_task(t) * fator(t) )
+desvio_conjunto = raiz_quadrada( soma de ( desvio_padrao_task(t) * fator(t) )^2 )
 piso_conjunto   = soma( o(t) * fator(t) )
 fator(t) = 1                                # quando o tipo da task t nao tem fator ativo
 min = media_conjunto - desvio_conjunto      # se min < piso_conjunto, entao min = piso_conjunto
 max = media_conjunto + desvio_conjunto
 ```
 
-O piso é a soma dos otimistas **já corrigidos pelo fator do tipo de cada task** — nunca a maior `o`, nunca um fator único do conjunto —, e o gatilho compara contra o mesmo `piso_conjunto` que atribui. O clamp acontece **antes** do arredondamento `floor(min)`/`ceil(max)` à hora inteira, que é o último passo (DS-163, que estende DS-41).
+**A soma e a quadratura já corrigem pelo fator, nunca os valores crus (DS-167).** `media_task(t)` e `desvio_padrao_task(t)` acima são os valores crus, sem fator; o `fator(t)` entra na soma e na quadratura, não depois — por isso `min` e `max` saem corrigidos os dois, nunca só o `min` pelo piso. O piso é a soma dos otimistas **já corrigidos pelo fator do tipo de cada task** — nunca a maior `o`, nunca um fator único do conjunto —, e o gatilho compara contra o mesmo `piso_conjunto` que atribui. O clamp acontece **antes** do arredondamento `floor(min)`/`ceil(max)` à hora inteira, que é o último passo (DS-163, que estende DS-41).
 
 Somar variâncias em quadratura faz o intervalo crescer menos que a soma linear: os desvios se compensam entre tasks, e supor que tudo dá errado ao mesmo tempo superestimaria grosseiramente. Por construção, a faixa agregada é sempre mais estreita que `[ soma( o(t) * fator(t) ), soma( p(t) * fator(t) ) ]` — os limites corrigidos task a task, pelos mesmos fatores que entraram na agregação.
 

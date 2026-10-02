@@ -6894,6 +6894,126 @@ ae_mutante "aem-mutante-8-origem-sem-acento-no-exemplo" $? "$AE_M" \
 
 rm -rf "$AEW"
 
+echo "== AF. PR#11 r4164972140/r4164972143: agregacao corrigida pelo fator (DS-167) e escalar legado condicional (DS-168) =="
+# r4164972143 (Logic error): a formula publicada de media_conjunto/desvio_conjunto somava os
+# valores CRUS de media_task/desvio_padrao_task — so o piso_conjunto multiplicava por fator(t).
+# `max`, que nao passa pelo piso, saia sem fator nenhum: fator aplicado so parcialmente. A DS-167
+# corrige multiplicando por fator(t) DENTRO da soma/quadratura, nos dois arquivos que publicam a
+# formula (07-estimativa.md e TEMPLATE-ESTIMATIVA.md) — sem renomear media_task/desvio_padrao_task
+# (DS-162 continua intacta).
+# r4164972140 (Api mismatch): o bloco "escalar legado" exigia Origem/Divergencia (DS-165) como
+# UM valor do trabalho inteiro, mas com mais de um tipo_task (DS-166) nao ha agregado — cada tipo
+# tem a sua. A DS-168 torna as duas linhas condicionais ao trabalho ter um unico tipo_task, e
+# manda OMITI-LAS (nunca inventar "misto") quando ha mais de um.
+AF_SK="$SK"
+AF_LIT_AGREG_EST='media_conjunto = soma de ( media_task(t) * fator(t) )'
+AF_LIT_AGREG_TPL='media_conjunto = soma de ( media_task(t) * fator(t) )'
+AF_LIT_QUAD_EST='desvio_conjunto = raiz_quadrada( soma de ( desvio_padrao_task(t) * fator(t) )^2 )'
+AF_LIT_DS167_EST='A agregação soma e quadratura já corrigidos, nunca os valores crus (DS-167)'
+AF_LIT_DS167_TPL='A soma e a quadratura já corrigem pelo fator, nunca os valores crus (DS-167)'
+AF_LIT_CONDICIONAL_UM='Com um único `tipo_task` presente neste trabalho, declare também'
+AF_LIT_CONDICIONAL_MAIS='não existe origem nem divergência agregada para o trabalho inteiro'
+AF_LIT_FAILCLOSED_ESCALAR='nunca escolha uma entre os tipos, nunca escreva "misto" ou "vários" no lugar de um valor do enum'
+AF_LIT_PASSO9_DS168='não há origem nem divergência agregada do trabalho (DS-168)'
+
+af_caso() { # af_caso <caso> <dir> -> 0 se o caso PASSA naquela arvore
+  local c="$1" d="$2"
+  case "$c" in
+    # A soma e a quadratura multiplicam por fator(t) DENTRO da formula, nos dois arquivos.
+    af_agregacao_corrigida_pelo_fator)
+      ad_lit "$d/references/07-estimativa.md"   "$AF_LIT_AGREG_EST" \
+             "$d/references/07-estimativa.md"   "$AF_LIT_QUAD_EST" \
+             "$d/references/07-estimativa.md"   "$AF_LIT_DS167_EST" \
+             "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AF_LIT_AGREG_TPL" \
+             "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AF_LIT_DS167_TPL" ;;
+    # media_task/desvio_padrao_task continuam os simbolos crus do Passo 4 (DS-162 intacta): a
+    # formula crua NUNCA desaparece, so a formula do CONJUNTO passa a multiplicar por fator(t).
+    af_simbolos_crus_preservados)
+      ad_lit "$d/references/07-estimativa.md"   'media_task = (o + 4m + p) / 6' \
+             "$d/references/07-estimativa.md"   'desvio_padrao_task = (p - o) / 6' \
+             "$d/assets/TEMPLATE-ESTIMATIVA.md" 'media_task = (o + 4m + p) / 6' \
+             "$d/assets/TEMPLATE-ESTIMATIVA.md" 'desvio_padrao_task = (p - o) / 6' ;;
+    # O escalar legado so exige Origem/Divergencia quando ha um UNICO tipo_task; com mais de um,
+    # manda OMITIR — nunca agregar.
+    af_escalar_legado_condicional)
+      ad_lit "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AF_LIT_CONDICIONAL_UM" \
+             "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AF_LIT_CONDICIONAL_MAIS" \
+             "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AF_LIT_FAILCLOSED_ESCALAR" \
+             "$d/references/07-estimativa.md"   "$AF_LIT_PASSO9_DS168" ;;
+    # DS-167 e DS-168 ficam registradas, append-only, sem reescrever a DS-166.
+    af_ds167_ds168_registradas)
+      local v167 v168
+      v167="$(grep -F '| DS-167 |' "$d/DECISOES-DA-SKILL.md" 2>/dev/null)"
+      v168="$(grep -F '| DS-168 |' "$d/DECISOES-DA-SKILL.md" 2>/dev/null)"
+      [ -n "$v167" ] && [ -n "$v168" ] \
+        && printf '%s' "$v167" | grep -qiF 'parcialmente' \
+        && printf '%s' "$v168" | grep -qiF 'omitid' ;;
+    *) return 1 ;;
+  esac
+}
+AF_CASOS="af_agregacao_corrigida_pelo_fator af_simbolos_crus_preservados
+af_escalar_legado_condicional af_ds167_ds168_registradas"
+
+for af_c in $AF_CASOS; do
+  af_nome="$(printf '%s' "$af_c" | tr '_' '-')"
+  af_caso "$af_c" "$AF_SK"; af_rc=$?
+  afirma "$af_nome" "$af_rc" "lido da arvore do contrato em $AF_SK"
+done
+grep -qF '| DS-166 |' "$AF_SK/DECISOES-DA-SKILL.md"
+afirma "af-ds166-preservada-append-only" $? "DS-166 continua no arquivo, intacta"
+
+AFW="$(mktemp -d)"
+af_copia() { rm -rf "$AFW/$1"; mkdir -p "$AFW/$1"; cp -R "$AF_SK/." "$AFW/$1/"; printf '%s' "$AFW/$1"; }
+af_muta() { [ -f "$1/$2" ] || return 1; sed -i "$3" "$1/$2" || return 1; ! cmp -s "$AF_SK/$2" "$1/$2"; }
+af_mata() { local c; for c in $AF_CASOS; do af_caso "$c" "$1" || { printf '%s' "$c"; return; }; done; }
+af_mutante() { # af_mutante <nome> <rc da geracao> <dir> <caso que TEM de matar>...
+  local nome="$1" rcg="$2" d="$3" c vivos=""; shift 3
+  if [ "$rcg" -eq 0 ]; then for c in "$@"; do af_caso "$c" "$d" && vivos="$vivos$c "; done; fi
+  [ "$rcg" -eq 0 ] && [ -z "$vivos" ]; local rc=$?
+  afirma "$nome" "$rc" "morto por: $* ${vivos:+— SOBREVIVEU a: $vivos}(rc geracao=$rcg)"
+}
+AF_CTL="$(af_copia controle)"
+AF_K="$(af_mata "$AF_CTL")"; [ -z "$AF_K" ]; af_rc=$?
+afirma "afm-controle-copia-intacta-sobrevive" "$af_rc" "${AF_K:-nenhum caso reprova a copia sem mutacao}"
+
+# m1 — volta a formula do conjunto a somar os valores CRUS (sem fator), o defeito original do
+#      comentario r4164972143: max deixa de ser corrigido, so o piso continua corrigido.
+AF_M="$(af_copia m1)"
+af_muta "$AF_M" references/07-estimativa.md \
+  's/media_conjunto  = soma de ( media_task(t) \* fator(t) )/media_conjunto  = soma das media_task/'
+af_mutante "afm-mutante-1-agregacao-volta-a-somar-cru-no-07" $? "$AF_M" \
+  af_agregacao_corrigida_pelo_fator
+
+# m2 — mesma regressao, agora no TEMPLATE-ESTIMATIVA.md (o arquivo que a auditoria apontou).
+AF_M="$(af_copia m2)"
+af_muta "$AF_M" assets/TEMPLATE-ESTIMATIVA.md \
+  's/media_conjunto  = soma de ( media_task(t) \* fator(t) )/media_conjunto  = soma das media_task/'
+af_mutante "afm-mutante-2-agregacao-volta-a-somar-cru-no-template" $? "$AF_M" \
+  af_agregacao_corrigida_pelo_fator
+
+# m3 — apaga a condicao "unico tipo" do escalar legado: as duas linhas voltam a parecer sempre
+#      obrigatorias, o defeito original do comentario r4164972140.
+AF_M="$(af_copia m3)"
+af_muta "$AF_M" assets/TEMPLATE-ESTIMATIVA.md \
+  "s/${AF_LIT_CONDICIONAL_UM}/Declare sempre/"
+af_mutante "afm-mutante-3-remove-condicao-unico-tipo" $? "$AF_M" \
+  af_escalar_legado_condicional
+
+# m4 — apaga a instrucao de OMITIR com mais de um tipo (o consumidor voltaria a esperar um
+#      valor agregado que o contrato nao define).
+AF_M="$(af_copia m4)"
+af_muta "$AF_M" assets/TEMPLATE-ESTIMATIVA.md "s/${AF_LIT_CONDICIONAL_MAIS}//"
+af_mutante "afm-mutante-4-remove-omissao-com-mais-de-um-tipo" $? "$AF_M" \
+  af_escalar_legado_condicional
+
+# m5 — DS-167/DS-168 apagadas do registro.
+AF_M="$(af_copia m5)"
+af_muta "$AF_M" DECISOES-DA-SKILL.md '/^| DS-167 |/d; /^| DS-168 |/d'
+af_mutante "afm-mutante-5-ds167-ds168-apagadas" $? "$AF_M" \
+  af_ds167_ds168_registradas
+
+rm -rf "$AFW"
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"
 [ "$pulado" -eq 0 ] || echo "  ATENCAO: skip interno e buraco de cobertura da sprintx nesta plataforma, nao dependencia externa."
