@@ -6,7 +6,8 @@
 #
 # O par (arquivo_alterado, suite_executada) e o que da ao painel a linha do
 # tempo do trabalho — e, junto com task_iniciada/task_concluida gravados pela
-# skill, a duracao observada que alimenta a calibracao de estimativa.
+# skill, a duracao observada que entra no HISTORICO.md ao lado do real — fora da
+# calibracao, que agrega o desvio sobre o real (references/08-rastro.md).
 set -uo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -483,6 +483,11 @@ caminho_critico_max: 63
 confianca: media
 confianca_motivo: Sem historico comparavel no projeto e uma lacuna nao bloqueante na base
 fator_correcao_aplicado: null
+calibracao_por_tipo:
+  - tipo_task: config
+    fator: null
+    origem: nenhum — canônico sem fator ativo
+    divergencia: não se aplica — HISTORICO.md ausente
 metodo_agregacao: pert_quadratura
 tasks_estimadas: 11
 premissas: [Credenciais de sandbox emitidas antes da sprint-02]
@@ -503,10 +508,44 @@ Regras duras deste kind:
 - `esforco_total_*` cobre TODAS as tasks estimadas (paralelas ou não); `caminho_critico_*`
   cobre apenas a cadeia de dependências mais longa. Os dois são normalmente diferentes — é o
   paralelismo declarado no plano que os separa.
-- `fator_correcao_aplicado` é `null` quando não houve calibração; um número (ex.: `1.25`)
-  quando um desvio histórico foi aplicado. Nunca `1.0` para disfarçar ausência de histórico.
+- `fator_correcao_aplicado` é o fator **efetivamente aplicado** (DS-165), e a **origem da
+  calibração** tem **três estados** possíveis: `null`, com origem `nenhum — canônico sem fator
+  ativo`, quando o canônico daquele tipo tem `fator_ativo: false` (menos de 3 entradas elegíveis,
+  ou `HISTORICO.md` ausente) — **isto vale mesmo quando o bloco `calibracao` gravado diverge e
+  dizia `fator_ativo: true`**: a origem da calibração continua sendo a ausência de fator, nunca
+  `persistido` nem `recomputado`, porque o canônico é quem decide se há fator, não o que está
+  escrito; ou, com o canônico ativo, é o `desvio_medio`
+  dele — **persistido** quando o leitor confere e bate contra o bloco `calibracao` gravado,
+  **recomputado** quando diverge —, copiado como está — número com as mesmas **duas casas
+  decimais** do `kind: estimativa_historico` (ex.: `1.25`, e `1.20` para o desvio de `1,2`).
+  Nunca `1.00` para disfarçar ausência de fator (DS-46): neutro declarado é indistinguível
+  de fator inventado, e a ausência se diz com `null`.
 - `confianca` segue o enum `confianca`; `confianca_motivo` é uma linha derivada dos sinais.
-  Sem `docs/sprintx/estimativas/HISTORICO.md`, `confianca` nunca é `alta`.
+  Sem `docs/sprintx/estimativas/HISTORICO.md`, `confianca` nunca é `alta`. Divergência entre o
+  bloco `calibracao` persistido e o canônico recomputado (DS-165) também limita `confianca` a
+  `media`, mesmo com um fator canônico ativo sendo aplicado.
+- **A colecao canônica é `calibracao_por_tipo` (DS-166), nunca o escalar.** Um trabalho mistura
+  tipos de task, e cada `tipo_task` tem o seu próprio canônico de calibração (DS-165) — um
+  trabalho com `config` e `integracao_externa` pode ter fator ativo num e não no outro, ou
+  fatores ativos diferentes nos dois. `calibracao_por_tipo` traz **exatamente uma linha por
+  `tipo_task` presente, em ordem lexical**, cada uma com `tipo_task`, `fator` (número com as
+  duas casas da DS-160, ou `null`), `origem` (`persistido` \| `recomputado` \| `nenhum —
+  canônico sem fator ativo`, DS-165) e `divergencia` (`confere` \| `diverge com valores` \| `não
+  se aplica — HISTORICO.md ausente`, DS-165) — os mesmos três estados da DS-165, só que
+  calculados por tipo, nunca um único canônico para o trabalho inteiro.
+  **Nenhum item de `calibracao_por_tipo` grava `1.00` como fator ativo** (a mesma proibição da DS-46, por tipo).
+  `calibracao_por_tipo` é `[]` apenas quando não há nenhuma task estimada — na prática, sempre
+  tem ao menos um item quando há tasks.
+- **O escalar legado `fator_correcao_aplicado` é derivado da coleção, nunca gravado à parte.**
+  Resolvido o `fator` de cada item de `calibracao_por_tipo`: o escalar fica **numérico** —
+  escalar numérico somente quando TODOS os tipos presentes recebem o MESMO fator ativo —, com
+  esse mesmo número; fica **`null`** — escalar `null` somente quando NENHUM tipo presente
+  recebe fator ativo — quando nenhum item tem fator ativo; e em qualquer mistura — fator ativo
+  e inativo, ou fatores ativos diferentes — grava `fator_correcao_aplicado: por_tipo`, o
+  literal string `por_tipo` (nunca um número escolhido entre os fatores, nunca a média deles).
+  Um trabalho com um único `tipo_task` nunca produz `por_tipo`: o escalar é sempre o fator (ou
+  `null`) desse único item.
+- **Consumidor legado e fail-closed (DS-166).** Consumidor que não reconhece `calibracao_por_tipo` lê `fator_correcao_aplicado: por_tipo` e, por não saber o que esse literal significa, declara a estimativa indisponível e não a usa — nunca coerção, média ou escolha arbitrária. Um consumidor assim nunca trata `por_tipo` como número, nem o ignora e segue como se o fator fosse `null`: as duas leituras produziriam esforço errado em silêncio.
 - `premissas`, `invalidadores` e `nao_incluido` são listas de strings de uma linha e não são
   vazias. `tasks_a_quebrar` lista ids `T-NN.MM` de tasks que NÃO foram estimadas e NÃO entram
   nos totais; `[]` quando nenhuma.
@@ -539,6 +578,42 @@ entradas:
     desvio: 1.17
     duracao_observada: 5.2
     registrado_em: 2026-08-29
+  - trabalho_id: exportacao-csv-relatorios
+    task_id: T-01.02
+    tipo_task: config
+    area: configuracao de ambiente
+    sinais: [arquivo_novo_isolado]
+    estimado_min: 3
+    estimado_max: 5
+    estimado_media: 4
+    real: 4.5
+    desvio: 1.13
+    duracao_observada: 4.8
+    registrado_em: 2026-08-29
+  - trabalho_id: relatorio-financeiro
+    task_id: T-02.01
+    tipo_task: config
+    area: configuracao de ambiente
+    sinais: [arquivo_novo_isolado]
+    estimado_min: 4
+    estimado_max: 8
+    estimado_media: 6
+    real: 7.0
+    desvio: 1.17
+    duracao_observada: 7.5
+    registrado_em: 2026-09-10
+  - trabalho_id: relatorio-financeiro
+    task_id: T-02.02
+    tipo_task: config
+    area: configuracao de ambiente
+    sinais: [arquivo_novo_isolado]
+    estimado_min: 1
+    estimado_max: 3
+    estimado_media: 2
+    real: 2.25
+    desvio: 1.13
+    duracao_observada: 2.1
+    registrado_em: 2026-09-10
 calibracao:
   - tipo_task: config
     entradas: 4
@@ -555,9 +630,45 @@ Regras duras deste kind:
   (`[]` se nenhum).
 - `estimado_min`, `estimado_max`, `estimado_media` e `desvio` são `null` quando o trabalho
   rodou sem a F3.5; `real` é sempre preenchido.
-- `desvio` é `real / estimado_media`. `fator_ativo` só é `true` com 3 ou mais entradas
-  encerradas daquele tipo.
-- `calibracao` é `[]` enquanto não houver entrada suficiente para calcular desvio por tipo. Com
+- **Entrada calibrável (DS-164).** É a entrada encerrada cujo `desvio` persistido é número — não
+  nulo. Entrada que rodou sem a F3.5 também encerra, com `real` e sem `desvio`: é entrada encerrada
+  que a calibração não tem como agregar. Por isso a cadeia inteira lê só as calibráveis —
+  `entradas` conta somente as entradas daquele tipo com `desvio` numérico (não nulo),
+  `desvio_medio` é a média somente dessas entradas elegíveis, e o limiar do `fator_ativo` conta
+  somente elas.
+  Entrada com `desvio: null` fica fora da contagem e nunca como zero: duas elegíveis
+  `1.20` e `1.30`, com duas entradas nulas do mesmo tipo ao lado, gravam `entradas: 2` com
+  `desvio_medio: 1.25` — nunca `entradas: 4` com `desvio_medio: 0.63`.
+- `desvio` é `real / estimado_media`, **arredondado a duas casas decimais com meio para cima
+  (half-up)** — e é o valor **arredondado antes** de ser gravado que a chave carrega.
+  `fator_ativo` só é `true` com **3 ou mais entradas elegíveis** daquele tipo.
+- **Quantas calibráveis, qual forma (DS-164).** Com **1 ou 2 entradas elegíveis**, o item daquele
+  `tipo_task` existe na `calibracao`, com o contador já preenchido e `fator_ativo: false` — o
+  próximo fechamento o incrementa, e apagá-lo perderia a contagem.
+  `calibracao: []` é o estado de **nenhuma entrada elegível** em tipo nenhum, nunca o de
+  "poucas entradas".
+- **Precisão e desempate (DS-160).** `desvio` e `desvio_medio` têm
+  **duas casas decimais**, com desempate **half-up**: quando a terceira casa é exatamente `5`, a
+  segunda sobe. A razão `1,125` — o empate exato, de `real: 4.5` sobre `estimado_media: 4.0` —
+  vira `1,13`, nunca `1,12`; no YAML, `desvio: 1.13`. As duas casas são
+  **fixas**, não "até duas": a razão `1,2` grava-se `1.20` no YAML e escreve-se `1,20` na prosa, e
+  número com uma casa ou com três é número fora do contrato. O YAML usa ponto e a prosa em pt-BR usa
+  vírgula — as duas formas do mesmo número, com as mesmas duas casas (regra universal 7); a única
+  exceção é a sintaxe de fórmula, onde o contrato a indica explicitamente.
+- `desvio_medio` é a **média** dos `desvio_calibracao_task`, nunca o `desvio_padrao_task` — a
+  chave `desvio` de cada entrada elegível daquele tipo, já **persistida** e portanto já
+  arredondada, nunca a média das razões brutas —, **arredondada de novo pela mesma regra**:
+  duas casas, half-up. O agregador é **único** e a precisão também: dois executores que leiam
+  este contrato gravam o mesmo número, dígito a dígito, a partir do mesmo histórico. Nem o
+  agregador nem a precisão dependem de `duracao_observada`, que a `calibracao` não lê (DS-37).
+- **Dois nomes, duas grandezas (DS-162).** O símbolo interno do número que `desvio` e
+  `desvio_medio` carregam é o `desvio_calibracao_task`, a razão entre `real` e
+  `estimado_media`: **adimensional**. Ele nunca é o `desvio_padrao_task` da
+  `references/07-estimativa.md`, que é o desvio-padrão PERT de uma estimativa, medido em
+  **horas** e somado em quadratura. As duas grandezas **não são intercambiáveis**, e nenhum
+  dos dois símbolos vira chave do YAML: em disco continuam valendo `desvio` e `desvio_medio`.
+- `calibracao` é `[]` enquanto não houver **nenhuma entrada elegível** em tipo nenhum — uma só já
+  cria o item do tipo, com `fator_ativo: false`. Com
   `calibracao: []`, a tabela `Calibração por tipo de task` da prosa fica **com cabeçalho e separador
   e sem nenhuma linha de dados** — regra universal 7 aplicada à lista vazia: o YAML diz `[]` e a
   prosa não mostra linha nenhuma. Cada linha de dados corresponde a **um** item de `calibracao` e
@@ -576,6 +687,23 @@ Regras duras deste kind:
 - `duracao_observada` fica **fora do cálculo de `desvio`** — que continua sendo
   `real / estimado_media`, só — e **fora da `calibracao`**: `desvio_medio` e `fator_ativo` não a
   leem. Por isso ela aparece **depois** de `desvio` na entrada: a cadeia de calibração termina ali.
+- **Conferência e regravação (DS-165).** `entradas:` é **append-only** — nunca se migra nem se
+  reescreve (regra do cabeçalho desta seção) —, mas o bloco `calibracao` é **derivado e
+  regravável**: a cada fechamento (F6, `references/07-estimativa.md` Passo 10) a leitura canônica
+  da DS-164 — `entradas`, `desvio_medio` e `fator_ativo` recalculados só das entradas elegíveis —
+  recalcula e regrava o bloco `calibracao` inteiro. O leitor da F3.5 (Passo 1) sempre **confere** o
+  bloco `calibracao` gravado contra esse canônico antes de usar: bate, aplica o persistido; diverge
+  e o canônico tem `fator_ativo: true`, aplica o canônico recomputado — nunca o bloco stale, e
+  nunca a média das razões brutas `real / estimado_media` — e declara a divergência na saída. Se o
+  canônico tem `fator_ativo: false` — menos de 3 entradas elegíveis, bata ou divirja o bloco
+  gravado —, não há fator nenhum para aplicar: a origem da calibração é `nenhum — canônico sem
+  fator ativo`, e `fator_correcao_aplicado` é `null`, mesmo que o bloco gravado divergente
+  dissesse `fator_ativo: true`. Sem `HISTORICO.md` não existe bloco `calibracao` nenhum para
+  comparar — a `Divergência encontrada` não é "confere" nem "diverge", é `não se aplica —
+  HISTORICO.md ausente`, e a origem da calibração é obrigatoriamente `nenhum — canônico sem fator
+  ativo` (os dois campos ficam consistentes: sem nada gravado, não há o que divergir, e também não
+  há fator). A F3.5 **nunca** escreve nem migra o `HISTORICO.md`: só a F6 regrava `calibracao` no
+  fechamento.
 
 ### `FECHAMENTO.md` → `kind: fechamento`
 

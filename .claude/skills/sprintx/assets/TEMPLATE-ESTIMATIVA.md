@@ -12,7 +12,12 @@ caminho_critico_min: {{numero}}
 caminho_critico_max: {{numero}}
 confianca: {{alta | media | baixa}}
 confianca_motivo: {{motivo derivado dos sinais, uma linha}}
-fator_correcao_aplicado: {{numero ou null}}
+fator_correcao_aplicado: {{numero ou null ou por_tipo}}
+calibracao_por_tipo:
+  - tipo_task: {{tipo_task, uma linha por tipo presente, ordem lexical}}
+    fator: {{numero ou null}}
+    origem: {{persistido | recomputado | nenhum — canônico sem fator ativo}}
+    divergencia: {{confere | diverge com valores | não se aplica — HISTORICO.md ausente}}
 metodo_agregacao: pert_quadratura
 tasks_estimadas: {{numero}}
 premissas: [{{premissa verificavel em uma linha}}]
@@ -56,9 +61,9 @@ Unidade: hora de trabalho focado. Método de agregação: PERT com variâncias s
 
 ## Por task
 
-| Task | Tipo | o | m | p | Média | Faixa | Sinais aplicados | Comparável no histórico |
-|---|---|---|---|---|---|---|---|---|
-| T-{{NN}}.{{MM}} | {{tipo_task}} | {{o}} | {{m}} | {{p}} | {{media}} | {{min}}–{{max}} h | {{sinal, sinal}} | {{trabalho/task ou "nenhum"}} |
+| Task | Tipo | Fator aplicado | o | m | p | Média | Faixa | Sinais aplicados | Comparável no histórico |
+|---|---|---|---|---|---|---|---|---|---|
+| T-{{NN}}.{{MM}} | {{tipo_task}} | {{fator ou "nenhum"}} | {{o}} | {{m}} | {{p}} | {{media}} | {{min}}–{{max}} h | {{sinal, sinal}} | {{trabalho/task ou "nenhum"}} |
 
 ## Tasks a quebrar — não estimadas
 
@@ -117,12 +122,36 @@ O que esta faixa deliberadamente não cobre:
 
 {{Se BAIXA, repita aqui a ação para subir o nível e diga quanto ela custa aproximadamente. Quase sempre é uma investigação curta que vale mais que uma estimativa apressada.}}
 
-## Calibração
+## Calibração por tipo de task
+
+Uma linha por `tipo_task` presente neste trabalho, em ordem lexical (DS-166) — cada `tipo_task`
+tem o seu próprio canônico de calibração (DS-165); misturar tipos nunca produz um fator único.
+
+| Tipo | Fator aplicado | Origem (DS-165) | Divergência (DS-165) |
+|---|---|---|---|
+| {{tipo_task}} | {{numero ou "nenhum"}} | {{persistido \| recomputado \| nenhum — canônico sem fator ativo}} | {{confere \| diverge com valores \| não se aplica — HISTORICO.md ausente}} |
+
+{{ou, se nenhuma task foi estimada: "Nenhuma: não há task estimada neste trabalho."}}
+
+## Calibração — escalar legado
 
 - Histórico consultado: {{`docs/sprintx/estimativas/HISTORICO.md` (N entradas) | "não existe neste projeto"}}
-- Fator de correção aplicado: {{ex.: "1,25× nas tasks de tipo `integracao_externa`, vindo de um desvio médio de 1,25 em 4 entradas encerradas" | "nenhum"}}
+- `fator_correcao_aplicado`: {{o número, quando todos os tipos presentes concordam no mesmo fator ativo | "null", quando nenhum tipo presente tem fator ativo | "por_tipo", em qualquer mistura — ver a tabela acima}}
+{{Com um único `tipo_task` presente neste trabalho, declare também as duas linhas abaixo — repetem o item único de `calibracao_por_tipo`, para quem só lê o escalar legado:}}
+- Origem da calibração (DS-165): {{persistido | recomputado | nenhum — canônico sem fator ativo}}
+- Divergência encontrada (DS-165): {{"nenhuma — o bloco `calibracao` gravado confere com o canônico" | "o bloco `calibracao` gravado trazia <valor stale>; o canônico recomputado das entradas elegíveis é <valor canônico>" | "não se aplica — HISTORICO.md ausente"}}
+
+{{Com mais de um `tipo_task` presente (DS-168): não existe origem nem divergência agregada para o trabalho inteiro — cada tipo tem a sua própria, só na tabela "Calibração por tipo de task" acima. Omita as duas linhas acima; nunca escolha uma entre os tipos, nunca escreva "misto" ou "vários" no lugar de um valor do enum — a mesma regra de fail-closed da DS-166 vale aqui: sem agregado definido, não se inventa um.}}
 
 O fator de correção é sempre visível. Fator embutido em silêncio é indistinguível de número inventado.
+
+**Consumidor legado e fail-closed (DS-166).** Um consumidor que só lê `fator_correcao_aplicado` e não conhece `calibracao_por_tipo` pode encontrar o literal `por_tipo` neste campo. Ele não é um número: um consumidor assim declara a estimativa indisponível e não a usa — nunca coerção, média ou escolha arbitrária. Tratar `por_tipo` como zero, como `1.00` ou como a média dos fatores produziria esforço errado sem aviso nenhum — o mesmo defeito que o fator visível (acima) existe para evitar.
+
+O fator é o `desvio_medio` do **canônico vigente** daquele tipo (DS-165, ver parágrafo seguinte) — persistido quando o bloco `calibracao` confere, recomputado quando diverge —, nunca o bloco gravado copiado às cegas: duas casas decimais, meio para cima (half-up) — `1,16`, `1,20`, nunca `1,2` nem `1,157` (DS-160). Ele entra na faixa de cada task daquele tipo **antes da agregação**; o arredondamento à hora inteira da faixa agregada vem depois, por último. O item de `calibracao_por_tipo` daquele tipo leva o mesmo número com ponto (`1.16`); o escalar
+`fator_correcao_aplicado` só repete esse número quando todos os tipos presentes concordam
+(DS-166, ver "Calibração — escalar legado").
+
+Antes de aplicar, a leitura **confere** o bloco `calibracao` gravado contra o canônico recomputado das `entradas` persistidas daquele tipo (DS-165). Com o canônico ativo, a origem da calibração é `persistido` quando bate, ou `recomputado` quando diverge — e, na divergência, o fator vem do canônico recomputado, nunca do bloco gravado às cegas, nunca da média das razões brutas `real / estimado_media`. Quando o canônico tem `fator_ativo: false` — menos de 3 entradas elegíveis, ou `HISTORICO.md` ausente —, não há fator nenhum para aplicar: a origem da calibração é `nenhum — canônico sem fator ativo` e `fator_correcao_aplicado` é `null`, **mesmo que o bloco gravado divergente dissesse `fator_ativo: true`** — o canônico decide se há fator, nunca o que o bloco stale afirma. Sem `HISTORICO.md`, não existe bloco `calibracao` nenhum para comparar: a `Divergência encontrada` não é "confere" nem "diverge", é `não se aplica — HISTORICO.md ausente`, e a origem da calibração é obrigatoriamente `nenhum — canônico sem fator ativo` — os dois campos consistentes, porque sem nada gravado não há o que divergir, e também não há fator. A divergência e a origem vêm declaradas acima, e a confiança desta estimativa não passa de `media`. A F3.5 nunca escreve nem migra o `HISTORICO.md`: a cura do bloco `calibracao` fica para o próximo fechamento (F6).
 
 ## Como a conta foi feita
 
@@ -131,19 +160,25 @@ Método: **PERT com variâncias somadas em quadratura**. Reproduzível à mão.
 Por task estimada:
 
 ```
-media_task  = (o + 4m + p) / 6
-desvio_task = (p - o) / 6
+media_task         = (o + 4m + p) / 6
+desvio_padrao_task = (p - o) / 6
 ```
+
+> **`desvio_padrao_task` é dispersão, em horas.** É o desvio-padrão PERT da task, e é só ele que entra na quadratura abaixo — nunca o `desvio_calibracao_task`, que é a razão de calibração do `HISTORICO.md`, **adimensional**, e nunca entra em quadratura nenhuma. As duas grandezas não são intercambiáveis (DS-162).
 
 Por conjunto (fase, sprint, trabalho, caminho crítico):
 
 ```
-media_conjunto  = soma das media_task
-desvio_conjunto = raiz_quadrada( soma dos (desvio_task)^2 )
-min = media_conjunto - desvio_conjunto      (piso: soma dos o)
+media_conjunto  = soma de ( media_task(t) * fator(t) )
+desvio_conjunto = raiz_quadrada( soma de ( desvio_padrao_task(t) * fator(t) )^2 )
+piso_conjunto   = soma( o(t) * fator(t) )
+fator(t) = 1                                # quando o tipo da task t nao tem fator ativo
+min = media_conjunto - desvio_conjunto      # se min < piso_conjunto, entao min = piso_conjunto
 max = media_conjunto + desvio_conjunto
 ```
 
-Somar variâncias em quadratura faz o intervalo crescer menos que a soma linear: os desvios se compensam entre tasks, e supor que tudo dá errado ao mesmo tempo superestimaria grosseiramente. Por construção, a faixa agregada é sempre mais estreita que `[soma dos o, soma dos p]`.
+**A soma e a quadratura já corrigem pelo fator, nunca os valores crus (DS-167).** `media_task(t)` e `desvio_padrao_task(t)` acima são os valores crus, sem fator; o `fator(t)` entra na soma e na quadratura, não depois — por isso `min` e `max` saem corrigidos os dois, nunca só o `min` pelo piso. O piso é a soma dos otimistas **já corrigidos pelo fator do tipo de cada task** — nunca a maior `o`, nunca um fator único do conjunto —, e o gatilho compara contra o mesmo `piso_conjunto` que atribui. O clamp acontece **antes** do arredondamento `floor(min)`/`ceil(max)` à hora inteira, que é o último passo (DS-163, que estende DS-41).
+
+Somar variâncias em quadratura faz o intervalo crescer menos que a soma linear: os desvios se compensam entre tasks, e supor que tudo dá errado ao mesmo tempo superestimaria grosseiramente. Por construção, a faixa agregada é sempre mais estreita que `[ soma( o(t) * fator(t) ), soma( p(t) * fator(t) ) ]` — os limites corrigidos task a task, pelos mesmos fatores que entraram na agregação.
 
 O **caminho crítico** usa as mesmas fórmulas, mas apenas sobre as tasks da cadeia de dependências mais longa: {{lista dos ids da cadeia}}. Tasks paralelizáveis somam no esforço total e não somam aqui.

@@ -37,15 +37,34 @@ Para cada task que você vai estimar, procure no histórico entradas comparávei
 
 Uma entrada é comparável quando bate no tipo **e** em pelo menos um dos outros dois eixos. Registre, para cada task, quais entradas do histórico você usou como comparável — isso vai para a prosa da saída.
 
-**Fator de correção.** O histórico traz, por tipo de task, o desvio médio entre estimado e real (ver Passo 8). Quando existir desvio calculado para um tipo com **3 ou mais** entradas encerradas, aplique-o como fator multiplicativo à faixa das tasks daquele tipo, e **declare o fator na saída, task a task e no total**. Fator de correção nunca é aplicado em silêncio: um número corrigido sem o fator visível é indistinguível de um número inventado.
+**Fator de correção.** O histórico traz, por tipo de task, o desvio médio entre estimado e real (ver Passo 8). Quando existir desvio calculado para um tipo com **3 ou mais** entradas elegíveis — as entradas daquele tipo com `desvio` numérico, não nulo (DS-164) —, aplique-o como fator multiplicativo à faixa das tasks daquele tipo, e **declare o fator na saída, task a task e no total**. Fator de correção nunca é aplicado em silêncio: um número corrigido sem o fator visível é indistinguível de um número inventado.
 
-Com menos de 3 entradas do tipo, o desvio é ruído: **não** aplique fator, e diga na saída que o histórico tem entradas insuficientes daquele tipo.
+**O fator é o `desvio_medio` persistido**, lido do `HISTORICO.md` como está — duas casas decimais, half-up (DS-160) —, sem recalcular nada a partir das entradas e sem reduzir ou ampliar as casas. Ele entra na faixa da task daquele tipo **antes da agregação**: multiplica `media_task` e `desvio_padrao_task` de cada task do tipo, e só então o Passo 5 agrega. O arredondamento `floor(min)`/`ceil(max)` à hora inteira é o **último passo** da faixa agregada, nunca um estágio intermediário — arredondar antes do fator, ou arredondar o fator, publica outra faixa.
+
+**Exemplo de impacto.** Duas tasks `integracao_externa` — `o=4 m=5 p=12` (média 6,00, desvio 1,33) e `o=3 m=4 p=5` (média 4,00, desvio 0,33) — com o fator canônico `1.16`: média agregada `11,60`, desvio agregado `1,59`, faixa `10,01–13,19`, publicada **10–14 h**. Com `1,15`, o número que sai de um arredondamento não canônico do mesmo histórico, a faixa publicada vira **9–14 h**. A casa decimal do fator não é detalhe de apresentação: ela muda a hora que se cobra.
+
+Com menos de 3 entradas elegíveis do tipo, o desvio é ruído: **não** aplique fator, e diga na saída que o histórico tem entradas insuficientes daquele tipo. Entrada daquele tipo com `desvio: null` não entra nessa conta — o item da `calibracao` pode existir com `fator_ativo: false`, e é o `fator_ativo` que manda.
+
+**Conferência do bloco persistido, nunca confiança cega (DS-165).** Antes de aplicar o `desvio_medio` persistido, recompute o canônico daquele `tipo_task` a partir dos `desvio` já persistidos nas `entradas` — nunca de `real / estimado_media`, que é a razão bruta e não o que a calibração agrega: `entradas` = a contagem das elegíveis (DS-164), `desvio_medio` = a média delas pela precisão da DS-160, `fator_ativo` = `true` a partir de 3. Confira esse canônico contra o bloco `calibracao` gravado no `HISTORICO.md`.
+
+- **Bate, com fator ativo no canônico:** aplique o `desvio_medio` persistido, como já descrito acima. A origem da calibração (DS-165) é `persistido`.
+- **Diverge, com fator ativo no canônico:** nunca aplique o bloco stale. Recompute o fator a partir do canônico recém-calculado — e só dele — e aplique esse valor. Declare na saída, nesta task e no total, a divergência encontrada: o que estava gravado e o que o canônico manda, e que a origem da calibração é `recomputado`. Uma divergência detectada **reduz o teto de confiança a `media`** (Passo 7), mesmo com um fator canônico ativo sendo aplicado — a leitura está corrigindo ao vivo um histórico que não bate com o próprio contrato, e isso não é a mesma coisa que um histórico limpo e comparável.
+- **Canônico sem fator ativo** (menos de 3 entradas elegíveis daquele tipo) **— bata ou divirja o bloco gravado:** não aplique fator nenhum, mesmo que o bloco stale dissesse `fator_ativo: true`. `fator_correcao_aplicado` é `null` (DS-46) e a origem da calibração declarada é `nenhum — canônico sem fator ativo`. Um bloco gravado divergente que mente sobre ter fator ativo não ganha um fator por isso: a elegibilidade é a da DS-164, não a do que está escrito.
+
+**Exemplo de divergência com fator ativo.** Para `integracao_externa`, o bloco gravado traz `entradas: 5`, `desvio_medio: 0.93`, `fator_ativo: true` — herança de uma leitura que contava a entrada de `desvio: null` como zero (o defeito que a DS-164 fechou). As entradas persistidas do tipo trazem `desvio` `1.13`, `1.13`, `1.17`, `1.20` e uma quinta `null`. O canônico, recomputado só das quatro elegíveis, é `entradas: 4`, `desvio_medio: 1.16`, `fator_ativo: true` (o mesmo exemplo da DS-160, Passo 10). O fator efetivamente aplicado é `1,16`, com origem da calibração `recomputado`; a divergência `0,93 → 1,16` vai declarada na saída, e a confiança desta estimativa não passa de `media`. O fator **nunca** é `1,15` — a média das razões brutas `real / estimado_media`, sem passar pelos `desvio` persistidos — nem `0,93` — o valor stale que a conferência descartou.
+
+**Exemplo de divergência sem fator ativo.** Para `api`, o bloco gravado traz `entradas: 4`, `desvio_medio: 0.63`, `fator_ativo: true` — a mesma herança da contagem de nulas como zero. As entradas persistidas do tipo trazem `desvio` `1.20`, `1.30` e duas `null`. O canônico, recomputado só das duas elegíveis, é `entradas: 2`, `desvio_medio: 1.25`, `fator_ativo: false` — menos de 3 entradas elegíveis, mesmo com o bloco stale dizendo o contrário. `fator_correcao_aplicado` é `null`, a origem da calibração declarada é `nenhum — canônico sem fator ativo`, a divergência `entradas: 4 → 2` vai declarada na saída, e a confiança não passa de `media`. Note a diferença para o exemplo anterior: ali a divergência corrige o NÚMERO do fator (de `0,93` para `1,16`, ambos ativos); aqui a divergência corrige se HÁ fator — e a resposta correta é que não há.
+
+**A F3.5 nunca escreve nem migra o `HISTORICO.md`.** Ela só lê. Encontrar divergência não autoriza esta fase a corrigir o arquivo: a cura do bloco `calibracao` acontece só no próximo fechamento (F6, Passo 10), que recalcula e regrava esse bloco a partir das mesmas `entradas`. As `entradas` persistidas são append-only e não se alteram nem aqui nem lá; é o bloco `calibracao` — derivado e regravável — que a F6 substitui a cada fechamento.
+
+**Um trabalho mistura tipos de task — o fator é sempre calculado por tipo (DS-166).** Repita a conferência da DS-165 **para cada `tipo_task` presente** no trabalho, nunca uma vez só para o trabalho inteiro: cada tipo tem seu próprio canônico, sua própria origem e sua própria divergência. Grave o resultado por tipo em `calibracao_por_tipo` (Passo 8). O escalar legado `fator_correcao_aplicado` é **derivado** dessa coleção, nunca calculado em paralelo a ela: é o número quando todos os tipos presentes concordam no mesmo fator ativo, é `null` quando nenhum tipo presente tem fator ativo, e é o literal `por_tipo` em qualquer mistura — fator ativo e inativo, ou fatores ativos diferentes entre os tipos presentes. Um consumidor que só lê `fator_correcao_aplicado` e não conhece `calibracao_por_tipo`, ao encontrar `por_tipo`, declara a estimativa indisponível e não a usa — nunca coerção, média ou escolha arbitrária.
 
 **Sem `HISTORICO.md`:** estime mesmo assim. Duas obrigações:
 
 - a confiança fica **no máximo `media`** (nunca `alta`), qualquer que seja o resto dos sinais;
 - a saída diz explicitamente, em uma linha própria: "Não há base de calibração neste projeto: `docs/sprintx/estimativas/HISTORICO.md` não existe. As faixas vêm de julgamento sobre o plano, sem desvio histórico para corrigi-las."
-- `fator_correcao_aplicado: null` no frontmatter.
+- `fator_correcao_aplicado: null` no frontmatter, com origem da calibração `nenhum — canônico sem fator ativo` (DS-165) — o mesmo rótulo do canônico sem entradas elegíveis suficientes, porque o efeito é o mesmo: não há fator nenhum para aplicar;
+- a `Divergência encontrada` (DS-165) é `não se aplica — HISTORICO.md ausente`: sem o arquivo não existe bloco `calibracao` nenhum para comparar — não é "confere" (não há com o que bater) nem "diverge" (não há o que divergir), é um terceiro estado, de ausência. Os dois campos ficam consistentes: sem `HISTORICO.md` não há como haver divergência, porque não há nada gravado, e também não há fator.
 
 ## Passo 2 — Classificar cada task por tipo
 
@@ -131,16 +150,28 @@ O método abaixo é o método oficial da skill. Ele é aritmética simples, repr
 Para cada task estimada:
 
 ```
-media_task    = (o + 4m + p) / 6          # PERT: favorece o provável
-desvio_task   = (p - o) / 6               # desvio-padrão aproximado
+media_task         = (o + 4m + p) / 6     # PERT: favorece o provável
+desvio_padrao_task = (p - o) / 6          # desvio-padrão PERT da task, em HORAS
 ```
+
+> **Dois nomes, duas grandezas.** O `desvio_padrao_task = (p - o) / 6` acima é a **dispersão de uma estimativa, medida em horas**, e é só ele que entra na quadratura — nunca o `desvio_calibracao_task`. O `desvio_calibracao_task = real / estimado_media` do Passo 10 é a **razão de calibração**, **adimensional**, e diz quanto o real excedeu o estimado — nunca o `desvio_padrao_task`. São **duas grandezas incompatíveis** e **não são intercambiáveis**: somar em quadratura a razão de calibração, em vez do desvio-padrão, publica 9–14 h onde o canônico publica 10–14 h. A notação antiga chamava as duas pelo mesmo símbolo (DS-162).
 
 Para um conjunto de N tasks (uma fase, uma sprint, o trabalho inteiro):
 
 ```
-media_conjunto  = soma das media_task
-desvio_conjunto = raiz_quadrada( soma dos (desvio_task)^2 )     # quadratura
+media_conjunto  = soma de ( media_task(t) * fator(t) )
+desvio_conjunto = raiz_quadrada( soma de ( desvio_padrao_task(t) * fator(t) )^2 )     # quadratura
 ```
+
+**A agregação soma e quadratura já corrigidos, nunca os valores crus (DS-167).** `media_task(t)`
+e `desvio_padrao_task(t)` são os valores crus do Passo 4, sem fator nenhum — o `fator(t)` entra
+aqui, na soma e na quadratura, e não depois: `media_conjunto` e `desvio_conjunto` já saem
+corrigidos, e por isso `min` e `max`, calculados a partir deles, também saem corrigidos — os
+dois, não só o `min` pelo piso. Corrigir só o piso e agregar os valores crus no resto deixaria
+o `max` sem fator nenhum, publicando uma faixa com o fator aplicado apenas parcialmente — o
+defeito que esta regra fecha. `fator(t)` é o mesmo da DS-166: `1` quando o tipo da task `t` não
+tem fator ativo, e o canônico daquele tipo quando tem — nunca um fator único do conjunto, nem
+mesmo quando todas as tasks do conjunto são do mesmo tipo.
 
 E a faixa publicada do conjunto:
 
@@ -149,11 +180,34 @@ min = media_conjunto - desvio_conjunto
 max = media_conjunto + desvio_conjunto
 ```
 
-Arredonde `min` para baixo e `max` para cima, à hora inteira. Se `min` der negativo ou menor que a maior `o` do conjunto, use a soma dos `o` como piso — nenhuma faixa agregada pode prometer menos do que o melhor caso somado.
+Arredonde `min` para baixo e `max` para cima, à hora inteira.
+
+**O piso do conjunto.** Nenhuma faixa agregada pode prometer menos do que o melhor caso somado, e o melhor caso somado já vem corrigido pelo fator da própria task:
+
+```
+piso_conjunto = soma( o(t) * fator(t) )
+fator(t) = 1                              # quando o tipo da task t nao tem fator ativo
+```
+
+**`fator(t)` vem do item de `calibracao_por_tipo` cujo `tipo_task` é o de `t` (DS-166)** —
+nunca de um fator único do conjunto. Um conjunto com tasks de dois tipos, um com fator ativo e
+outro sem, soma o piso com `fator(t)=1` nas tasks do tipo sem fator e `fator(t)` = o canônico
+daquele tipo nas outras; é exatamente por isso que o escalar `fator_correcao_aplicado` não
+basta para a conta — a conta sempre lê por tipo, com ou sem mistura.
+
+Se `min < piso_conjunto`, então `min = piso_conjunto`. O operando comparado e o operando atribuído são o **mesmo** `piso_conjunto` (DS-163, que estende DS-41): nunca a maior `o` do conjunto no gatilho e a soma dos `o` na atribuição, que são grandezas diferentes e deixam o piso sem definição. `fator(t) = 1` é identidade aritmética do piso, não fator declarado — `fator_correcao_aplicado` continua `null` quando nenhum tipo tem fator ativo.
+
+O clamp acontece **antes** do arredondamento à hora inteira: `floor(min)`/`ceil(max)` recebe o `min` já pisado.
+
+Pisar depois de arredondar publica um `min` fracionário — `3,20 h` no exemplo abaixo —, e a faixa publicada é em hora inteira. É por isso que o estágio está escrito: a ordem entre o piso e o arredondamento é observável na faixa que sai.
+
+Esse arredondamento à hora inteira é o **último passo** da faixa agregada. Quando há fator de correção (Passo 1), ele já entrou antes da agregação, na faixa de cada task do tipo — e o piso também vem corrigido task a task, pelo fator do tipo de cada uma, nunca por um fator único do conjunto. Arredondar à hora antes de aplicar o fator, ou arredondar o próprio fator, é estágio errado e publica outra faixa. As duas casas do `desvio` e do `desvio_medio` (DS-160) são do histórico; a hora inteira é da faixa publicada, e os dois arredondamentos não se misturam.
+
+**Exemplo com fator abaixo de 1.** Uma task `api` `o=4 m=5 p=12` cujo tipo tem fator `0,80`: média corrigida `4,80`, desvio corrigido `1,0667`, `min` cru `3,7333`, `max` `5,8667`. O piso é `4 × 0,80 = 3,20`, e `3,7333` não fica abaixo dele: a faixa publicada é **3–6 h**. Com o piso bruto — a soma dos `o` sem fator, `4` — o `min` seria pisado em `4` e a faixa publicada viraria **4–6 h**: uma hora na base da faixa que o método não calculou. Fator abaixo de 1 é permitido e alcançável — é o tipo cujo histórico mostra que o projeto estima para cima.
 
 **Por que a quadratura.** Somar desvios em quadratura (raiz da soma dos quadrados) é o que faz o intervalo crescer **menos** que a soma linear: dez tasks com desvio 1 h cada dão desvio agregado de `√10 ≈ 3,2 h`, não 10 h. É exatamente o efeito de compensação descrito acima, e é a razão de a faixa da fase ser mais estreita, em proporção, que a faixa de uma task isolada.
 
-**Verificação obrigatória de sanidade:** a faixa agregada de qualquer conjunto tem de ser **mais estreita** que `[soma dos o, soma dos p]`. Se não for, você errou a conta — refaça.
+**Verificação obrigatória de sanidade:** a checagem é sobre o `[min, max]` do Passo 5 — decimal, com o fator de cada task e o `piso_conjunto` já aplicados, mas **antes** do arredondamento à hora inteira do Passo 6 — e esse intervalo tem de estar **contido** em `[ soma( o(t) * fator(t) ), soma( p(t) * fator(t) ) ]`, os limites corrigidos task a task pelos mesmos fatores que entraram na agregação. Se não estiver, você errou a conta — refaça. Comparar com o intervalo bruto (sem fator) reprova conta certa sempre que algum fator é abaixo de 1: no exemplo acima, o `min` decimal e já pisado `3,7333` fica fora de `[4, 12]` e dentro de `[3,20, 9,60]`. Nunca compare essa sanidade contra a faixa **publicada** — já arredondada por `floor(min)`/`ceil(max)` à hora inteira: o arredondamento alarga a faixa para fora, nunca para dentro, então a publicada pode deixar de estar contida no intervalo corrigido mesmo numa conta certa — no mesmo exemplo ela é `3–6 h`, e `3` não fica acima de `3,20`. A sanidade é sempre sobre o decimal do Passo 5, nunca sobre o arredondado do Passo 6.
 
 ### Esforço total × caminho crítico
 
@@ -231,7 +285,7 @@ A confiança é **derivada de sinais**, nunca de sensação. Avalie na ordem: a 
 | Nível | Quando |
 |---|---|
 | `baixa` | há lacuna **bloqueante** em `base/00-LACUNAS.md` que afeta tasks estimadas; **ou** integração externa não documentada na base; **ou** raio de impacto ALTO; **ou** mais de um terço das tasks foram mandadas quebrar |
-| `media` | há lacuna não bloqueante; **ou** não existe histórico comparável (inclusive: `HISTORICO.md` não existe) |
+| `media` | há lacuna não bloqueante; **ou** não existe histórico comparável (inclusive: `HISTORICO.md` não existe); **ou** o bloco `calibracao` persistido divergiu do canônico recomputado (DS-165) |
 | `alta` | plano sem lacuna bloqueante, área com cobertura de teste, e histórico comparável existente no projeto |
 
 Teto duro: **sem `HISTORICO.md`, a confiança nunca é `alta`** — no máximo `media`.
@@ -254,7 +308,11 @@ Grave em `docs/sprintx/features/<slug>/00-ESTIMATIVA.md`, a partir de `assets/TE
 
 - `esforco_total_min` / `esforco_total_max` e `caminho_critico_min` / `caminho_critico_max` são **números** (horas), nunca strings com unidade. A unidade está em `unidade: h`.
 - Os quatro nunca são iguais dois a dois de forma a produzir número único: `min < max` sempre. Se `min == max`, você produziu número único — refaça.
-- `fator_correcao_aplicado` é `null` quando não houve calibração aplicada; nunca `1.0` disfarçando ausência de histórico.
+- `fator_correcao_aplicado` é o fator **efetivamente aplicado** (DS-165), e a **origem da calibração** tem três estados possíveis: `null`, origem `nenhum — canônico sem fator ativo`, quando o canônico tem `fator_ativo: false` (menos de 3 entradas elegíveis, ou `HISTORICO.md` ausente) — **mesmo que o bloco gravado divergente dissesse `fator_ativo: true`**; ou, com o canônico ativo, o `desvio_medio` dele — origem `persistido` quando a conferência bate contra o bloco `calibracao` gravado, `recomputado` quando diverge —, copiado com as mesmas duas casas (`1.16`, `1.20`). Nunca `1.00` disfarçando ausência de fator (DS-46).
+- `calibracao_por_tipo` (DS-166) leva uma linha por `tipo_task` presente, em ordem lexical, com
+  `fator`, `origem` e `divergencia` conforme a conferência da DS-165 aplicada a cada tipo.
+  `fator_correcao_aplicado` é derivado dela (ver Passo 1): número quando todos os tipos
+  presentes concordam, `null` quando nenhum tem fator ativo, `por_tipo` em qualquer mistura.
 - `tasks_a_quebrar` é `[]` quando nenhuma task passou do portão do Passo 4.
 - `premissas`, `invalidadores` e `nao_incluido` são listas de strings de uma linha, nunca vazias por preguiça — `nao_incluido` em particular sempre tem conteúdo.
 
@@ -275,7 +333,7 @@ A saída na conversa espelha o arquivo. Nesta ordem:
 7. **Tasks a quebrar**, se houver — com o que esclarecer em cada uma.
 8. **Premissas**, **Invalidadores**, **Não incluído**.
 9. **Confiança** e o motivo derivado dos sinais.
-10. **Fator de correção aplicado**, se houver — com o desvio histórico que o originou.
+10. **Fator de correção aplicado**, por `tipo_task` presente — para cada um, o desvio histórico que o originou, a origem da calibração (`persistido` | `recomputado` | `nenhum — canônico sem fator ativo`) e a divergência encontrada (confere | diverge com valores | `não se aplica — HISTORICO.md ausente`) (DS-165). Com um único tipo presente, repita também o escalar `fator_correcao_aplicado`, a origem e a divergência como valores do trabalho inteiro — eles coincidem com os do tipo único. Com mais de um tipo presente, não há origem nem divergência agregada do trabalho (DS-168): a saída não anuncia uma delas; cada tipo leva a sua, e nenhuma linha extra finge um resumo que não existe.
 
 ## Passo 10 — Registrar o real e calibrar (ao fim do trabalho)
 
@@ -286,12 +344,17 @@ Ao fim de um trabalho, `docs/sprintx/estimativas/HISTORICO.md` recebe uma linha 
 O **desvio** de uma task é calculado contra a média PERT que a originou:
 
 ```
-desvio_task = real / media_task_estimada
+desvio_calibracao_task = arredonda( real / media_task_estimada )
+arredonda(x)           = duas casas decimais, meio para cima (half-up)
 ```
 
-`1.0` é o alvo; `1.4` significa que levou 40% a mais que o previsto.
+`1,00` é o alvo; `1,40` significa que levou 40% a mais que o previsto.
 
-O **desvio por tipo** é a média dos `desvio_task` de todas as entradas encerradas daquele tipo. Ele é gravado na tabela de calibração do próprio `HISTORICO.md` e é o que vira **fator de correção** no Passo 1 — a partir de 3 entradas do tipo, e sempre declarado na saída, nunca embutido em silêncio.
+**Precisão e desempate (DS-160).** São **duas casas decimais**, com desempate **half-up**: terceira casa exatamente `5`, a segunda sobe. A razão `1,125` vira `1,13`, nunca `1,12`. As duas casas são **fixas**: a razão `1,2` grava-se `1.20` no YAML e escreve-se `1,20` na prosa. Cada `desvio` é arredondado **antes** de ser persistido — é o valor persistido que participa da calibração.
+
+O **desvio por tipo** é a média dos `desvio_calibracao_task` **já persistidos** de todas as entradas elegíveis daquele tipo — nunca a média das razões brutas, e nunca o `desvio_padrao_task`, que é dispersão em horas e não razão —, arredondada de novo pela mesma regra. Ele é gravado na tabela de calibração do próprio `HISTORICO.md` e é o que vira **fator de correção** no Passo 1 — a partir de 3 entradas do tipo, e sempre declarado na saída, nunca embutido em silêncio.
+
+**Exemplo completo.** Quatro entradas de `integracao_externa` com `estimado_media` 4.0, 4.0, 3.0 e 1.0 e `real` 4.5, 4.5, 3.5 e 1.2 dão razões `1,125`, `1,125`, `1,1666…` e `1,2`, persistidas como `desvio: 1.13`, `1.13`, `1.17` e `1.20`. A média dos quatro persistidos é `1,1575`, gravada como `desvio_medio: 1.16` com `fator_ativo: true`. Esse `1.16` é o fator que o Passo 1 aplica. Pelas convenções que o contrato **não** aceita, o mesmo histórico daria `1,15` — e a faixa publicada mudaria (ver o exemplo do Passo 1).
 
 Se o trabalho não teve estimativa (a F3.5 não rodou), registre o real mesmo assim, com `estimado_min: null`, `estimado_max: null` e `desvio: null`: o real alimenta a comparabilidade por tipo e área nas estimativas futuras.
 
@@ -303,7 +366,7 @@ A **`duracao_observada`** vem do rastro (`references/08-rastro.md`), é opcional
 - [ ] Nenhuma conversão de esforço em data, prazo, dia útil, semana ou sprint de calendário.
 - [ ] A frase "esforço não é prazo" está na saída e no arquivo.
 - [ ] Esforço total e caminho crítico são números **diferentes**, e a diferença está explicada em uma frase que nomeia o que roda em paralelo.
-- [ ] A faixa agregada é mais estreita que `[soma dos o, soma dos p]` (senão a quadratura foi feita errado).
+- [ ] O `[min, max]` decimal do Passo 5 — já com o fator por task e o piso `piso_conjunto` aplicados, ainda antes do arredondamento à hora inteira do Passo 6 — está contido em `[ soma( o(t) * fator(t) ), soma( p(t) * fator(t) ) ]` (senão a quadratura foi feita errado). Nunca compare a faixa já publicada, em hora inteira, contra esse intervalo decimal — o arredondamento alarga a faixa e reprovaria conta certa.
 - [ ] O método de agregação está documentado na saída, com as fórmulas.
 - [ ] Toda task tem seus sinais declarados ao lado dela.
 - [ ] Toda task com `p > 4 × o` está em `tasks_a_quebrar`, **não** foi estimada e **não** entrou nos totais.
