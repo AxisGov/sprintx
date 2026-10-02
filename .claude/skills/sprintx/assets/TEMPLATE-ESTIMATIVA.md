@@ -12,7 +12,12 @@ caminho_critico_min: {{numero}}
 caminho_critico_max: {{numero}}
 confianca: {{alta | media | baixa}}
 confianca_motivo: {{motivo derivado dos sinais, uma linha}}
-fator_correcao_aplicado: {{numero ou null}}
+fator_correcao_aplicado: {{numero ou null ou por_tipo}}
+calibracao_por_tipo:
+  - tipo_task: {{tipo_task, uma linha por tipo presente, ordem lexical}}
+    fator: {{numero ou null}}
+    origem: {{persistido | recomputado | nenhum — canônico sem fator ativo}}
+    divergencia: {{confere | diverge com valores | não se aplica — HISTORICO.md ausente}}
 metodo_agregacao: pert_quadratura
 tasks_estimadas: {{numero}}
 premissas: [{{premissa verificavel em uma linha}}]
@@ -56,9 +61,9 @@ Unidade: hora de trabalho focado. Método de agregação: PERT com variâncias s
 
 ## Por task
 
-| Task | Tipo | o | m | p | Média | Faixa | Sinais aplicados | Comparável no histórico |
-|---|---|---|---|---|---|---|---|---|
-| T-{{NN}}.{{MM}} | {{tipo_task}} | {{o}} | {{m}} | {{p}} | {{media}} | {{min}}–{{max}} h | {{sinal, sinal}} | {{trabalho/task ou "nenhum"}} |
+| Task | Tipo | Fator aplicado | o | m | p | Média | Faixa | Sinais aplicados | Comparável no histórico |
+|---|---|---|---|---|---|---|---|---|---|
+| T-{{NN}}.{{MM}} | {{tipo_task}} | {{fator ou "nenhum"}} | {{o}} | {{m}} | {{p}} | {{media}} | {{min}}–{{max}} h | {{sinal, sinal}} | {{trabalho/task ou "nenhum"}} |
 
 ## Tasks a quebrar — não estimadas
 
@@ -117,16 +122,31 @@ O que esta faixa deliberadamente não cobre:
 
 {{Se BAIXA, repita aqui a ação para subir o nível e diga quanto ela custa aproximadamente. Quase sempre é uma investigação curta que vale mais que uma estimativa apressada.}}
 
-## Calibração
+## Calibração por tipo de task
+
+Uma linha por `tipo_task` presente neste trabalho, em ordem lexical (DS-166) — cada `tipo_task`
+tem o seu próprio canônico de calibração (DS-165); misturar tipos nunca produz um fator único.
+
+| Tipo | Fator aplicado | Origem (DS-165) | Divergência (DS-165) |
+|---|---|---|---|
+| {{tipo_task}} | {{numero ou "nenhum"}} | {{persistido \| recomputado \| nenhum — canônico sem fator ativo}} | {{confere \| diverge com valores \| não se aplica — HISTORICO.md ausente}} |
+
+{{ou, se nenhuma task foi estimada: "Nenhuma: não há task estimada neste trabalho."}}
+
+## Calibração — escalar legado
 
 - Histórico consultado: {{`docs/sprintx/estimativas/HISTORICO.md` (N entradas) | "não existe neste projeto"}}
-- Fator de correção aplicado: {{ex.: "1,16× nas tasks de tipo `integracao_externa`, vindo de um desvio médio de 1,16 em 4 entradas elegíveis" | "nenhum"}}
-- Origem da calibração (DS-165): {{persistido | recomputado | nenhum — canônico sem fator ativo}}
+- `fator_correcao_aplicado`: {{o número, quando todos os tipos presentes concordam no mesmo fator ativo | "null", quando nenhum tipo presente tem fator ativo | "por_tipo", em qualquer mistura — ver a tabela acima}}
+- Origem da calibração (DS-165): {{persistido | recomputado | nenhum — canônico sem fator ativo}} — válido tal qual quando só há um `tipo_task` neste trabalho; com mais de um tipo presente, a origem de cada tipo está na coluna "Origem" da tabela "Calibração por tipo de task", acima.
 - Divergência encontrada (DS-165): {{"nenhuma — o bloco `calibracao` gravado confere com o canônico" | "o bloco `calibracao` gravado trazia <valor stale>; o canônico recomputado das entradas elegíveis é <valor canônico>" | "não se aplica — HISTORICO.md ausente"}}
 
 O fator de correção é sempre visível. Fator embutido em silêncio é indistinguível de número inventado.
 
-O fator é o `desvio_medio` do **canônico vigente** daquele tipo (DS-165, ver parágrafo seguinte) — persistido quando o bloco `calibracao` confere, recomputado quando diverge —, nunca o bloco gravado copiado às cegas: duas casas decimais, meio para cima (half-up) — `1,16`, `1,20`, nunca `1,2` nem `1,157` (DS-160). Ele entra na faixa de cada task daquele tipo **antes da agregação**; o arredondamento à hora inteira da faixa agregada vem depois, por último. `fator_correcao_aplicado` no frontmatter leva o mesmo número com ponto (`1.16`).
+**Consumidor legado e fail-closed (DS-166).** Um consumidor que só lê `fator_correcao_aplicado` e não conhece `calibracao_por_tipo` pode encontrar o literal `por_tipo` neste campo. Ele não é um número: um consumidor assim declara a estimativa indisponível e não a usa — nunca coerção, média ou escolha arbitrária. Tratar `por_tipo` como zero, como `1.00` ou como a média dos fatores produziria esforço errado sem aviso nenhum — o mesmo defeito que o fator visível (acima) existe para evitar.
+
+O fator é o `desvio_medio` do **canônico vigente** daquele tipo (DS-165, ver parágrafo seguinte) — persistido quando o bloco `calibracao` confere, recomputado quando diverge —, nunca o bloco gravado copiado às cegas: duas casas decimais, meio para cima (half-up) — `1,16`, `1,20`, nunca `1,2` nem `1,157` (DS-160). Ele entra na faixa de cada task daquele tipo **antes da agregação**; o arredondamento à hora inteira da faixa agregada vem depois, por último. O item de `calibracao_por_tipo` daquele tipo leva o mesmo número com ponto (`1.16`); o escalar
+`fator_correcao_aplicado` só repete esse número quando todos os tipos presentes concordam
+(DS-166, ver "Calibração — escalar legado").
 
 Antes de aplicar, a leitura **confere** o bloco `calibracao` gravado contra o canônico recomputado das `entradas` persistidas daquele tipo (DS-165). Com o canônico ativo, a origem da calibração é `persistido` quando bate, ou `recomputado` quando diverge — e, na divergência, o fator vem do canônico recomputado, nunca do bloco gravado às cegas, nunca da média das razões brutas `real / estimado_media`. Quando o canônico tem `fator_ativo: false` — menos de 3 entradas elegíveis, ou `HISTORICO.md` ausente —, não há fator nenhum para aplicar: a origem da calibração é `nenhum — canônico sem fator ativo` e `fator_correcao_aplicado` é `null`, **mesmo que o bloco gravado divergente dissesse `fator_ativo: true`** — o canônico decide se há fator, nunca o que o bloco stale afirma. Sem `HISTORICO.md`, não existe bloco `calibracao` nenhum para comparar: a `Divergência encontrada` não é "confere" nem "diverge", é `não se aplica — HISTORICO.md ausente`, e a origem da calibração é obrigatoriamente `nenhum — canônico sem fator ativo` — os dois campos consistentes, porque sem nada gravado não há o que divergir, e também não há fator. A divergência e a origem vêm declaradas acima, e a confiança desta estimativa não passa de `media`. A F3.5 nunca escreve nem migra o `HISTORICO.md`: a cura do bloco `calibracao` fica para o próximo fechamento (F6).
 

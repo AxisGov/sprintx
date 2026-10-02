@@ -483,6 +483,11 @@ caminho_critico_max: 63
 confianca: media
 confianca_motivo: Sem historico comparavel no projeto e uma lacuna nao bloqueante na base
 fator_correcao_aplicado: null
+calibracao_por_tipo:
+  - tipo_task: config
+    fator: null
+    origem: nenhum — canônico sem fator ativo
+    divergencia: não se aplica — HISTORICO.md ausente
 metodo_agregacao: pert_quadratura
 tasks_estimadas: 11
 premissas: [Credenciais de sandbox emitidas antes da sprint-02]
@@ -519,6 +524,28 @@ Regras duras deste kind:
   Sem `docs/sprintx/estimativas/HISTORICO.md`, `confianca` nunca é `alta`. Divergência entre o
   bloco `calibracao` persistido e o canônico recomputado (DS-165) também limita `confianca` a
   `media`, mesmo com um fator canônico ativo sendo aplicado.
+- **A colecao canônica é `calibracao_por_tipo` (DS-166), nunca o escalar.** Um trabalho mistura
+  tipos de task, e cada `tipo_task` tem o seu próprio canônico de calibração (DS-165) — um
+  trabalho com `config` e `integracao_externa` pode ter fator ativo num e não no outro, ou
+  fatores ativos diferentes nos dois. `calibracao_por_tipo` traz **exatamente uma linha por
+  `tipo_task` presente, em ordem lexical**, cada uma com `tipo_task`, `fator` (número com as
+  duas casas da DS-160, ou `null`), `origem` (`persistido` \| `recomputado` \| `nenhum —
+  canônico sem fator ativo`, DS-165) e `divergencia` (`confere` \| `diverge com valores` \| `não
+  se aplica — HISTORICO.md ausente`, DS-165) — os mesmos três estados da DS-165, só que
+  calculados por tipo, nunca um único canônico para o trabalho inteiro.
+  **Nenhum item de `calibracao_por_tipo` grava `1.00` como fator ativo** (a mesma proibição da DS-46, por tipo).
+  `calibracao_por_tipo` é `[]` apenas quando não há nenhuma task estimada — na prática, sempre
+  tem ao menos um item quando há tasks.
+- **O escalar legado `fator_correcao_aplicado` é derivado da coleção, nunca gravado à parte.**
+  Resolvido o `fator` de cada item de `calibracao_por_tipo`: o escalar fica **numérico** —
+  escalar numérico somente quando TODOS os tipos presentes recebem o MESMO fator ativo —, com
+  esse mesmo número; fica **`null`** — escalar `null` somente quando NENHUM tipo presente
+  recebe fator ativo — quando nenhum item tem fator ativo; e em qualquer mistura — fator ativo
+  e inativo, ou fatores ativos diferentes — grava `fator_correcao_aplicado: por_tipo`, o
+  literal string `por_tipo` (nunca um número escolhido entre os fatores, nunca a média deles).
+  Um trabalho com um único `tipo_task` nunca produz `por_tipo`: o escalar é sempre o fator (ou
+  `null`) desse único item.
+- **Consumidor legado e fail-closed (DS-166).** Consumidor que não reconhece `calibracao_por_tipo` lê `fator_correcao_aplicado: por_tipo` e, por não saber o que esse literal significa, declara a estimativa indisponível e não a usa — nunca coerção, média ou escolha arbitrária. Um consumidor assim nunca trata `por_tipo` como número, nem o ignora e segue como se o fator fosse `null`: as duas leituras produziriam esforço errado em silêncio.
 - `premissas`, `invalidadores` e `nao_incluido` são listas de strings de uma linha e não são
   vazias. `tasks_a_quebrar` lista ids `T-NN.MM` de tasks que NÃO foram estimadas e NÃO entram
   nos totais; `[]` quando nenhuma.

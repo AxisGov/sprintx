@@ -57,6 +57,8 @@ Com menos de 3 entradas elegíveis do tipo, o desvio é ruído: **não** aplique
 
 **A F3.5 nunca escreve nem migra o `HISTORICO.md`.** Ela só lê. Encontrar divergência não autoriza esta fase a corrigir o arquivo: a cura do bloco `calibracao` acontece só no próximo fechamento (F6, Passo 10), que recalcula e regrava esse bloco a partir das mesmas `entradas`. As `entradas` persistidas são append-only e não se alteram nem aqui nem lá; é o bloco `calibracao` — derivado e regravável — que a F6 substitui a cada fechamento.
 
+**Um trabalho mistura tipos de task — o fator é sempre calculado por tipo (DS-166).** Repita a conferência da DS-165 **para cada `tipo_task` presente** no trabalho, nunca uma vez só para o trabalho inteiro: cada tipo tem seu próprio canônico, sua própria origem e sua própria divergência. Grave o resultado por tipo em `calibracao_por_tipo` (Passo 8). O escalar legado `fator_correcao_aplicado` é **derivado** dessa coleção, nunca calculado em paralelo a ela: é o número quando todos os tipos presentes concordam no mesmo fator ativo, é `null` quando nenhum tipo presente tem fator ativo, e é o literal `por_tipo` em qualquer mistura — fator ativo e inativo, ou fatores ativos diferentes entre os tipos presentes. Um consumidor que só lê `fator_correcao_aplicado` e não conhece `calibracao_por_tipo`, ao encontrar `por_tipo`, declara a estimativa indisponível e não a usa — nunca coerção, média ou escolha arbitrária.
+
 **Sem `HISTORICO.md`:** estime mesmo assim. Duas obrigações:
 
 - a confiança fica **no máximo `media`** (nunca `alta`), qualquer que seja o resto dos sinais;
@@ -177,6 +179,12 @@ piso_conjunto = soma( o(t) * fator(t) )
 fator(t) = 1                              # quando o tipo da task t nao tem fator ativo
 ```
 
+**`fator(t)` vem do item de `calibracao_por_tipo` cujo `tipo_task` é o de `t` (DS-166)** —
+nunca de um fator único do conjunto. Um conjunto com tasks de dois tipos, um com fator ativo e
+outro sem, soma o piso com `fator(t)=1` nas tasks do tipo sem fator e `fator(t)` = o canônico
+daquele tipo nas outras; é exatamente por isso que o escalar `fator_correcao_aplicado` não
+basta para a conta — a conta sempre lê por tipo, com ou sem mistura.
+
 Se `min < piso_conjunto`, então `min = piso_conjunto`. O operando comparado e o operando atribuído são o **mesmo** `piso_conjunto` (DS-163, que estende DS-41): nunca a maior `o` do conjunto no gatilho e a soma dos `o` na atribuição, que são grandezas diferentes e deixam o piso sem definição. `fator(t) = 1` é identidade aritmética do piso, não fator declarado — `fator_correcao_aplicado` continua `null` quando nenhum tipo tem fator ativo.
 
 O clamp acontece **antes** do arredondamento à hora inteira: `floor(min)`/`ceil(max)` recebe o `min` já pisado.
@@ -291,6 +299,10 @@ Grave em `docs/sprintx/features/<slug>/00-ESTIMATIVA.md`, a partir de `assets/TE
 - `esforco_total_min` / `esforco_total_max` e `caminho_critico_min` / `caminho_critico_max` são **números** (horas), nunca strings com unidade. A unidade está em `unidade: h`.
 - Os quatro nunca são iguais dois a dois de forma a produzir número único: `min < max` sempre. Se `min == max`, você produziu número único — refaça.
 - `fator_correcao_aplicado` é o fator **efetivamente aplicado** (DS-165), e a **origem da calibração** tem três estados possíveis: `null`, origem `nenhum — canônico sem fator ativo`, quando o canônico tem `fator_ativo: false` (menos de 3 entradas elegíveis, ou `HISTORICO.md` ausente) — **mesmo que o bloco gravado divergente dissesse `fator_ativo: true`**; ou, com o canônico ativo, o `desvio_medio` dele — origem `persistido` quando a conferência bate contra o bloco `calibracao` gravado, `recomputado` quando diverge —, copiado com as mesmas duas casas (`1.16`, `1.20`). Nunca `1.00` disfarçando ausência de fator (DS-46).
+- `calibracao_por_tipo` (DS-166) leva uma linha por `tipo_task` presente, em ordem lexical, com
+  `fator`, `origem` e `divergencia` conforme a conferência da DS-165 aplicada a cada tipo.
+  `fator_correcao_aplicado` é derivado dela (ver Passo 1): número quando todos os tipos
+  presentes concordam, `null` quando nenhum tem fator ativo, `por_tipo` em qualquer mistura.
 - `tasks_a_quebrar` é `[]` quando nenhuma task passou do portão do Passo 4.
 - `premissas`, `invalidadores` e `nao_incluido` são listas de strings de uma linha, nunca vazias por preguiça — `nao_incluido` em particular sempre tem conteúdo.
 

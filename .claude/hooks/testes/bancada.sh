@@ -6697,6 +6697,203 @@ ad_muta "$AD_M" assets/TEMPLATE-ESTIMATIVA.md \
 ad_equivalente "ade-equivalente-2-reformulacao-do-placeholder" $? "$AD_M"
 rm -rf "$ADW"
 
+echo "== AE. a estimativa declara o fator por tipo_task, nunca um fator unico sobre mistura (PR#10 r4161807465) =="
+# O TEMPLATE-ESTIMATIVA.md so tinha `fator_correcao_aplicado` (DS-46/DS-165): um UNICO numero ou
+# null para o trabalho inteiro. Um trabalho com tasks de dois tipos — um com fator ativo, outro
+# sem, ou dois tipos com fatores ativos DIFERENTES — nao tem como representar isso num escalar
+# sem inventar (media, maior, ultimo tipo lido...). A DS-166 acrescenta `calibracao_por_tipo`:
+# uma linha por `tipo_task` PRESENTE no trabalho, em ordem lexical, cada uma com seu fator (ou
+# null), origem e divergencia (DS-165, agora por tipo). O escalar legado so sobrevive puro
+# (numero ou null) quando todos os tipos presentes concordam; qualquer mistura grava o literal
+# `por_tipo`, e um consumidor que nao conhece a colecao nova falha fechado — nunca aproxima.
+AE_SK="$SK"
+AE_SCH="$AE_SK/references/00-schema.md"
+AE_EST="$AE_SK/references/07-estimativa.md"
+AE_TPL="$AE_SK/assets/TEMPLATE-ESTIMATIVA.md"
+
+# O ORACULO do escalar: dado o conjunto de fatores (um por tipo PRESENTE, "null" quando o tipo
+# nao tem fator ativo), devolve o que `fator_correcao_aplicado` tem de gravar.
+ae_escalar() { # ae_escalar <fator1> [<fator2> ...]
+  awk -v lista="$*" '
+    BEGIN {
+      n = split(lista, v, / +/)
+      ativos = 0; distintos = 0; primeiro = ""
+      for (i = 1; i <= n; i++) {
+        if (v[i] == "null") { nulos++; continue }
+        ativos++
+        if (primeiro == "") primeiro = v[i]
+        else if (v[i] != primeiro) distintos = 1
+      }
+      if (ativos == 0) { print "null"; exit }
+      if (ativos == n && distintos == 0) { print primeiro; exit }
+      print "por_tipo"
+    }'
+}
+[ "$(ae_escalar 1.16 null)" = "por_tipo" ]; afirma "ae1-oraculo-ativo-e-inativo-e-por-tipo" $? \
+  "fator presente + tipo sem fator -> mistura"
+[ "$(ae_escalar 1.16 1.25)" = "por_tipo" ]; afirma "ae2-oraculo-dois-ativos-distintos-e-por-tipo" $? \
+  "dois fatores ativos diferentes -> mistura"
+[ "$(ae_escalar 1.16 1.16)" = "1.16" ]; afirma "ae3-oraculo-mesmo-ativo-em-todos-e-escalar" $? \
+  "todos os tipos com o mesmo fator ativo -> escalar numerico igual ao fator"
+[ "$(ae_escalar null null)" = "null" ]; afirma "ae4-oraculo-nenhum-ativo-e-null" $? \
+  "nenhum tipo com fator ativo -> escalar null"
+[ "$(ae_escalar 1.16)" = "1.16" ]; afirma "ae5-oraculo-um-unico-tipo-ativo-e-o-proprio-fator" $? \
+  "um unico tipo presente, ativo -> escalar e o fator dele, nao e mistura"
+
+# Detector por marcador literal, mesma tecnica e mesma justificativa da secao AD (ad_lit): string
+# exata do contrato, nunca regex de linguagem natural, para nao ter falso negativo acentuado.
+AE_LIT_SCH_CAMPO='`calibracao_por_tipo`'
+AE_LIT_SCH_UMALINHA='exatamente uma linha por `tipo_task` presente, em ordem lexical'
+AE_LIT_SCH_ESCALAR_NUM='escalar numérico somente quando TODOS os tipos presentes recebem o MESMO fator ativo'
+AE_LIT_SCH_ESCALAR_NULL='escalar `null` somente quando NENHUM tipo presente recebe fator ativo'
+AE_LIT_SCH_POR_TIPO='qualquer mistura — fator ativo e inativo, ou fatores ativos diferentes — grava `fator_correcao_aplicado: por_tipo`'
+AE_LIT_SCH_NUNCA_100='Nenhum item de `calibracao_por_tipo` grava `1.00` como fator ativo'
+AE_LIT_SCH_FAILCLOSED='declara a estimativa indisponível e não a usa — nunca coerção, média ou escolha arbitrária'
+AE_LIT_TPL_CAMPO='calibracao_por_tipo:'
+AE_LIT_TPL_TABELA='Calibração por tipo de task'
+AE_LIT_TPL_PORTASK_COLUNA='Fator aplicado'
+AE_LIT_EST_PISO_POR_TIPO='`fator(t)` vem do item de `calibracao_por_tipo` cujo `tipo_task` é o de `t`'
+AE_LIT_EST_FAILCLOSED='declara a estimativa indisponível e não a usa — nunca coerção, média ou escolha arbitrária'
+# Os valores de `origem`/`divergencia` em `calibracao_por_tipo` sao os MESMOS estados da DS-165
+# (canonico, acentuados) — nunca uma forma ASCII sem acento inventada so para este campo novo.
+# Marcador POSITIVO e a linha exata do YAML (exemplo real e template), e NEGATIVO proibe a forma
+# sem acento aparecer em lugar nenhum dos dois arquivos (auditoria Codex, incompatibilidade de
+# enum achada entre o exemplo e a regra canonica DS-165/DS-166).
+AE_LIT_SCH_ORIGEM_FRONT='origem: nenhum — canônico sem fator ativo'
+AE_LIT_SCH_DIVERG_FRONT='divergencia: não se aplica — HISTORICO.md ausente'
+AE_LIT_TPL_ORIGEM_FRONT='origem: {{persistido | recomputado | nenhum — canônico sem fator ativo}}'
+AE_LIT_TPL_DIVERG_FRONT='divergencia: {{confere | diverge com valores | não se aplica — HISTORICO.md ausente}}'
+AE_LIT_PROIBE_CANONICO_SEM_ACENTO='!nenhum — canonico sem fator ativo'
+AE_LIT_PROIBE_DIVERGE_SEM_ACENTO='!nao se aplica — HISTORICO.md ausente'
+
+ae_caso() { # ae_caso <caso> <dir> -> 0 se o caso PASSA naquela arvore
+  local c="$1" d="$2"
+  case "$c" in
+    # A colecao canonica existe no contrato e na saida, uma linha por tipo, ordem lexical.
+    ae_colecao_por_tipo_no_contrato)
+      ad_lit "$d/references/00-schema.md" "$AE_LIT_SCH_CAMPO" \
+             "$d/references/00-schema.md" "$AE_LIT_SCH_UMALINHA" \
+             "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AE_LIT_TPL_CAMPO" \
+             "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AE_LIT_TPL_TABELA" ;;
+    # A regra dos tres estados do escalar legado esta escrita no schema.
+    ae_regra_do_escalar_legado)
+      ad_lit "$d/references/00-schema.md" "$AE_LIT_SCH_ESCALAR_NUM" \
+             "$d/references/00-schema.md" "$AE_LIT_SCH_ESCALAR_NULL" \
+             "$d/references/00-schema.md" "$AE_LIT_SCH_POR_TIPO" ;;
+    # 1.00 nunca e fator ativo, nem no escalar nem por tipo (estende a DS-46).
+    ae_nunca_100_por_tipo)
+      ad_lit "$d/references/00-schema.md" "$AE_LIT_SCH_NUNCA_100" ;;
+    # Consumidor legado que nao reconhece calibracao_por_tipo falha fechado.
+    ae_fail_closed_consumidor_legado)
+      ad_lit "$d/references/00-schema.md" "$AE_LIT_SCH_FAILCLOSED" \
+             "$d/references/07-estimativa.md" "$AE_LIT_EST_FAILCLOSED" ;;
+    # A tabela "Por task" identifica o fator/estado aplicado a cada task, nao so o tipo.
+    ae_tabela_por_task_identifica_fator)
+      ad_lit "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AE_LIT_TPL_PORTASK_COLUNA" ;;
+    # O piso aditivo (DS-163) usa o fator do TIPO de cada task, lido da colecao por tipo.
+    ae_piso_aditivo_por_tipo)
+      ad_lit "$d/references/07-estimativa.md" "$AE_LIT_EST_PISO_POR_TIPO" ;;
+    # origem/divergencia de calibracao_por_tipo usam as formas CANONICAS acentuadas da DS-165,
+    # no exemplo do schema e no template, e a forma sem acento nunca aparece em nenhum dos dois.
+    ae_formas_acentuadas_no_frontmatter)
+      ad_lit "$d/references/00-schema.md"       "$AE_LIT_SCH_ORIGEM_FRONT" \
+             "$d/references/00-schema.md"       "$AE_LIT_SCH_DIVERG_FRONT" \
+             "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AE_LIT_TPL_ORIGEM_FRONT" \
+             "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AE_LIT_TPL_DIVERG_FRONT" \
+             "$d/references/00-schema.md"       "$AE_LIT_PROIBE_CANONICO_SEM_ACENTO" \
+             "$d/references/00-schema.md"       "$AE_LIT_PROIBE_DIVERGE_SEM_ACENTO" \
+             "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AE_LIT_PROIBE_CANONICO_SEM_ACENTO" \
+             "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AE_LIT_PROIBE_DIVERGE_SEM_ACENTO" ;;
+    # A DS-166 fica registrada, append-only, citando a mistura e o literal por_tipo.
+    ae_ds166_registrada)
+      local v; v="$(grep -F '| DS-166 |' "$d/DECISOES-DA-SKILL.md" 2>/dev/null)"
+      [ -n "$v" ] && printf '%s' "$v" | grep -qiF 'por_tipo' \
+        && printf '%s' "$v" | grep -qiF 'mistura' ;;
+    *) return 1 ;;
+  esac
+}
+AE_CASOS="ae_colecao_por_tipo_no_contrato ae_regra_do_escalar_legado ae_nunca_100_por_tipo
+ae_fail_closed_consumidor_legado ae_tabela_por_task_identifica_fator ae_piso_aditivo_por_tipo
+ae_ds166_registrada ae_formas_acentuadas_no_frontmatter"
+
+for ae_c in $AE_CASOS; do
+  ae_nome="$(printf '%s' "$ae_c" | tr '_' '-')"
+  ae_caso "$ae_c" "$AE_SK"; ae_rc=$?
+  afirma "$ae_nome" "$ae_rc" "lido da arvore do contrato em $AE_SK"
+done
+
+# DS-166 registrada, append-only (nao reescreve DS-165): nao reafirma pela ae_caso de novo (ja
+# roda no loop acima), so confere a DS-165 anterior continua intacta.
+grep -qF '| DS-165 |' "$AE_SK/DECISOES-DA-SKILL.md"
+afirma "ae-ds165-preservada-append-only" $? "DS-165 continua no arquivo, intacta"
+
+# Mutantes: a mesma mecanica de AD/AC, numa copia da arvore.
+AEW="$(mktemp -d)"
+ae_copia() { rm -rf "$AEW/$1"; mkdir -p "$AEW/$1"; cp -R "$AE_SK/." "$AEW/$1/"; printf '%s' "$AEW/$1"; }
+ae_muta() { [ -f "$1/$2" ] || return 1; sed -i "$3" "$1/$2" || return 1; ! cmp -s "$AE_SK/$2" "$1/$2"; }
+ae_mata() { local c; for c in $AE_CASOS; do ae_caso "$c" "$1" || { printf '%s' "$c"; return; }; done; }
+ae_mutante() { # ae_mutante <nome> <rc da geracao> <dir> <caso que TEM de matar>...
+  local nome="$1" rcg="$2" d="$3" c vivos=""; shift 3
+  if [ "$rcg" -eq 0 ]; then for c in "$@"; do ae_caso "$c" "$d" && vivos="$vivos$c "; done; fi
+  [ "$rcg" -eq 0 ] && [ -z "$vivos" ]; local rc=$?
+  afirma "$nome" "$rc" "morto por: $* ${vivos:+— SOBREVIVEU a: $vivos}(rc geracao=$rcg)"
+}
+AE_CTL="$(ae_copia controle)"
+AE_K="$(ae_mata "$AE_CTL")"; [ -z "$AE_K" ]; ae_rc=$?
+afirma "aem-controle-copia-intacta-sobrevive" "$ae_rc" "${AE_K:-nenhum caso reprova a copia sem mutacao}"
+
+# m1 — remove a colecao canonica do schema: so o escalar legado sobra.
+AE_M="$(ae_copia m1)"
+ae_muta "$AE_M" references/00-schema.md "s/${AE_LIT_SCH_CAMPO}//"
+ae_mutante "aem-mutante-1-remove-colecao-do-schema" $? "$AE_M" \
+  ae_colecao_por_tipo_no_contrato
+
+# m2 — remove a regra do escalar numerico (deixa so null/por_tipo descritos).
+AE_M="$(ae_copia m2)"
+ae_muta "$AE_M" references/00-schema.md "s/${AE_LIT_SCH_ESCALAR_NUM}//"
+ae_mutante "aem-mutante-2-remove-regra-escalar-numerico" $? "$AE_M" \
+  ae_regra_do_escalar_legado
+
+# m3 — permite 1.00 como fator ativo por tipo (regressao da DS-46 para a colecao nova).
+AE_M="$(ae_copia m3)"
+ae_muta "$AE_M" references/00-schema.md "s/${AE_LIT_SCH_NUNCA_100}//"
+ae_mutante "aem-mutante-3-permite-100-por-tipo" $? "$AE_M" \
+  ae_nunca_100_por_tipo
+
+# m4 — apaga a instrucao de falha fechada para consumidor legado (ex.: ele poderia tentar media).
+AE_M="$(ae_copia m4)"
+ae_muta "$AE_M" references/00-schema.md "s/${AE_LIT_SCH_FAILCLOSED}//"
+ae_mutante "aem-mutante-4-remove-fail-closed" $? "$AE_M" \
+  ae_fail_closed_consumidor_legado
+
+# m5 — apaga a coluna de fator aplicado da tabela "Por task" (so sobra o tipo, sem o fator/estado).
+AE_M="$(ae_copia m5)"
+ae_muta "$AE_M" assets/TEMPLATE-ESTIMATIVA.md "s/${AE_LIT_TPL_PORTASK_COLUNA}//"
+ae_mutante "aem-mutante-5-remove-coluna-fator-por-task" $? "$AE_M" \
+  ae_tabela_por_task_identifica_fator
+
+# m6 — colapsa o piso aditivo de volta a um fator unico do conjunto (apaga o vinculo por tipo).
+AE_M="$(ae_copia m6)"
+ae_muta "$AE_M" references/07-estimativa.md "s/${AE_LIT_EST_PISO_POR_TIPO}//"
+ae_mutante "aem-mutante-6-piso-sem-vinculo-por-tipo" $? "$AE_M" \
+  ae_piso_aditivo_por_tipo
+
+# m7 — DS-166 apagada do registro.
+AE_M="$(ae_copia m7)"
+ae_muta "$AE_M" DECISOES-DA-SKILL.md '/^| DS-166 |/d'
+ae_mutante "aem-mutante-7-ds166-apagada" $? "$AE_M" \
+  ae_ds166_registrada
+
+# m8 — corrompe a forma acentuada do exemplo no schema de volta para ASCII sem acento, a
+# incompatibilidade de enum que a auditoria Codex achou entre o exemplo e a regra canonica.
+AE_M="$(ae_copia m8)"
+ae_muta "$AE_M" references/00-schema.md \
+  's/origem: nenhum — canônico sem fator ativo/origem: nenhum — canonico sem fator ativo/'
+ae_mutante "aem-mutante-8-origem-sem-acento-no-exemplo" $? "$AE_M" \
+  ae_formas_acentuadas_no_frontmatter
+
+rm -rf "$AEW"
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"
 [ "$pulado" -eq 0 ] || echo "  ATENCAO: skip interno e buraco de cobertura da sprintx nesta plataforma, nao dependencia externa."
