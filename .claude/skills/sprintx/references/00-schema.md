@@ -503,13 +503,22 @@ Regras duras deste kind:
 - `esforco_total_*` cobre TODAS as tasks estimadas (paralelas ou não); `caminho_critico_*`
   cobre apenas a cadeia de dependências mais longa. Os dois são normalmente diferentes — é o
   paralelismo declarado no plano que os separa.
-- `fator_correcao_aplicado` é `null` quando não houve calibração; quando um desvio histórico foi
-  aplicado, é o `desvio_medio` persistido daquele tipo, copiado como está — número com as mesmas
-  **duas casas decimais** do `kind: estimativa_historico` (ex.: `1.25`, e `1.20` para o desvio de
-  `1,2`). Nunca `1.00` para disfarçar ausência de histórico (DS-46): neutro declarado é
-  indistinguível de fator inventado, e a ausência se diz com `null`.
+- `fator_correcao_aplicado` é o fator **efetivamente aplicado** (DS-165), e a **origem da
+  calibração** tem **três estados** possíveis: `null`, com origem `nenhum — canônico sem fator
+  ativo`, quando o canônico daquele tipo tem `fator_ativo: false` (menos de 3 entradas elegíveis,
+  ou `HISTORICO.md` ausente) — **isto vale mesmo quando o bloco `calibracao` gravado diverge e
+  dizia `fator_ativo: true`**: a origem da calibração continua sendo a ausência de fator, nunca
+  `persistido` nem `recomputado`, porque o canônico é quem decide se há fator, não o que está
+  escrito; ou, com o canônico ativo, é o `desvio_medio`
+  dele — **persistido** quando o leitor confere e bate contra o bloco `calibracao` gravado,
+  **recomputado** quando diverge —, copiado como está — número com as mesmas **duas casas
+  decimais** do `kind: estimativa_historico` (ex.: `1.25`, e `1.20` para o desvio de `1,2`).
+  Nunca `1.00` para disfarçar ausência de fator (DS-46): neutro declarado é indistinguível
+  de fator inventado, e a ausência se diz com `null`.
 - `confianca` segue o enum `confianca`; `confianca_motivo` é uma linha derivada dos sinais.
-  Sem `docs/sprintx/estimativas/HISTORICO.md`, `confianca` nunca é `alta`.
+  Sem `docs/sprintx/estimativas/HISTORICO.md`, `confianca` nunca é `alta`. Divergência entre o
+  bloco `calibracao` persistido e o canônico recomputado (DS-165) também limita `confianca` a
+  `media`, mesmo com um fator canônico ativo sendo aplicado.
 - `premissas`, `invalidadores` e `nao_incluido` são listas de strings de uma linha e não são
   vazias. `tasks_a_quebrar` lista ids `T-NN.MM` de tasks que NÃO foram estimadas e NÃO entram
   nos totais; `[]` quando nenhuma.
@@ -542,6 +551,42 @@ entradas:
     desvio: 1.17
     duracao_observada: 5.2
     registrado_em: 2026-08-29
+  - trabalho_id: exportacao-csv-relatorios
+    task_id: T-01.02
+    tipo_task: config
+    area: configuracao de ambiente
+    sinais: [arquivo_novo_isolado]
+    estimado_min: 3
+    estimado_max: 5
+    estimado_media: 4
+    real: 4.5
+    desvio: 1.13
+    duracao_observada: 4.8
+    registrado_em: 2026-08-29
+  - trabalho_id: relatorio-financeiro
+    task_id: T-02.01
+    tipo_task: config
+    area: configuracao de ambiente
+    sinais: [arquivo_novo_isolado]
+    estimado_min: 4
+    estimado_max: 8
+    estimado_media: 6
+    real: 7.0
+    desvio: 1.17
+    duracao_observada: 7.5
+    registrado_em: 2026-09-10
+  - trabalho_id: relatorio-financeiro
+    task_id: T-02.02
+    tipo_task: config
+    area: configuracao de ambiente
+    sinais: [arquivo_novo_isolado]
+    estimado_min: 1
+    estimado_max: 3
+    estimado_media: 2
+    real: 2.25
+    desvio: 1.13
+    duracao_observada: 2.1
+    registrado_em: 2026-09-10
 calibracao:
   - tipo_task: config
     entradas: 4
@@ -615,6 +660,23 @@ Regras duras deste kind:
 - `duracao_observada` fica **fora do cálculo de `desvio`** — que continua sendo
   `real / estimado_media`, só — e **fora da `calibracao`**: `desvio_medio` e `fator_ativo` não a
   leem. Por isso ela aparece **depois** de `desvio` na entrada: a cadeia de calibração termina ali.
+- **Conferência e regravação (DS-165).** `entradas:` é **append-only** — nunca se migra nem se
+  reescreve (regra do cabeçalho desta seção) —, mas o bloco `calibracao` é **derivado e
+  regravável**: a cada fechamento (F6, `references/07-estimativa.md` Passo 10) a leitura canônica
+  da DS-164 — `entradas`, `desvio_medio` e `fator_ativo` recalculados só das entradas elegíveis —
+  recalcula e regrava o bloco `calibracao` inteiro. O leitor da F3.5 (Passo 1) sempre **confere** o
+  bloco `calibracao` gravado contra esse canônico antes de usar: bate, aplica o persistido; diverge
+  e o canônico tem `fator_ativo: true`, aplica o canônico recomputado — nunca o bloco stale, e
+  nunca a média das razões brutas `real / estimado_media` — e declara a divergência na saída. Se o
+  canônico tem `fator_ativo: false` — menos de 3 entradas elegíveis, bata ou divirja o bloco
+  gravado —, não há fator nenhum para aplicar: a origem da calibração é `nenhum — canônico sem
+  fator ativo`, e `fator_correcao_aplicado` é `null`, mesmo que o bloco gravado divergente
+  dissesse `fator_ativo: true`. Sem `HISTORICO.md` não existe bloco `calibracao` nenhum para
+  comparar — a `Divergência encontrada` não é "confere" nem "diverge", é `não se aplica —
+  HISTORICO.md ausente`, e a origem da calibração é obrigatoriamente `nenhum — canônico sem fator
+  ativo` (os dois campos ficam consistentes: sem nada gravado, não há o que divergir, e também não
+  há fator). A F3.5 **nunca** escreve nem migra o `HISTORICO.md`: só a F6 regrava `calibracao` no
+  fechamento.
 
 ### `FECHAMENTO.md` → `kind: fechamento`
 

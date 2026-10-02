@@ -53,6 +53,8 @@ A **duração observada** é outra coisa: o tempo de parede entre `task_iniciada
 
 `desvio_medio` é a média dos desvios **persistidos** das entradas elegíveis daquele tipo — a coluna `Desvio` da tabela acima, nunca a média das razões brutas. `1,00` é o alvo; `1,40` significa que aquele tipo de task leva, em média, 40% a mais que o estimado.
 
+> **Bloco derivado e regravável (DS-165).** `entradas:` acima é append-only, mas este bloco `calibracao` não é: a cada fechamento, a F6 recalcula e **substitui** o bloco inteiro a partir das entradas elegíveis vigentes. A F3.5 (`references/07-estimativa.md`) nunca escreve nem migra o `HISTORICO.md` — ela só lê, confere o que está gravado aqui contra o canônico recomputado das entradas, e declara a divergência quando houver.
+
 > **Entrada calibrável.** Elegível é a entrada encerrada cujo `desvio` persistido é número (DS-164). Entrada que rodou sem a F3.5 encerra com `real` e com `desvio` em `null`, e nesta tabela ela não aparece de nenhuma forma: `entradas` conta somente as entradas daquele tipo com `desvio` numérico (não nulo), `desvio_medio` é a média somente dessas entradas elegíveis, e o `Fator ativo?` olha somente para elas.
 >
 > Entrada com `desvio: null` fica fora da contagem e nunca como zero: dois desvios `1.20` e `1.30`, com duas entradas nulas do mesmo tipo ao lado, dão `entradas: 2` com `desvio_medio: 1.25` — jamais `entradas: 4` com `desvio_medio: 0.63`, que é o que sairia de somar as nulas como se valessem zero.

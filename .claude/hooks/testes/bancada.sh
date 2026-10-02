@@ -6335,6 +6335,368 @@ ac_muta "$AC_M" references/00-schema.md 's/entradas elegíveis/entradas **elegí
 ac_equivalente "ace-equivalente-2-marcacao-do-elegivel" $? "$AC_M"
 rm -rf "$ACW"
 
+echo "== AD. o leitor da F3.5 confere o bloco \`calibracao\` persistido contra o canonico, nunca aplica as cegas (PR#10 c.4161807476) =="
+# A DS-164 (secao AC) fixou QUAIS entradas a calibracao agrega. Ficou aberto o que o leitor da F3.5
+# faz quando o bloco `calibracao` GRAVADO nao e o que essa regra produziria — por exemplo, uma linha
+# gravada por uma sessao anterior a DS-164, que contava `desvio: null` como zero. O Passo 1 da
+# 07-estimativa.md mandava aplicar "o desvio_medio persistido... sem recalcular nada a partir das
+# entradas": um bloco stale era aplicado com a MESMA confianca de um bloco correto, e nada na saida
+# avisava a diferenca. A DS-165 fecha isso: o leitor CONFERE o bloco gravado contra o canonico
+# (recomputado so dos `desvio` persistidos, nunca de `real / estimado_media`); bate, aplica o
+# persistido; diverge, aplica o canonico recomputado, declara a divergencia na saida, marca a
+# origem do fator efetivamente aplicado, e o teto de confianca desce a `media`. A F3.5 nunca
+# escreve nem migra o HISTORICO.md — so a F6 regrava `calibracao` no fechamento.
+# Detector por MARCADOR LITERAL — nunca regex de linguagem natural. Cada regra da DS-165 e uma
+# string EXATA, copiada do proprio texto do contrato: se a frase que a carrega for reescrita, o
+# marcador tem de ser atualizado junto (o que e o comportamento certo), e se for apagada ou trocada
+# por um mutante, a string some e o caso reprova — sem janela de proximidade, sem classe de
+# caractere acentuada (que num `grep` baseado em ugrep estoura "complexity limits" e devolve falso
+# negativo silencioso), sem depender de a frase caber numa unica linha fisica do markdown.
+ad_lit() { # ad_lit <arquivo1> <marcador1> [<arquivo2> <marcador2> ...] -> 0 se TODOS os pares batem
+  # Marcador prefixado com "!" inverte o sentido: o caso so passa se essa string NAO estiver no
+  # arquivo — usado para proibir a regressao a uma frase antiga que um paragrafo vizinho corrigido
+  # deixaria sobreviver sem isso (ex.: "fator e sempre o persistido" ao lado de uma conferencia
+  # que já existe, mas antes do fix, em outro paragrafo do MESMO arquivo).
+  python3 - "$@" <<'PYEOF'
+import sys
+
+args = sys.argv[1:]
+pares = list(zip(args[0::2], args[1::2]))
+
+cache = {}
+def normalizado(caminho):
+    if caminho not in cache:
+        try:
+            with open(caminho, encoding="utf-8") as fh:
+                # so colapsa espaco em branco (quebra de linha fisica inclusive) para uma frase
+                # que o markdown fisicamente quebrou em duas linhas continuar casando como uma —
+                # nao e regex, e concatenacao: o marcador em si tambem usa espaco simples.
+                cache[caminho] = " ".join(fh.read().split())
+        except OSError:
+            cache[caminho] = None
+    return cache[caminho]
+
+def falhou(caminho, marcador):
+    t = normalizado(caminho)
+    if marcador.startswith("!"):
+        proibido = marcador[1:]
+        return t is None or proibido in t
+    return t is None or marcador not in t
+
+faltando = [(f, m) for f, m in pares if falhou(f, m)]
+if faltando:
+    print("marcador ausente/proibido-presente:", faltando, file=sys.stderr)
+sys.exit(0 if not faltando else 1)
+PYEOF
+}
+
+# Os marcadores, um por regra da decisao do comentario 4161807476 — exatamente como aparecem no
+# arquivo (espaco simples entre palavras; ad_lit normaliza quebras de linha fisicas do mesmo jeito
+# antes de procurar).
+AD_LIT_CONFERE_07='Confira esse canônico contra o bloco `calibracao` gravado no `HISTORICO.md`.'
+AD_LIT_CONFERE_00='O leitor da F3.5 (Passo 1) sempre **confere** o bloco `calibracao` gravado contra esse canônico antes de usar'
+AD_LIT_DIVERGE_07='Declare na saída, nesta task e no total, a divergência encontrada'
+AD_LIT_DIVERGE_00='e declara a divergência na saída'
+AD_LIT_PROIBE_07='**A F3.5 nunca escreve nem migra o `HISTORICO.md`.**'
+AD_LIT_PROIBE_00='A F3.5 **nunca** escreve nem migra o `HISTORICO.md`'
+AD_LIT_PROIBE_HIST='A F3.5 (`references/07-estimativa.md`) nunca escreve nem migra o `HISTORICO.md`'
+AD_LIT_CALIBRACAO_07A='A origem da calibração (DS-165) é `persistido`.'
+AD_LIT_CALIBRACAO_07B='a origem da calibração é `recomputado`'
+AD_LIT_CALIBRACAO_00A='**persistido** quando o leitor confere e bate contra o bloco `calibracao` gravado'
+AD_LIT_CALIBRACAO_00B='**recomputado** quando diverge'
+AD_LIT_CALIBRACAO_TMPL='Origem da calibração (DS-165): {{persistido | recomputado | nenhum — canônico sem fator ativo}}'
+# O rotulo do campo de prosa e "Origem da calibração" — nunca "Origem do fator": um dos tres
+# estados (`nenhum — canônico sem fator ativo`) nao e origem de fator nenhum, entao o nome do
+# campo nao pode pressupor que sempre existe um fator. Marcador negativo: proibe a regressao.
+AD_LIT_ROTULO_ANTIGO_TMPL='!Origem do fator (DS-165)'
+# Os TRES estados do campo "Divergência encontrada" — o terceiro (`HISTORICO.md` ausente) nao e
+# nem "confere" nem "diverge": sem o arquivo nao ha bloco `calibracao` nenhum para comparar.
+AD_LIT_DIVERGE_AUSENTE_TMPL='não se aplica — HISTORICO.md ausente'
+AD_LIT_DIVERGE_AUSENTE_07='não se aplica — HISTORICO.md ausente'
+AD_LIT_DIVERGE_AUSENTE_00='não se aplica — HISTORICO.md ausente'
+AD_LIT_CONFIANCA_07='Uma divergência detectada **reduz o teto de confiança a `media`**'
+AD_LIT_CONFIANCA_00='também limita `confianca` a `media`'
+AD_LIT_RAZAO_07='nunca de `real / estimado_media`, que é a razão bruta e não o que a calibração agrega'
+AD_LIT_RAZAO_00='nunca a média das razões brutas `real / estimado_media`'
+AD_LIT_LIMIAR_00='3 ou mais entradas elegíveis'
+# O TEMPLATE-ESTIMATIVA.md tinha dois paragrafos contraditorios: um dizia "o fator e o
+# desvio_medio persistido... copiado como esta" (sem condicao nenhuma), o seguinte ja descrevia a
+# conferencia (DS-165). "canônico vigente" e o MESMO marcador que 07-estimativa.md e 00-schema.md
+# ja usam para "o fator e condicional, persistido OU recomputado" — reaproveitado aqui em vez de
+# um quarto texto, para a mesma ideia ter uma unica frase-ancora nos tres documentos.
+AD_LIT_CANONICO_VIGENTE_TMPL='canônico vigente'
+AD_LIT_SEMPRE_PERSISTIDO_TMPL='!persistido do tipo, copiado do `HISTORICO.md` como está'
+# O TERCEIRO ESTADO da origem: nem `persistido` nem `recomputado` cobrem "o canonico nao tem
+# fator ativo" (menos de 3 entradas elegiveis, ou sem HISTORICO.md) — e forcar um dos dois ali e
+# inventar uma origem para um fator que nao existe (`fator_correcao_aplicado: null` com origem
+# `persistido`/`recomputado` e contradicao direta). O rotulo e o MESMO marcador nos 3 documentos.
+AD_LIT_SEM_FATOR_07='nenhum — canônico sem fator ativo'
+AD_LIT_SEM_FATOR_00='nenhum — canônico sem fator ativo'
+AD_LIT_SEM_FATOR_TMPL='nenhum — canônico sem fator ativo'
+# E o rotulo se aplica mesmo quando o bloco STALE divergente MENTE que tem fator ativo — a
+# fixture `api` (2 elegiveis, canonico desliga, stale divergente dizia `fator_ativo: true` com 4
+# entradas) e exatamente esse cenario: divergencia presente, mas sem fator a aplicar.
+AD_LIT_SEM_FATOR_MESMO_SE_STALE_MENTE='mesmo que o bloco gravado divergente dissesse `fator_ativo: true`'
+
+# O ORACULO da divergencia. Dado o conjunto de `desvio` persistidos de um tipo e o bloco STALE
+# gravado (entradas, desvio_medio, fator_ativo), devolve o canonico (DS-164: so elegiveis, media
+# half-up, fator a partir de 3), se diverge do stale, o fator EFETIVAMENTE aplicado e a origem.
+ad_num() { # ad_num <desvios> <stale_entradas> <stale_media> <stale_fator_ativo>
+  awk -v lista="$1" -v se="$2" -v sm="$3" -v sf="$4" '
+    function arr(x,  s, i) { s = x * 100; i = int(s); if (s - i >= 0.5) i++; return sprintf("%.2f", i / 100) }
+    BEGIN {
+      n = split(lista, v, / +/)
+      for (i = 1; i <= n; i++) { if (v[i] == "") continue; if (v[i] != "null") { ne++; soma += v[i] } }
+      ce = ne + 0
+      cm = (ne > 0) ? arr(soma / ne) : "sem"
+      cf = (ne >= 3) ? "true" : "false"
+      dv = (se != ce || sm != cm || sf != cf) ? "true" : "false"
+      # A origem depende do CANONICO (cf), nunca da divergencia isolada: com `fator_ativo: false`
+      # nao ha fator nenhum para ter sido persistido OU recomputado — e o terceiro estado da
+      # DS-165, independente de bater ou divergir do bloco stale.
+      if (cf == "true") { fv = cm; org = (dv == "true") ? "recomputado" : "persistido" }
+      else              { fv = "null"; org = "nenhum — canônico sem fator ativo" }
+      printf "%s %s %s %s %s %s", ce, cm, cf, dv, fv, org
+    }'
+}
+# As duas fixtures do PR#10 c.4161807476, ambas do mesmo `tipo_task`, com a quinta/quarta nula.
+AD_API='1.20 1.30 null null'                  # canonico: 2 elegiveis, stale conta as nulas como zero
+AD_INTEG='1.13 1.13 1.17 1.20 null'           # canonico: 4 elegiveis (DS-160); stale conta 5
+AD_CTRL='1.20 1.30 1.30'                      # 3 elegiveis, stale JA bate com o canonico
+
+# 1. O oraculo distingue as quatro grandezas do caso: `0.93` (stale, descartado), `1.16`
+#    (canonico, efetivamente aplicado), `1.15` (razao bruta — NUNCA pode aparecer como aplicado) e
+#    a recusa indevida de todo fator (NAO pode sair `null` com o canonico `fator_ativo: true`).
+AD_INTEG_CALC="$(ad_num "$AD_INTEG" 5 0.93 true)"
+[ "$AD_INTEG_CALC" = '4 1.16 true true 1.16 recomputado' ]; ad_rc=$?
+afirma "ad1-oraculo-distingue-stale-canonico-e-razao-bruta" "$ad_rc" \
+  "calculado=[$AD_INTEG_CALC] — 0,93 descartado, 1,16 aplicado (nunca 1,15), fator nao recusado"
+
+# 1b. O outro cenario do PR#10: stale conta nulas como zero e LIGA o fator (2 elegiveis < 3); o
+#     canonico desliga. Sem conferencia, o fator errado ficaria ligado sobre 2 desvios reais.
+AD_API_CALC="$(ad_num "$AD_API" 4 0.63 true)"
+[ "$AD_API_CALC" = '2 1.25 false true null nenhum — canônico sem fator ativo' ]; ad_rc=$?
+afirma "ad1b-oraculo-desliga-fator-quando-canonico-tem-menos-de-3" "$ad_rc" "calculado=[$AD_API_CALC]"
+
+# 1c. E quando o bloco gravado JA bate com o canonico, nao ha divergencia nenhuma: a origem e
+#     `persistido`, sem qualquer recomputo — a conferencia nao inventa divergencia onde nao ha.
+AD_CTRL_CALC="$(ad_num "$AD_CTRL" 3 1.27 true)"
+[ "$AD_CTRL_CALC" = '3 1.27 true false 1.27 persistido' ]; ad_rc=$?
+afirma "ad1c-sem-divergencia-origem-e-persistido" "$ad_rc" "calculado=[$AD_CTRL_CALC]"
+
+# A bateria, por ARVORE: a real roda em "$SK" e cada mutante roda a MESMA bateria numa copia.
+ad_caso() { # ad_caso <caso> <dir> -> 0 se o caso PASSA naquela arvore
+  local c="$1" d="$2"
+  case "$c" in
+    # O leitor confere o bloco persistido contra o canonico antes de aplicar — nao aplica as cegas.
+    ad_conferencia_contra_canonico)
+      ad_lit "$d/references/07-estimativa.md" "$AD_LIT_CONFERE_07" \
+             "$d/references/00-schema.md"     "$AD_LIT_CONFERE_00" ;;
+    # A divergencia, quando existe, vai declarada na saida — nunca escondida pelo recomputo.
+    ad_divergencia_declarada_na_saida)
+      ad_lit "$d/references/07-estimativa.md" "$AD_LIT_DIVERGE_07" \
+             "$d/references/00-schema.md"     "$AD_LIT_DIVERGE_00" ;;
+    # A F3.5 so le; a cura do bloco calibracao fica para o fechamento (F6).
+    ad_f35_nunca_escreve_historico)
+      ad_lit "$d/references/07-estimativa.md"     "$AD_LIT_PROIBE_07" \
+             "$d/references/00-schema.md"         "$AD_LIT_PROIBE_00" \
+             "$d/assets/TEMPLATE-HISTORICO.md"    "$AD_LIT_PROIBE_HIST" ;;
+    # `fator_correcao_aplicado`/a saida marcam a ORIGEM do fator efetivamente aplicado — as duas
+    # palavras, persistido e recomputado, tem de aparecer: apagar uma delas quebra o par.
+    ad_origem_do_fator_declarada)
+      ad_lit "$d/references/07-estimativa.md" "$AD_LIT_CALIBRACAO_07A" \
+             "$d/references/07-estimativa.md" "$AD_LIT_CALIBRACAO_07B" \
+             "$d/references/00-schema.md"     "$AD_LIT_CALIBRACAO_00A" \
+             "$d/references/00-schema.md"     "$AD_LIT_CALIBRACAO_00B" \
+             "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AD_LIT_CALIBRACAO_TMPL" ;;
+    # O rotulo do campo de prosa e "Origem da calibração", nunca "Origem do fator" — um dos tres
+    # estados nao e origem de fator nenhum.
+    ad_rotulo_origem_da_calibracao)
+      ad_lit "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AD_LIT_CALIBRACAO_TMPL" \
+             "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AD_LIT_ROTULO_ANTIGO_TMPL" ;;
+    # Os TRES estados de "Divergência encontrada": confere, diverge com valores, e o terceiro —
+    # HISTORICO.md ausente, sem bloco `calibracao` nenhum para comparar.
+    ad_tres_estados_divergencia)
+      ad_lit "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AD_LIT_DIVERGE_AUSENTE_TMPL" \
+             "$d/references/07-estimativa.md"   "$AD_LIT_DIVERGE_AUSENTE_07" \
+             "$d/references/00-schema.md"       "$AD_LIT_DIVERGE_AUSENTE_00" ;;
+    # Divergencia detectada reduz o teto de confianca a `media`, mesmo com fator canonico ativo.
+    ad_divergencia_reduz_confianca)
+      ad_lit "$d/references/07-estimativa.md" "$AD_LIT_CONFIANCA_07" \
+             "$d/references/00-schema.md"     "$AD_LIT_CONFIANCA_00" ;;
+    # O recomputo da divergencia nunca parte da razao bruta `real / estimado_media` — so dos
+    # `desvio` ja persistidos (a mesma fronteira da DS-162, aplicada ao caso da divergencia).
+    ad_nunca_razao_bruta_na_divergencia)
+      ad_lit "$d/references/07-estimativa.md" "$AD_LIT_RAZAO_07" \
+             "$d/references/00-schema.md"     "$AD_LIT_RAZAO_00" ;;
+    # O limiar do canonico recomputado continua 3 (DS-162/DS-164) — a divergencia corrige o
+    # CONJUNTO lido, nunca o numero do limiar.
+    ad_limiar_tres_no_canonico)
+      ad_lit "$d/references/00-schema.md" "$AD_LIT_LIMIAR_00" ;;
+    # A DS-165 fica registrada, append-only, citando divergencia, canonico e recomputo.
+    ad_ds165_registrada)
+      local v; v="$(grep -F '| DS-165 |' "$d/DECISOES-DA-SKILL.md" 2>/dev/null)"
+      [ -n "$v" ] && printf '%s' "$v" | grep -qiF 'diverg' \
+        && printf '%s' "$v" | grep -qiF 'canônic' \
+        && printf '%s' "$v" | grep -qiF 'recomputad' ;;
+    # O TEMPLATE-ESTIMATIVA.md NAO pode voltar a dizer que o fator e sempre o persistido copiado
+    # as cegas — a frase que contradizia a conferencia da DS-165 no paragrafo vizinho.
+    ad_fator_nao_e_sempre_persistido)
+      ad_lit "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AD_LIT_CANONICO_VIGENTE_TMPL" \
+             "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AD_LIT_SEMPRE_PERSISTIDO_TMPL" ;;
+    # O contrato define os TRES estados da origem — persistido, recomputado, e `nenhum — canonico
+    # sem fator ativo` —, e o terceiro vale mesmo quando o bloco STALE divergente MENTE que tem
+    # fator ativo (a fixture `api`: canonico desliga, stale divergente dizia `fator_ativo: true`).
+    # So dois estados, ou o terceiro sem essa ressalva, obriga a inventar uma origem para um fator
+    # que nao existe.
+    ad_terceiro_estado_sem_fator_ativo)
+      ad_lit "$d/references/07-estimativa.md"     "$AD_LIT_SEM_FATOR_07" \
+             "$d/references/00-schema.md"         "$AD_LIT_SEM_FATOR_00" \
+             "$d/assets/TEMPLATE-ESTIMATIVA.md"   "$AD_LIT_SEM_FATOR_TMPL" \
+             "$d/references/07-estimativa.md"     "$AD_LIT_SEM_FATOR_MESMO_SE_STALE_MENTE" ;;
+    *) return 1 ;;
+  esac
+}
+AD_CASOS="ad_conferencia_contra_canonico ad_divergencia_declarada_na_saida
+ad_f35_nunca_escreve_historico ad_origem_do_fator_declarada ad_divergencia_reduz_confianca
+ad_nunca_razao_bruta_na_divergencia ad_limiar_tres_no_canonico ad_ds165_registrada
+ad_fator_nao_e_sempre_persistido ad_terceiro_estado_sem_fator_ativo
+ad_rotulo_origem_da_calibracao ad_tres_estados_divergencia"
+
+# 2 a 9. A bateria lida das referencias reais.
+for ad_c in $AD_CASOS; do
+  ad_nome="$(printf '%s' "$ad_c" | tr '_' '-')"
+  ad_caso "$ad_c" "$SK"; ad_rc=$?
+  afirma "$ad_nome" "$ad_rc" "lido da arvore do contrato em $SK"
+done
+
+# 10. Mutantes. Mesma mecanica das secoes AB/AC: cada um nasce numa COPIA da skill, e so conta como
+#     morto quando TODOS os casos nomeados reprovam.
+ADW="$(mktemp -d)"
+ad_copia() { rm -rf "$ADW/$1"; mkdir -p "$ADW/$1"; cp -R "$SK/." "$ADW/$1/"; printf '%s' "$ADW/$1"; }
+ad_muta() { # ad_muta <dir> <arquivo-rel> <expressao sed>
+  [ -f "$1/$2" ] || return 1
+  sed -i "$3" "$1/$2" || return 1
+  ! cmp -s "$SK/$2" "$1/$2"
+}
+ad_mata() { local c; for c in $AD_CASOS; do ad_caso "$c" "$1" || { printf '%s' "$c"; return; }; done; }
+ad_mutante() { # ad_mutante <nome> <rc da geracao> <dir> <caso que TEM de matar>...
+  local nome="$1" rcg="$2" d="$3" c vivos=""; shift 3
+  if [ "$rcg" -eq 0 ]; then for c in "$@"; do ad_caso "$c" "$d" && vivos="$vivos$c "; done; fi
+  [ "$rcg" -eq 0 ] && [ -z "$vivos" ]; local rc=$?
+  afirma "$nome" "$rc" "morto por: $* ${vivos:+— SOBREVIVEU a: $vivos}(rc geracao=$rcg)"
+}
+ad_equivalente() { # ad_equivalente <nome> <rc da geracao> <dir> — equivalente nao pode morrer
+  local nome="$1" rcg="$2" d="$3" m=""
+  [ "$rcg" -eq 0 ] && m="$(ad_mata "$d")"
+  [ "$rcg" -eq 0 ] && [ -z "$m" ]; local rc=$?
+  afirma "$nome" "$rc" "equivalente, nao conta como morto; reprovou=[${m:-nenhum}] (rc geracao=$rcg)"
+}
+AD_CTL="$(ad_copia controle)"
+AD_K="$(ad_mata "$AD_CTL")"; [ -z "$AD_K" ]; ad_rc=$?
+afirma "adm-controle-copia-intacta-sobrevive" "$ad_rc" "${AD_K:-nenhum caso reprova a copia sem mutacao}"
+
+# m1 — aplicar o bloco stale sem conferir: apaga o marcador da CONFERENCIA no Passo 1, voltando
+#      a ler "como esta, sem recalcular nada" — exatamente o HEAD que o PR#10 reportou.
+AD_M="$(ad_copia m1)"
+ad_muta "$AD_M" references/07-estimativa.md \
+  's/Confira esse canônico contra o bloco `calibracao` gravado no `HISTORICO\.md`\.//'
+ad_mutante "adm-mutante-1-aplica-stale-sem-conferir" $? "$AD_M" \
+  ad_conferencia_contra_canonico
+
+# m2 — recomputar sempre e ocultar a divergencia: apaga so o marcador que obriga DECLARAR na saida.
+AD_M="$(ad_copia m2)"
+ad_muta "$AD_M" references/07-estimativa.md \
+  's/Declare na saída, nesta task e no total, a divergência encontrada/Resolva a divergência em silêncio/'
+ad_mutante "adm-mutante-2-oculta-divergencia" $? "$AD_M" \
+  ad_divergencia_declarada_na_saida
+
+# m3 — recusar todo fator na divergencia: apaga o marcador que nomeia `recomputado` como origem
+#      possivel, como se divergencia so pudesse zerar o fator (nunca recompute-lo).
+AD_M="$(ad_copia m3)"
+ad_muta "$AD_M" references/07-estimativa.md \
+  's/a origem da calibração é `recomputado`/o fator fica `null`/'
+ad_mutante "adm-mutante-3-recusa-fator-na-divergencia" $? "$AD_M" \
+  ad_origem_do_fator_declarada
+
+# m4 — recomputar a partir da razao bruta: apaga o marcador que proibe `real / estimado_media`
+#      no recomputo da divergencia.
+AD_M="$(ad_copia m4)"
+ad_muta "$AD_M" references/07-estimativa.md \
+  's/ — nunca de `real \/ estimado_media`, que é a razão bruta e não o que a calibração agrega//'
+ad_mutante "adm-mutante-4-recomputa-de-razao-bruta" $? "$AD_M" \
+  ad_nunca_razao_bruta_na_divergencia
+
+# m5 — a F3.5 escreve/migra o HISTORICO.md: apaga o marcador da proibicao, confundindo fase de
+#      leitura com fase de fechamento.
+AD_M="$(ad_copia m5)"
+ad_muta "$AD_M" references/07-estimativa.md \
+  's/\*\*A F3\.5 nunca escreve nem migra o `HISTORICO\.md`\.\*\* //'
+ad_mutante "adm-mutante-5-f35-escreve-historico" $? "$AD_M" \
+  ad_f35_nunca_escreve_historico
+
+# m6 — limiar 2 no canonico recomputado: apaga o marcador "3 ou mais entradas elegíveis" do
+#      schema — o mesmo defeito da AC, agora sobre o numero que a divergencia tem de respeitar.
+AD_M="$(ad_copia m6)"
+ad_muta "$AD_M" references/00-schema.md 's/3 ou mais entradas elegíveis/2 ou mais entradas elegíveis/g'
+ad_mutante "adm-mutante-6-limiar-dois-no-recomputo" $? "$AD_M" \
+  ad_limiar_tres_no_canonico
+
+# m7 — a DS-165 apagada do registro: a regra fica nas referencias e perde o porque, exatamente
+#      como a m9 da AC fez com a DS-162.
+AD_M="$(ad_copia m7)"
+ad_muta "$AD_M" DECISOES-DA-SKILL.md '/^| DS-165 |/d'
+ad_mutante "adm-mutante-7-ds165-apagada" $? "$AD_M" \
+  ad_ds165_registrada
+
+# m8 — regressao ao "sempre persistido": o TEMPLATE-ESTIMATIVA.md volta a afirmar, sem condicao
+#      nenhuma, que o fator e o persistido copiado como esta — a contradicao que a auditoria achou
+#      entre o paragrafo do fator e o paragrafo vizinho da conferencia (DS-165).
+AD_M="$(ad_copia m8)"
+ad_muta "$AD_M" assets/TEMPLATE-ESTIMATIVA.md \
+  's/O fator é o `desvio_medio` do \*\*canônico vigente\*\* daquele tipo (DS-165, ver parágrafo seguinte) — persistido quando o bloco `calibracao` confere, recomputado quando diverge —, nunca o bloco gravado copiado às cegas/O fator é o `desvio_medio` persistido do tipo, copiado do `HISTORICO.md` como está/'
+ad_mutante "adm-mutante-8-template-volta-a-sempre-persistido" $? "$AD_M" \
+  ad_fator_nao_e_sempre_persistido
+
+# m9 — colapsa o terceiro estado: a origem `nenhum — canônico sem fator ativo` vira
+#      `recomputado` em 07-estimativa.md, como se o canonico sem fator ativo tivesse que forcar
+#      uma das duas origens antigas — a exata contradicao que a fixture `api` expos (fator
+#      `null` com origem `recomputado` nao faz sentido nenhum).
+AD_M="$(ad_copia m9)"
+ad_muta "$AD_M" references/07-estimativa.md \
+  's/nenhum — canônico sem fator ativo/recomputado/g'
+ad_mutante "adm-mutante-9-colapsa-terceiro-estado" $? "$AD_M" \
+  ad_terceiro_estado_sem_fator_ativo
+
+# m10 — reverte o rotulo do campo de prosa para "Origem do fator": presume que todo estado e
+#       origem de um fator que existe, o que e falso para o terceiro estado.
+AD_M="$(ad_copia m10)"
+ad_muta "$AD_M" assets/TEMPLATE-ESTIMATIVA.md \
+  's/Origem da calibração (DS-165)/Origem do fator (DS-165)/'
+ad_mutante "adm-mutante-10-reverte-rotulo-origem-do-fator" $? "$AD_M" \
+  ad_rotulo_origem_da_calibracao
+
+# m11 — colapsa o terceiro estado de "Divergência encontrada": sem HISTORICO.md volta a nao ter
+#       um marcador proprio, como se a ausencia do arquivo fosse so mais um caso de "confere".
+AD_M="$(ad_copia m11)"
+ad_muta "$AD_M" assets/TEMPLATE-ESTIMATIVA.md \
+  's/não se aplica — HISTORICO\.md ausente/nenhuma — o bloco `calibracao` gravado confere com o canônico/'
+ad_mutante "adm-mutante-11-colapsa-tres-estados-divergencia" $? "$AD_M" \
+  ad_tres_estados_divergencia
+
+# Equivalentes: mudam a forma e nao a regra (texto FORA de todo marcador), e por isso NAO podem
+# morrer — um discriminador por marcador que dependesse de frase vizinha passaria por sensivel
+# sem ser.
+AD_M="$(ad_copia e1)"
+ad_muta "$AD_M" references/07-estimativa.md \
+  's/herança de uma leitura que contava a entrada/herança de uma leitura antiga que contava a entrada/'
+ad_equivalente "ade-equivalente-1-reformulacao-do-exemplo" $? "$AD_M"
+AD_M="$(ad_copia e2)"
+ad_muta "$AD_M" assets/TEMPLATE-ESTIMATIVA.md \
+  's/o canônico recomputado das entradas elegíveis é <valor canônico>/o canônico vigente das entradas elegíveis é <valor canônico>/'
+ad_equivalente "ade-equivalente-2-reformulacao-do-placeholder" $? "$AD_M"
+rm -rf "$ADW"
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"
 [ "$pulado" -eq 0 ] || echo "  ATENCAO: skip interno e buraco de cobertura da sprintx nesta plataforma, nao dependencia externa."

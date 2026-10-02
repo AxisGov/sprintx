@@ -45,11 +45,24 @@ Uma entrada é comparável quando bate no tipo **e** em pelo menos um dos outros
 
 Com menos de 3 entradas elegíveis do tipo, o desvio é ruído: **não** aplique fator, e diga na saída que o histórico tem entradas insuficientes daquele tipo. Entrada daquele tipo com `desvio: null` não entra nessa conta — o item da `calibracao` pode existir com `fator_ativo: false`, e é o `fator_ativo` que manda.
 
+**Conferência do bloco persistido, nunca confiança cega (DS-165).** Antes de aplicar o `desvio_medio` persistido, recompute o canônico daquele `tipo_task` a partir dos `desvio` já persistidos nas `entradas` — nunca de `real / estimado_media`, que é a razão bruta e não o que a calibração agrega: `entradas` = a contagem das elegíveis (DS-164), `desvio_medio` = a média delas pela precisão da DS-160, `fator_ativo` = `true` a partir de 3. Confira esse canônico contra o bloco `calibracao` gravado no `HISTORICO.md`.
+
+- **Bate, com fator ativo no canônico:** aplique o `desvio_medio` persistido, como já descrito acima. A origem da calibração (DS-165) é `persistido`.
+- **Diverge, com fator ativo no canônico:** nunca aplique o bloco stale. Recompute o fator a partir do canônico recém-calculado — e só dele — e aplique esse valor. Declare na saída, nesta task e no total, a divergência encontrada: o que estava gravado e o que o canônico manda, e que a origem da calibração é `recomputado`. Uma divergência detectada **reduz o teto de confiança a `media`** (Passo 7), mesmo com um fator canônico ativo sendo aplicado — a leitura está corrigindo ao vivo um histórico que não bate com o próprio contrato, e isso não é a mesma coisa que um histórico limpo e comparável.
+- **Canônico sem fator ativo** (menos de 3 entradas elegíveis daquele tipo) **— bata ou divirja o bloco gravado:** não aplique fator nenhum, mesmo que o bloco stale dissesse `fator_ativo: true`. `fator_correcao_aplicado` é `null` (DS-46) e a origem da calibração declarada é `nenhum — canônico sem fator ativo`. Um bloco gravado divergente que mente sobre ter fator ativo não ganha um fator por isso: a elegibilidade é a da DS-164, não a do que está escrito.
+
+**Exemplo de divergência com fator ativo.** Para `integracao_externa`, o bloco gravado traz `entradas: 5`, `desvio_medio: 0.93`, `fator_ativo: true` — herança de uma leitura que contava a entrada de `desvio: null` como zero (o defeito que a DS-164 fechou). As entradas persistidas do tipo trazem `desvio` `1.13`, `1.13`, `1.17`, `1.20` e uma quinta `null`. O canônico, recomputado só das quatro elegíveis, é `entradas: 4`, `desvio_medio: 1.16`, `fator_ativo: true` (o mesmo exemplo da DS-160, Passo 10). O fator efetivamente aplicado é `1,16`, com origem da calibração `recomputado`; a divergência `0,93 → 1,16` vai declarada na saída, e a confiança desta estimativa não passa de `media`. O fator **nunca** é `1,15` — a média das razões brutas `real / estimado_media`, sem passar pelos `desvio` persistidos — nem `0,93` — o valor stale que a conferência descartou.
+
+**Exemplo de divergência sem fator ativo.** Para `api`, o bloco gravado traz `entradas: 4`, `desvio_medio: 0.63`, `fator_ativo: true` — a mesma herança da contagem de nulas como zero. As entradas persistidas do tipo trazem `desvio` `1.20`, `1.30` e duas `null`. O canônico, recomputado só das duas elegíveis, é `entradas: 2`, `desvio_medio: 1.25`, `fator_ativo: false` — menos de 3 entradas elegíveis, mesmo com o bloco stale dizendo o contrário. `fator_correcao_aplicado` é `null`, a origem da calibração declarada é `nenhum — canônico sem fator ativo`, a divergência `entradas: 4 → 2` vai declarada na saída, e a confiança não passa de `media`. Note a diferença para o exemplo anterior: ali a divergência corrige o NÚMERO do fator (de `0,93` para `1,16`, ambos ativos); aqui a divergência corrige se HÁ fator — e a resposta correta é que não há.
+
+**A F3.5 nunca escreve nem migra o `HISTORICO.md`.** Ela só lê. Encontrar divergência não autoriza esta fase a corrigir o arquivo: a cura do bloco `calibracao` acontece só no próximo fechamento (F6, Passo 10), que recalcula e regrava esse bloco a partir das mesmas `entradas`. As `entradas` persistidas são append-only e não se alteram nem aqui nem lá; é o bloco `calibracao` — derivado e regravável — que a F6 substitui a cada fechamento.
+
 **Sem `HISTORICO.md`:** estime mesmo assim. Duas obrigações:
 
 - a confiança fica **no máximo `media`** (nunca `alta`), qualquer que seja o resto dos sinais;
 - a saída diz explicitamente, em uma linha própria: "Não há base de calibração neste projeto: `docs/sprintx/estimativas/HISTORICO.md` não existe. As faixas vêm de julgamento sobre o plano, sem desvio histórico para corrigi-las."
-- `fator_correcao_aplicado: null` no frontmatter.
+- `fator_correcao_aplicado: null` no frontmatter, com origem da calibração `nenhum — canônico sem fator ativo` (DS-165) — o mesmo rótulo do canônico sem entradas elegíveis suficientes, porque o efeito é o mesmo: não há fator nenhum para aplicar;
+- a `Divergência encontrada` (DS-165) é `não se aplica — HISTORICO.md ausente`: sem o arquivo não existe bloco `calibracao` nenhum para comparar — não é "confere" (não há com o que bater) nem "diverge" (não há o que divergir), é um terceiro estado, de ausência. Os dois campos ficam consistentes: sem `HISTORICO.md` não há como haver divergência, porque não há nada gravado, e também não há fator.
 
 ## Passo 2 — Classificar cada task por tipo
 
@@ -254,7 +267,7 @@ A confiança é **derivada de sinais**, nunca de sensação. Avalie na ordem: a 
 | Nível | Quando |
 |---|---|
 | `baixa` | há lacuna **bloqueante** em `base/00-LACUNAS.md` que afeta tasks estimadas; **ou** integração externa não documentada na base; **ou** raio de impacto ALTO; **ou** mais de um terço das tasks foram mandadas quebrar |
-| `media` | há lacuna não bloqueante; **ou** não existe histórico comparável (inclusive: `HISTORICO.md` não existe) |
+| `media` | há lacuna não bloqueante; **ou** não existe histórico comparável (inclusive: `HISTORICO.md` não existe); **ou** o bloco `calibracao` persistido divergiu do canônico recomputado (DS-165) |
 | `alta` | plano sem lacuna bloqueante, área com cobertura de teste, e histórico comparável existente no projeto |
 
 Teto duro: **sem `HISTORICO.md`, a confiança nunca é `alta`** — no máximo `media`.
@@ -277,7 +290,7 @@ Grave em `docs/sprintx/features/<slug>/00-ESTIMATIVA.md`, a partir de `assets/TE
 
 - `esforco_total_min` / `esforco_total_max` e `caminho_critico_min` / `caminho_critico_max` são **números** (horas), nunca strings com unidade. A unidade está em `unidade: h`.
 - Os quatro nunca são iguais dois a dois de forma a produzir número único: `min < max` sempre. Se `min == max`, você produziu número único — refaça.
-- `fator_correcao_aplicado` é `null` quando não houve calibração aplicada; quando houve, é o `desvio_medio` persistido copiado como está, com as mesmas duas casas (`1.16`, `1.20`). Nunca `1.00` disfarçando ausência de histórico.
+- `fator_correcao_aplicado` é o fator **efetivamente aplicado** (DS-165), e a **origem da calibração** tem três estados possíveis: `null`, origem `nenhum — canônico sem fator ativo`, quando o canônico tem `fator_ativo: false` (menos de 3 entradas elegíveis, ou `HISTORICO.md` ausente) — **mesmo que o bloco gravado divergente dissesse `fator_ativo: true`**; ou, com o canônico ativo, o `desvio_medio` dele — origem `persistido` quando a conferência bate contra o bloco `calibracao` gravado, `recomputado` quando diverge —, copiado com as mesmas duas casas (`1.16`, `1.20`). Nunca `1.00` disfarçando ausência de fator (DS-46).
 - `tasks_a_quebrar` é `[]` quando nenhuma task passou do portão do Passo 4.
 - `premissas`, `invalidadores` e `nao_incluido` são listas de strings de uma linha, nunca vazias por preguiça — `nao_incluido` em particular sempre tem conteúdo.
 
@@ -298,7 +311,7 @@ A saída na conversa espelha o arquivo. Nesta ordem:
 7. **Tasks a quebrar**, se houver — com o que esclarecer em cada uma.
 8. **Premissas**, **Invalidadores**, **Não incluído**.
 9. **Confiança** e o motivo derivado dos sinais.
-10. **Fator de correção aplicado**, se houver — com o desvio histórico que o originou.
+10. **Fator de correção aplicado**, se houver — com o desvio histórico que o originou, a origem da calibração (`persistido` | `recomputado` | `nenhum — canônico sem fator ativo`) e a divergência encontrada (confere | diverge com valores | `não se aplica — HISTORICO.md ausente`) (DS-165).
 
 ## Passo 10 — Registrar o real e calibrar (ao fim do trabalho)
 
