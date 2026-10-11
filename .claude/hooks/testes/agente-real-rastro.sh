@@ -218,12 +218,11 @@ grep -F '"evento":"task_concluida"' "$R" 2>/dev/null | grep -F "\"task\":\"$TASK
 prova "task-concluida-pelo-escritor" $? "task_concluida com a mesma identidade"
 ! grep -qF sessao_ambigua "$ST" 2>/dev/null && ! grep -qF sessao_ambigua "$R" 2>/dev/null
 prova "nenhum-sessao-ambigua" $? "a primeira edicao nao foi barrada por falta de reivindicacao"
-# primeiro Edit current: arquivo_alterado da task no rastro DO TRABALHO, depois da reivindicacao
-awk -v t="$TASK" '
-  /"evento":"task_iniciada"/ && index($0, "\"task\":\"" t "\"") { i = NR }
-  /"evento":"arquivo_alterado"/ && (/src\/contador\.sh/ || /test\/dobro\.test\.sh/) && i && !a { a = NR }
-  END { exit (i && a > i) ? 0 : 1 }' "$R" 2>/dev/null
-prova "primeiro-edit-current-permitido" $? "arquivo_alterado de src/contador.sh|test/dobro.test.sh depois do task_iniciada, no rastro do trabalho"
+# A PRIMEIRA edicao de arquivo da task tem de vir DEPOIS da reivindicacao, no rastro DO TRABALHO.
+# A prova mora em transcrito-agente.sh, com a da transcricao: as duas sao o que a bancada julga
+# sem gastar uma chamada paga, e assim a bancada julga exatamente este codigo.
+rastro_edicao_depois_do_claim "$R" "$TASK" 'src/contador\.sh|test/dobro\.test\.sh'
+prova "primeiro-edit-current-permitido" $? "a PRIMEIRA edicao de src/contador.sh|test/dobro.test.sh veio depois do task_iniciada, no rastro do trabalho"
 grep -F '"evento":"acao_bloqueada"' "$R" 2>/dev/null | grep -F arquivo_de_task_irma | grep -qF src/rotulo.sh \
   && [ "$(git -C "$PROD" hash-object src/rotulo.sh)" = "$SB0" ]
 prova "irma-barrada-e-intacta" $? "acao_bloqueada arquivo_de_task_irma em src/rotulo.sh; arquivo sem mudanca"

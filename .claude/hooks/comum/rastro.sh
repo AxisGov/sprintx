@@ -335,6 +335,61 @@ rastro_tool_input_get() {
   printf '%s' "$_saida"
 }
 
+# RASTRO_ESC — o byte ESC, e RASTRO_ANSI a sequencia CSI que comeca nele. Removidas da saida de
+# uma suite ANTES de classificar o resultado: Maven e Surefire saem coloridos, e a cor cola um
+# `m` imediatamente antes de `[ERROR]` e outro depois de `BUILD FAILURE` — nenhuma fronteira de
+# espaco em branco existe ali, e a suite vermelha era gravada como `ok`.
+RASTRO_ESC=$'\033'
+RASTRO_ANSI="$RASTRO_ESC"'\[[0-9;?]*[ -/]*[@-~]'
+
+# rastro_sem_ansi_em <var> <texto> — o texto sem sequencia ANSI nenhuma.
+#
+# O `case` e o que paga: saida sem ESC — a de toda suite que nao pinta, que e a regra em runner
+# nao interativo — sai pela atribuicao direta, sem processo (regra 1 do contrato). So quando ha
+# cor de verdade um `sed` roda, e aí um processo e mais barato que classificar errado.
+rastro_sem_ansi_em() {
+  case "$2" in
+    *"$RASTRO_ESC"*)
+      printf -v "$1" '%s' "$(printf '%s' "$2" | sed -E "s/$RASTRO_ANSI//g; s/$RASTRO_ESC//g")" ;;
+    *) printf -v "$1" '%s' "$2" ;;
+  esac
+}
+
+# rastro_tool_response_em <var> <json> — o TEXTO da resposta da ferramenta, qualquer que seja a
+# forma dela.
+#
+# `tool_response` nao e sempre string: no Bash o Claude Code entrega um OBJETO
+# (`{"stdout":...,"stderr":...,"interrupted":...}`). Lido como string, isso dava:
+#   - com jq, `.tool_response` de um objeto impresso como JSON — onde a quebra de linha aparece
+#     ESCAPADA e o token de erro perde a fronteira de espaco que o classificador procurava;
+#   - sem jq, NADA: o casamento de `"chave": "valor"` nao casa objeto, e a saida vinha vazia —
+#     nenhuma suite era classificada como falha nessa rota.
+#
+# Aqui o texto sai das STRINGS de dentro da resposta, concatenadas por quebra de linha de
+# verdade: com jq por recursao (`..`), que cobre qualquer forma presente ou futura; sem jq, pelas
+# chaves de texto que o contrato do harness nomeia, pelo mesmo helper de sempre — e `"chave"` so
+# casa chave de verdade, porque dentro de uma string JSON toda aspa e escapada.
+RASTRO_RESP_CHAVES='stdout stderr output content error message'
+#
+# Os nomes locais daqui (`_tx`, `_acc`) NAO podem repetir os de rastro_json_campo_em (`_v`, `_t`,
+# `_out`, `_pre`, ...): `local` lá dentro cria a variavel de novo, e um `printf -v _v` escreveria
+# na copia interna dela em vez da de fora — que ficaria indefinida.
+rastro_tool_response_em() {
+  local _j="$2" _k _tx="" _acc=""
+  if command -v jq >/dev/null 2>&1; then
+    printf -v "$1" '%s' "$(printf '%s' "$_j" | jq -r '.tool_response? | .. | select(type == "string")' 2>/dev/null)"
+    return 0
+  fi
+  rastro_json_campo_em _tx "$_j" tool_response
+  if [ -n "$_tx" ]; then printf -v "$1" '%s' "$_tx"; return 0; fi
+  for _k in $RASTRO_RESP_CHAVES; do
+    rastro_json_campo_em _tx "$_j" "$_k"
+    [ -n "$_tx" ] && _acc="$_acc${_acc:+
+}$_tx"
+  done
+  printf -v "$1" '%s' "$_acc"
+}
+
 # ------------------------------------------------------------ trabalho_id
 
 # Um trabalho_id e o slug da feature: o mesmo nome do diretorio da feature e do

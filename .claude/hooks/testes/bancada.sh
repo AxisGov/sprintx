@@ -7773,6 +7773,261 @@ ai_mutante "aim-mutante-7-ds171-apagada" $? "$AIM" "ai_ds"
 
 rm -rf "$AI_T"
 
+echo "== AJ. deteccao da saida da suite e certificacao da ORDEM real (PR#12) =="
+# Tres defeitos na forma como a maquina LE o que o agente fez:
+#
+#   1. CLASSIFICACAO DA SUITE. `rastro-post` decidia `falha` por fronteira de espaco em branco
+#      ao redor de `[ERROR]` e `BUILD FAILURE`. Maven e Surefire saem COLORIDOS: a sequencia
+#      ANSI cola um `m` antes do token e outro depois, nenhuma fronteira de espaco existe, e
+#      uma suite vermelha era gravada como `ok` — o painel passava a mostrar verde onde o
+#      build quebrou. Agora a saida tem as sequencias ANSI removidas ANTES de classificar, e
+#      so quando ha ESC no texto (o caminho de sempre nao paga processo nenhum).
+#   2. FORMA DO `tool_response`. O hook lia `tool_response` como string. No Bash, o Claude Code
+#      entrega um OBJETO (`{"stdout":...,"stderr":...}`): com jq, `.tool_response` de um objeto
+#      vira o JSON impresso, onde as quebras aparecem ESCAPADAS e o token perde a fronteira de
+#      espaco; sem jq, a leitura de string nao casa objeto nenhum e a saida vinha VAZIA — nenhuma
+#      suite era classificada como falha nessa rota. Agora o texto sai das strings de dentro da
+#      resposta, qualquer que seja a forma, nas duas rotas.
+#   3. ORDEM NO RASTRO. A certificacao do agente real exigia "uma edicao da task depois do
+#      claim" — mas marcava a primeira edicao so a partir do instante em que o claim aparecia.
+#      Com a PRIMEIRA edicao ANTES da reivindicacao (o defeito que a prova existe para pegar) e
+#      uma segunda edicao legitima depois, a prova passava. Agora a primeira edicao e marcada
+#      sempre, e a prova exige que ELA venha depois do claim.
+#
+# E a auditoria de transcrito reprovava escrita manual em docs/eventos so por redirecao, `tee` e
+# `sed -i`. `cp`, `mv` e um interpretador com `open(..., 'a')` escrevem o mesmo arquivo e
+# passavam — inclusive num transcrito que TAMBEM chama o escritor oficial, que era a forma mais
+# facil de parecer conforme. A regra nova olha o PAPEL do caminho, nao a mencao: copiar ou mover
+# PARA docs/eventos viola; `cat`, `grep`, `jq`, `tail`, `wc`, `print(open(...).read())` e copiar
+# o rastro PARA FORA continuam sendo leitura, que o contrato permite.
+AJ_T="$(mktemp -d)"
+AJ_H="$(cd "$H" && pwd)"
+AJ_JSONL="$AJ_T/repo/docs/eventos/sem-trabalho.jsonl"
+
+aj_path_sem_jq() {
+  local d f espelho novo="" i=0 IFS=:
+  for d in $PATH; do
+    [ -n "$d" ] || continue
+    if [ -x "$d/jq" ]; then
+      i=$((i+1)); espelho="$AJ_T/bin$i"
+      if [ ! -d "$espelho" ]; then
+        mkdir -p "$espelho"
+        for f in "$d"/*; do
+          [ -e "$f" ] || continue
+          [ "${f##*/}" = jq ] && continue
+          ln -sf "$f" "$espelho/${f##*/}" 2>/dev/null
+        done
+      fi
+      novo="$novo:$espelho"
+    else
+      novo="$novo:$d"
+    fi
+  done
+  printf '%s' "${novo#:}"
+}
+AJ_SEMJQ="$(aj_path_sem_jq)"
+if PATH="$AJ_SEMJQ" command -v jq >/dev/null 2>&1; then AJ_RC=1
+else PATH="$AJ_SEMJQ" command -v grep >/dev/null 2>&1; AJ_RC=$?
+fi
+afirma "aj0-sandbox-esconde-jq-e-serve-o-resto" "$AJ_RC" "PATH do caso sem jq, com grep"
+
+# ------------------------------------------------- 1 e 2. classificacao da saida da suite
+cat > "$AJ_T/payload.py" <<'PY'
+import json, sys
+forma, arq_saida, cwd = sys.argv[1], sys.argv[2], sys.argv[3]
+texto = open(arq_saida, encoding='utf-8').read()
+if forma == 'string':
+    resp = texto
+elif forma == 'objeto':
+    resp = {'stdout': texto, 'stderr': '', 'interrupted': False, 'isImage': False}
+else:
+    resp = {'stdout': '', 'stderr': texto, 'interrupted': False, 'isImage': False}
+print(json.dumps({'cwd': cwd, 'tool_name': 'Bash',
+                  'tool_input': {'command': 'mvn test'}, 'tool_response': resp}))
+PY
+aj_roda() { # aj_roda <forma> <texto da saida> <PATH do caso>
+  rm -rf "$AJ_T/repo"; mkdir -p "$AJ_T/repo/.git" "$AJ_T/repo/docs/eventos"
+  printf '%s' "$2" > "$AJ_T/saida.txt"
+  python3 "$AJ_T/payload.py" "$1" "$AJ_T/saida.txt" "$AJ_T/repo" > "$AJ_T/payload.json"
+  (cd "$AJ_T/repo" && PATH="$3" bash "$AJ_H/comum/rastro-post.sh") < "$AJ_T/payload.json" >/dev/null 2>&1
+}
+aj_resultado() { # ecoa o `resultado` gravado, ou um diagnostico
+  [ -s "$AJ_JSONL" ] || { printf 'sem-linha'; return 0; }
+  python3 -c 'import json,sys; print(json.loads(open(sys.argv[1],encoding="utf-8").readline())["resultado"])' \
+    "$AJ_JSONL" 2>/dev/null || printf 'ilegivel'
+}
+aj_caso() { # aj_caso <nome> <esperado> <texto> — as 3 formas x as 2 rotas
+  local nome="$1" esp="$2" texto="$3" forma rota caminho real ruim=""
+  for rota in com-jq sem-jq; do
+    caminho="$PATH"; [ "$rota" = sem-jq ] && caminho="$AJ_SEMJQ"
+    for forma in string objeto objeto-stderr; do
+      aj_roda "$forma" "$texto" "$caminho"
+      real="$(aj_resultado)"
+      [ "$real" = "$esp" ] || ruim="$ruim $rota/$forma=$real"
+    done
+  done
+  [ -z "$ruim" ]
+  afirma "$nome" $? "esperado=$esp${ruim:+ — FORA DO ESPERADO:$ruim}"
+}
+# Maven/Surefire colorido: a sequencia ANSI cola um `m` antes do token e outro depois.
+printf -v AJ_ERR_ANSI '\033[1;31m[ERROR]\033[0m Failed to execute goal on project app'
+printf -v AJ_BF_ANSI  '\033[1m[INFO] \033[1;31mBUILD FAILURE\033[0m\n\033[1m[INFO] \033[0mTotal time: 3.1 s'
+printf -v AJ_VERDE    '[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0\n[INFO] BUILD SUCCESS'
+printf -v AJ_VERDE_ANSI '\033[1;32m[INFO]\033[0m Tests run: 12, Failures: 0, Errors: 0\n\033[1;32m[INFO] BUILD SUCCESS\033[0m'
+AJ_ERR_CRU='[ERROR] Failed to execute goal on project app'
+aj_caso "aj1-error-com-ansi-ao-redor-e-falha"      falha "$AJ_ERR_ANSI"
+aj_caso "aj2-build-failure-com-ansi-ao-redor-e-falha" falha "$AJ_BF_ANSI"
+aj_caso "aj3-error-cru-nao-regride"                falha "$AJ_ERR_CRU"
+aj_caso "aj4-surefire-com-falhas-contadas-e-falha" falha '[INFO] Tests run: 12, Failures: 3, Errors: 0
+Results: 3 failed, 9 passed'
+# Controles: verde e verde colorido NAO viram falha — a remocao de ANSI nao inventa defeito.
+aj_caso "aj5-verde-continua-ok"                    ok "$AJ_VERDE"
+aj_caso "aj6-verde-colorido-continua-ok"           ok "$AJ_VERDE_ANSI"
+
+# ------------------------------------------------- 3. auditoria de transcrito: escrita x leitura
+AJ_TR_OK=1
+if ! command -v jq >/dev/null 2>&1; then
+  pula_externo "aj-auditoria-de-transcrito" "jq"; AJ_TR_OK=0
+fi
+aj_ev() { # aj_ev <ferramenta> <input-json> — uma linha stream-json com um tool_use
+  printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t","name":"%s","input":%s}]}}\n' "$1" "$2"
+}
+# O transcrito CONFORME: so o escritor oficial abre e fecha, e o agente LE o rastro para conferir.
+aj_bom() {
+  aj_ev Bash '{"command":"bash .claude/skills/sprintx/scripts/rastro.sh task-iniciada fx T-01.01"}'
+  aj_ev Edit '{"file_path":"/p/src/a.ts","old_string":"a","new_string":"b"}'
+  aj_ev Bash '{"command":"bash .claude/skills/sprintx/scripts/rastro.sh task-concluida fx T-01.01 ok src/a.ts"}'
+}
+aj_verifica() { # aj_verifica <arquivo de transcrito> — ecoa as violacoes (vazio = aprovado)
+  ( . "$AJ_H/testes/transcrito-agente.sh"; transcrito_verifica "$1" 1111-2222 fx T-01.01 || : )
+}
+# Cada comando abaixo e acrescentado a um transcrito que TAMBEM chama o escritor oficial: e essa
+# a forma de burlar que a regra antiga nao pegava.
+aj_tr_viola() { # aj_tr_viola <nome> <comando> <detalhe>
+  local nome="$1" cmd="$2" det="$3" v
+  [ "$AJ_TR_OK" = 1 ] || return 0
+  { aj_bom; aj_ev Bash "$(python3 -c 'import json,sys; print(json.dumps({"command":sys.argv[1]}))' "$cmd")"; } > "$AJ_T/tr"
+  v="$(aj_verifica "$AJ_T/tr")"
+  printf '%s' "$v" | grep -q '^rastro_manual:'
+  afirma "$nome" $? "${det}${v:+ — violacoes=[$(printf '%s' "$v" | tr '\n' ' ' | cut -c1-90)]}"
+}
+aj_tr_viola "aj7-cp-para-docs-eventos-e-escrita-manual" \
+  'cp /tmp/forjado.jsonl docs/eventos/fx.jsonl' "cp com docs/eventos como DESTINO"
+aj_tr_viola "aj8-mv-para-docs-eventos-e-escrita-manual" \
+  'mv /tmp/forjado.jsonl docs/eventos/fx.jsonl' "mv com docs/eventos como DESTINO"
+aj_tr_viola "aj9-python-append-e-escrita-manual" \
+  "python3 -c \"open('docs/eventos/fx.jsonl','a').write('{}')\"" "open em modo de escrita"
+aj_tr_viola "aj10-python-dump-e-escrita-manual" \
+  "python3 - <<'P'
+import json; json.dump({}, open('docs/eventos/fx.jsonl','w'))
+P" "json.dump no rastro"
+aj_tr_viola "aj11-tee-sem-redirecao-tambem" \
+  'printf "{}" | tee docs/eventos/fx.jsonl' "tee com o rastro como destino"
+# E a LEITURA continua permitida: nenhuma destas pode virar violacao.
+aj_tr_le() { # aj_tr_le <nome> <comando> <detalhe>
+  local nome="$1" cmd="$2" det="$3" v
+  [ "$AJ_TR_OK" = 1 ] || return 0
+  { aj_bom; aj_ev Bash "$(python3 -c 'import json,sys; print(json.dumps({"command":sys.argv[1]}))' "$cmd")"; } > "$AJ_T/tr"
+  v="$(aj_verifica "$AJ_T/tr")"
+  [ -z "$v" ]
+  afirma "$nome" $? "${det}${v:+ — REPROVOU leitura: [$(printf '%s' "$v" | tr '\n' ' ' | cut -c1-90)]}"
+}
+aj_tr_le "aj12-cat-do-rastro-e-leitura"  'cat docs/eventos/fx.jsonl' "cat"
+aj_tr_le "aj13-grep-e-tail-sao-leitura"  'grep -c task_iniciada docs/eventos/fx.jsonl | tail -1' "grep + tail"
+aj_tr_le "aj14-jq-e-wc-sao-leitura"      'jq -r .evento docs/eventos/fx.jsonl 2>/dev/null | wc -l' "jq + wc"
+aj_tr_le "aj15-python-read-e-leitura"    "python3 -c \"print(open('docs/eventos/fx.jsonl').read())\"" "print(open(...).read())"
+aj_tr_le "aj16-copiar-o-rastro-para-fora-e-leitura" 'cp docs/eventos/fx.jsonl /tmp/copia.jsonl' "cp com docs/eventos como ORIGEM"
+if [ "$AJ_TR_OK" = 1 ]; then
+  aj_bom > "$AJ_T/tr-bom"; AJ_V="$(aj_verifica "$AJ_T/tr-bom")"
+  [ -z "$AJ_V" ]
+  afirma "aj17-transcrito-conforme-continua-aprovando" $? "${AJ_V:-escritor no inicio e no fim, nenhuma violacao}"
+fi
+
+# ------------------------------------------------- 4. a ORDEM real: primeira edicao depois do claim
+aj_rastro() { # aj_rastro <arquivo> <evento:detalhe> ... — monta um rastro na ordem dada
+  local arq="$1" e ev det n=0; shift
+  : > "$arq"
+  for e in "$@"; do
+    n=$((n + 1)); ev="${e%%:*}"; det="${e#*:}"
+    printf '{"ts":"2026-10-01T10:%02d:00Z","expx_eventos":1,"trabalho_id":"dc","ferramenta":"sprintx","origem":"skill","evento":"%s","fase":"f6","task":"%s","agente":"principal","resultado":"ok","detalhe":null,"arquivos":["%s"],"sessao":"c@1","harness":"c"}\n' \
+      "$n" "$ev" "$([ "$ev" = arquivo_alterado ] && printf 'null' || printf 'T-01.01')" "$det" >> "$arq"
+  done
+}
+AJ_RE='src/contador\.sh|test/dobro\.test\.sh'
+aj_ordem() { # aj_ordem <nome> <esperado: 0|1> <detalhe> <eventos...>
+  local nome="$1" esp="$2" det="$3"; shift 3
+  aj_rastro "$AJ_T/ordem.jsonl" "$@"
+  ( . "$AJ_H/testes/transcrito-agente.sh"
+    rastro_edicao_depois_do_claim "$AJ_T/ordem.jsonl" T-01.01 "$AJ_RE" )
+  [ "$?" -eq "$esp" ]
+  afirma "$nome" $? "$det"
+}
+aj_ordem "aj18-primeira-edicao-depois-do-claim-aprova" 0 "claim, depois a primeira edicao da task" \
+  task_iniciada:- arquivo_alterado:src/contador.sh arquivo_alterado:test/dobro.test.sh
+# O DEFEITO: a primeira edicao veio ANTES do claim, e uma segunda, legitima, veio depois.
+aj_ordem "aj19-primeira-edicao-antes-do-claim-reprova" 1 "edicao antes do claim nao e salva por uma edicao legitima depois" \
+  arquivo_alterado:src/contador.sh task_iniciada:- arquivo_alterado:test/dobro.test.sh
+aj_ordem "aj20-sem-claim-reprova" 1 "edicao sem reivindicacao nenhuma" \
+  arquivo_alterado:src/contador.sh arquivo_alterado:test/dobro.test.sh
+aj_ordem "aj21-sem-edicao-reprova" 1 "claim sem nenhuma edicao da task" \
+  task_iniciada:- arquivo_alterado:src/outro.ts
+# Guarda estrutural: a certificacao paga usa o MESMO helper, nao uma segunda copia do awk.
+AJ_AR="$AJ_H/testes/agente-real-rastro.sh"
+grep -qF 'rastro_edicao_depois_do_claim' "$AJ_AR" && ! grep -qF 'a > i' "$AJ_AR"; AJ_RC=$?
+afirma "aj22-certificacao-paga-usa-o-helper-local" "$AJ_RC" "agente-real-rastro.sh chama o helper testavel, sem awk proprio"
+
+# ------------------------------------------------- mutantes
+AJ_M="$AJ_T/mut"
+aj_copia() { # aj_copia <nome> — copia de .claude/hooks
+  local r="$AJ_M/$1"; rm -rf "$r"; mkdir -p "$r"
+  cp -R "$AJ_H/comum" "$AJ_H/sprintx" "$AJ_H/testes" "$r/"
+  printf '%s' "$r"
+}
+aj_mutante() { # aj_mutante <nome> <rc da geracao> <raiz-hooks> <o que TEM de mudar de veredito>
+  local nome="$1" rcg="$2" r="$3" tipo="$4" rc=1 det
+  det="(rc geracao=$rcg)"
+  if [ "$rcg" -eq 0 ]; then
+    local guarda="$AJ_H"; AJ_H="$r"
+    case "$tipo" in
+      saida)   aj_roda objeto "$AJ_ERR_ANSI" "$PATH"; [ "$(aj_resultado)" = ok ] && rc=0 ;;
+      saida-sj) aj_roda objeto "$AJ_ERR_ANSI" "$AJ_SEMJQ"; [ "$(aj_resultado)" != falha ] && rc=0 ;;
+      ordem)   aj_rastro "$AJ_T/o.jsonl" arquivo_alterado:src/contador.sh task_iniciada:- arquivo_alterado:test/dobro.test.sh
+               ( . "$r/testes/transcrito-agente.sh"
+                 rastro_edicao_depois_do_claim "$AJ_T/o.jsonl" T-01.01 "$AJ_RE" ) && rc=0 ;;
+      manual)  { aj_bom; aj_ev Bash '{"command":"cp /tmp/f.jsonl docs/eventos/fx.jsonl"}'; } > "$AJ_T/trm"
+               ( . "$r/testes/transcrito-agente.sh"; transcrito_verifica "$AJ_T/trm" 1111-2222 fx T-01.01 || : ) \
+                 | grep -q '^rastro_manual:' || rc=0 ;;
+      leitura) { aj_bom; aj_ev Bash '{"command":"cat docs/eventos/fx.jsonl"}'; } > "$AJ_T/trl"
+               [ -n "$( . "$r/testes/transcrito-agente.sh"; transcrito_verifica "$AJ_T/trl" 1111-2222 fx T-01.01 || : )" ] && rc=0 ;;
+    esac
+    AJ_H="$guarda"
+  fi
+  [ "$rcg" -eq 0 ] && [ "$rc" -eq 0 ]
+  afirma "$nome" $? "o mutante volta ao defeito de '$tipo' $det"
+}
+# m1 — a remocao de ANSI desaparece: a saida colorida volta a ser classificada como ok.
+AJR="$(aj_copia m1)" && muta_lit "$AJ_H/comum/rastro.sh" "$AJR/comum/rastro.sh" \
+  '    *"$RASTRO_ESC"*)' '    *naoexisteESC*)'
+aj_mutante "ajm-mutante-1-sem-remocao-de-ansi" $? "$AJR" saida
+# m2 — a leitura do tool_response volta a aceitar so string: no objeto, sem jq, nada e classificado.
+AJR="$(aj_copia m2)" && muta_lit "$AJ_H/comum/rastro-post.sh" "$AJR/comum/rastro-post.sh" \
+  'rastro_tool_response_em SAIDA "$ENTRADA"' 'SAIDA="$(rastro_json_get "$ENTRADA" tool_response)"'
+aj_mutante "ajm-mutante-2-tool-response-so-como-string" $? "$AJR" saida-sj
+# m3 — a prova da ordem volta a so marcar a edicao DEPOIS do claim.
+AJR="$(aj_copia m3)" && muta_lit "$AJ_H/testes/transcrito-agente.sh" "$AJR/testes/transcrito-agente.sh" \
+  '$0 ~ re && !a { a = NR }' '$0 ~ re && i && !a { a = NR }'
+aj_mutante "ajm-mutante-3-ordem-ignora-edicao-antes-do-claim" $? "$AJR" ordem
+# m4 — a auditoria volta a olhar so redirecao/tee/sed -i: cp e mv passam.
+AJR="$(aj_copia m4)" && muta_lit "$AJ_H/testes/transcrito-agente.sh" "$AJR/testes/transcrito-agente.sh" \
+  'if _tr_escreve_no_rastro "$cmd"; then' 'if [[ $cmd =~ $_TR_REDIR ]] || [[ $cmd =~ $_TR_SED ]]; then'
+aj_mutante "ajm-mutante-4-auditoria-sem-cp-e-mv" $? "$AJR" manual
+# m5 — a auditoria vira blacklist de mencao: `cat docs/eventos/...` passa a reprovar.
+AJR="$(aj_copia m5)" && muta_lit "$AJ_H/testes/transcrito-agente.sh" "$AJR/testes/transcrito-agente.sh" \
+  '  case "$c" in *docs/eventos*) ;; *) return 1 ;; esac' '  case "$c" in *docs/eventos*) return 0 ;; *) return 1 ;; esac'
+aj_mutante "ajm-mutante-5-blacklist-reprova-leitura" $? "$AJR" leitura
+
+rm -rf "$AJ_T"
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"
 [ "$pulado" -eq 0 ] || echo "  ATENCAO: skip interno e buraco de cobertura da sprintx nesta plataforma, nao dependencia externa."
