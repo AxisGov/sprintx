@@ -6871,7 +6871,10 @@ AE_LIT_SCH_UMALINHA='exatamente uma linha por `tipo_task` presente, em ordem lex
 AE_LIT_SCH_ESCALAR_NUM='escalar numérico somente quando TODOS os tipos presentes recebem o MESMO fator ativo'
 AE_LIT_SCH_ESCALAR_NULL='escalar `null` somente quando NENHUM tipo presente recebe fator ativo'
 AE_LIT_SCH_POR_TIPO='qualquer mistura — fator ativo e inativo, ou fatores ativos diferentes — grava `fator_correcao_aplicado: por_tipo`'
-AE_LIT_SCH_NUNCA_100='Nenhum item de `calibracao_por_tipo` grava `1.00` como fator ativo'
+# A DS-172 trocou o SENTIDO desta regra: o proibido e `1.00` NO LUGAR DE `null` (o disfarce da
+# DS-46), nunca o valor `1.00` em si — que, medido, e fator legitimo e obrigatorio. O marcador
+# acompanha: a secao AK e que julga as duas metades da regra nova.
+AE_LIT_SCH_NUNCA_100='Nenhum item de `calibracao_por_tipo` usa `1.00` no lugar de `null`'
 AE_LIT_SCH_FAILCLOSED='declara a estimativa indisponível e não a usa — nunca coerção, média ou escolha arbitrária'
 AE_LIT_TPL_CAMPO='calibracao_por_tipo:'
 AE_LIT_TPL_TABELA='Calibração por tipo de task'
@@ -6904,7 +6907,8 @@ ae_caso() { # ae_caso <caso> <dir> -> 0 se o caso PASSA naquela arvore
       ad_lit "$d/references/00-schema.md" "$AE_LIT_SCH_ESCALAR_NUM" \
              "$d/references/00-schema.md" "$AE_LIT_SCH_ESCALAR_NULL" \
              "$d/references/00-schema.md" "$AE_LIT_SCH_POR_TIPO" ;;
-    # 1.00 nunca e fator ativo, nem no escalar nem por tipo (estende a DS-46).
+    # `1.00` nunca substitui `null`, nem no escalar nem por tipo (DS-46, com o sentido que a
+    # DS-172 fixou: o disfarce e que e proibido, nao o numero).
     ae_nunca_100_por_tipo)
       ad_lit "$d/references/00-schema.md" "$AE_LIT_SCH_NUNCA_100" ;;
     # Consumidor legado que nao reconhece calibracao_por_tipo falha fechado.
@@ -6978,10 +6982,10 @@ ae_muta "$AE_M" references/00-schema.md "s/${AE_LIT_SCH_ESCALAR_NUM}//"
 ae_mutante "aem-mutante-2-remove-regra-escalar-numerico" $? "$AE_M" \
   ae_regra_do_escalar_legado
 
-# m3 — permite 1.00 como fator ativo por tipo (regressao da DS-46 para a colecao nova).
+# m3 — apaga a proibicao do disfarce por tipo: `1.00` voltaria a poder substituir `null`.
 AE_M="$(ae_copia m3)"
 ae_muta "$AE_M" references/00-schema.md "s/${AE_LIT_SCH_NUNCA_100}//"
-ae_mutante "aem-mutante-3-permite-100-por-tipo" $? "$AE_M" \
+ae_mutante "aem-mutante-3-permite-100-no-lugar-de-null-por-tipo" $? "$AE_M" \
   ae_nunca_100_por_tipo
 
 # m4 — apaga a instrucao de falha fechada para consumidor legado (ex.: ele poderia tentar media).
@@ -8027,6 +8031,203 @@ AJR="$(aj_copia m5)" && muta_lit "$AJ_H/testes/transcrito-agente.sh" "$AJR/teste
 aj_mutante "ajm-mutante-5-blacklist-reprova-leitura" $? "$AJR" leitura
 
 rm -rf "$AJ_T"
+
+echo "== AK. 1.00 MEDIDO e fator legitimo, e o caminho critico se escolhe pela duracao corrigida (PR#12) =="
+# Dois defeitos de contrato na estimativa:
+#
+#   1. A proibicao do neutro (DS-46) virou proibicao do VALOR. Ela existe para que ausencia de
+#      fator nao se disfarce de fator — e ausencia se diz com `null`. Mas um tipo com 3 ou mais
+#      entradas elegiveis cuja media de desvios da exatamente `1.00` tem um fator MEDIDO, e ele
+#      diz algo: "este tipo tem historico suficiente e o projeto acerta a estimativa dele".
+#      Proibir `1.00` indiscriminadamente obrigava a gravar `null` ali — ou seja, obrigava a
+#      mentir "nao ha historico" exatamente no tipo melhor calibrado do projeto, e a apagar a
+#      distincao que a propria DS-46 queria preservar. O que continua proibido e `1.00` NO LUGAR
+#      de `null`: sem historico, com menos de 3 elegiveis ou com `fator_ativo: false`.
+#   2. A selecao do caminho critico usava a media CRUA. O `fator(t)` entra na soma e na quadratura
+#      (DS-167), mas a regra de ACHAR a cadeia mais longa somava `media_task(t)` sem fator — e com
+#      fatores diferentes entre os tipos o ramo mais longo em media crua nao e o mais longo de
+#      verdade. A saida publicava a cadeia errada e um `caminho_critico` menor que o real.
+#
+# Os dois casos tem oraculo executavel aqui, nao so marcador de texto: o numero que a regra manda
+# gravar e o ramo que a regra manda escolher sao calculados, e e contra esse calculo que o
+# contrato escrito e conferido.
+AK_SK="$SK"
+
+# --------------------------------------------------------- oraculo 1: o fator que se grava
+# Dado os `desvio` persistidos de um tipo ("null" para a entrada sem desvio), o que o item de
+# `calibracao_por_tipo` tem de gravar em `fator`: `null` com menos de 3 elegiveis, ou a media das
+# elegiveis com duas casas half-up (DS-160/DS-164) — INCLUSIVE quando essa media e `1.00`.
+ak_fator() { # ak_fator <desvio|null> ...
+  awk -v lista="$*" '
+    BEGIN {
+      n = split(lista, v, / +/); soma = 0; e = 0
+      for (i = 1; i <= n; i++) { if (v[i] == "null") continue; e++; soma += v[i] + 0 }
+      if (e < 3) { print "null"; exit }                      # fator_ativo: false (DS-164)
+      m = soma / e
+      printf "%.2f\n", int(m * 100 + 0.5) / 100              # duas casas, half-up (DS-160)
+    }'
+}
+[ "$(ak_fator 1.00 1.00 1.00)" = "1.00" ]
+afirma "ak1-oraculo-media-exata-de-1-e-fator-1.00" $? "3 elegiveis, todas 1.00 -> fator medido 1.00, nunca null"
+[ "$(ak_fator 0.90 1.00 1.10)" = "1.00" ]
+afirma "ak2-oraculo-desvios-que-se-compensam-dao-1.00" $? "0,90 + 1,00 + 1,10 -> media exatamente 1.00"
+[ "$(ak_fator 0.98 1.00 1.03)" = "1.00" ]
+afirma "ak3-oraculo-media-que-arredonda-para-1.00" $? "1,00333... -> 1.00 pelas duas casas half-up"
+[ "$(ak_fator 1.00 1.00)" = "null" ]
+afirma "ak4-oraculo-duas-elegiveis-e-null-nao-1.00" $? "menos de 3 elegiveis -> null, e e a proibicao da DS-46 que continua"
+[ "$(ak_fator null null null)" = "null" ]
+afirma "ak5-oraculo-sem-desvio-elegivel-e-null" $? "nenhuma entrada elegivel -> null, nunca 1.00"
+[ "$(ak_fator 1.13 1.13 1.17 1.20)" = "1.16" ]
+afirma "ak6-oraculo-exemplo-canonico-nao-regride" $? "o 1.16 da DS-160 continua saindo igual"
+
+# --------------------------------------------------------- oraculo 2: qual ramo e o critico
+# Cada ramo e uma cadeia; a duracao dela e a soma de media_task(t) * fator(t). Com fatores
+# diferentes entre os tipos, o ramo mais longo em media CRUA pode nao ser o mais longo corrigido.
+ak_critico() { # ak_critico <modo: cru|corrigido> <ramo:media:fator> ...
+  local modo="$1"; shift
+  awk -v modo="$modo" -v lista="$*" '
+    BEGIN {
+      n = split(lista, r, / +/)
+      for (i = 1; i <= n; i++) {
+        split(r[i], c, ":")
+        D[c[1]] += c[2] * (modo == "corrigido" ? c[3] : 1)
+      }
+      melhor = ""; maior = -1
+      for (k in D) if (D[k] > maior) { maior = D[k]; melhor = k }
+      printf "%s=%.2f\n", melhor, maior
+    }'
+}
+AK_RAMOS="A:10:0.80 B:9:1.20"
+[ "$(ak_critico cru $AK_RAMOS)" = "A=10.00" ]
+afirma "ak7-oraculo-pela-media-crua-o-ramo-a-parece-critico" $? "10,00 > 9,00 — a conta ERRADA, registrada para o caso ter contraste"
+[ "$(ak_critico corrigido $AK_RAMOS)" = "B=10.80" ]
+afirma "ak8-oraculo-corrigido-pelo-fator-o-critico-e-o-ramo-b" $? "10,00*0,80=8,00 contra 9,00*1,20=10,80 — o fator TROCA o ramo critico"
+# Controle: com o mesmo fator nos dois ramos, a correcao nao muda a escolha.
+[ "$(ak_critico corrigido A:10:1.20 B:9:1.20)" = "A=12.00" ]
+afirma "ak9-oraculo-fator-igual-nos-dois-nao-troca-o-ramo" $? "fator igual: a ordem dos ramos e a mesma da media crua"
+
+# --------------------------------------------------------- o contrato escrito
+AK_LIT_SCH_100='`1.00` medido é um fator legítimo, e é obrigatório gravá-lo (DS-172)'
+AK_LIT_SCH_100_QUANDO='o canônico daquele tipo tem `fator_ativo: true` e a média dos `desvio` elegíveis é exatamente `1.00`'
+AK_LIT_SCH_100_PROIBIDO='O que a DS-46 proíbe é `1.00` **no lugar de** `null`'
+AK_LIT_SCH_POR_TIPO='Nenhum item de `calibracao_por_tipo` usa `1.00` no lugar de `null`'
+AK_LIT_EST_100='`1.00` **medido** é fator legítimo e vai gravado como `1.00`, nunca convertido em `null` (DS-172)'
+AK_LIT_TPL_100='`1.00` medido vai gravado como `1.00`'
+# A proibicao preservada: a frase da DS-46 continua nos dois arquivos que a bancada ja exigia.
+AK_LIT_SCH_DISFARCE='Nunca `1.00` para disfarçar ausência de fator (DS-46)'
+AK_LIT_EST_DISFARCE='Nunca `1.00` disfarçando ausência de fator (DS-46)'
+# E a frase antiga, que proibia o VALOR sem distinguir o disfarce, nao sobrevive.
+AK_LIT_PROIBE_ANTIGA='!Nenhum item de `calibracao_por_tipo` grava `1.00` como fator ativo'
+# Caminho critico: a selecao usa a duracao corrigida, e o exemplo do ramo que troca existe.
+AK_LIT_EST_SEL='`caminho(t) = media_task(t) * fator(t) + máximo dos caminho(anteriores)`'
+AK_LIT_EST_SEL_REGRA='A duração que seleciona o caminho é a já corrigida pelo `fator(t)` do tipo daquela task, nunca a média crua (DS-173)'
+AK_LIT_EST_EXEMPLO='Exemplo em que o fator troca o ramo crítico'
+AK_LIT_EST_EXEMPLO_NUM='as durações corrigidas são `8,00` e `10,80`, e o ramo crítico é o de `T-02.01`'
+AK_LIT_TPL_SEL='A cadeia é **selecionada** pela duração já corrigida — `media_task(t) * fator(t)` —, nunca pela média crua'
+
+ak_caso() { # ak_caso <caso> <dir> -> 0 se o caso PASSA naquela arvore
+  local c="$1" d="$2"
+  case "$c" in
+    # O 1.00 medido e fator legitimo, e o contrato diz QUANDO.
+    ak_100_legitimo)
+      ad_lit "$d/references/00-schema.md" "$AK_LIT_SCH_100" \
+             "$d/references/00-schema.md" "$AK_LIT_SCH_100_QUANDO" \
+             "$d/references/07-estimativa.md" "$AK_LIT_EST_100" \
+             "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AK_LIT_TPL_100" ;;
+    # A proibicao da DS-46 continua, agora nomeando o que ela proibe: 1.00 no lugar de null.
+    ak_100_no_lugar_de_null_proibido)
+      ad_lit "$d/references/00-schema.md" "$AK_LIT_SCH_100_PROIBIDO" \
+             "$d/references/00-schema.md" "$AK_LIT_SCH_DISFARCE" \
+             "$d/references/07-estimativa.md" "$AK_LIT_EST_DISFARCE" ;;
+    # A regra por tipo passou a proibir o disfarce, nao o valor — e a forma antiga nao sobrevive.
+    ak_por_tipo_proibe_o_disfarce)
+      ad_lit "$d/references/00-schema.md" "$AK_LIT_SCH_POR_TIPO" \
+             "$d/references/00-schema.md" "$AK_LIT_PROIBE_ANTIGA" ;;
+    # A selecao do caminho critico usa a duracao corrigida, nos dois arquivos que a publicam.
+    ak_selecao_corrigida_pelo_fator)
+      ad_lit "$d/references/07-estimativa.md" "$AK_LIT_EST_SEL" \
+             "$d/references/07-estimativa.md" "$AK_LIT_EST_SEL_REGRA" \
+             "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AK_LIT_TPL_SEL" ;;
+    # E o caso em que fatores diferentes trocam o ramo critico esta escrito, com os numeros.
+    ak_exemplo_troca_o_ramo)
+      ad_lit "$d/references/07-estimativa.md" "$AK_LIT_EST_EXEMPLO" \
+             "$d/references/07-estimativa.md" "$AK_LIT_EST_EXEMPLO_NUM" ;;
+    # DS-172 e DS-173 registradas, append-only, e as anteriores intactas.
+    ak_ds_registradas)
+      local v172 v173
+      v172="$(grep -F '| DS-172 |' "$d/DECISOES-DA-SKILL.md" 2>/dev/null)"
+      v173="$(grep -F '| DS-173 |' "$d/DECISOES-DA-SKILL.md" 2>/dev/null)"
+      [ -n "$v172" ] && [ -n "$v173" ] \
+        && printf '%s' "$v172" | grep -qF 'DS-46' \
+        && printf '%s' "$v172" | grep -qF 'substitui a parte incompatível da DS-46' \
+        && printf '%s' "$v173" | grep -qiF 'caminho crítico' \
+        && grep -qF '| DS-46 |' "$d/DECISOES-DA-SKILL.md" \
+        && grep -qF '| DS-160 |' "$d/DECISOES-DA-SKILL.md" \
+        && grep -qF '| DS-165 |' "$d/DECISOES-DA-SKILL.md" \
+        && grep -qF '| DS-166 |' "$d/DECISOES-DA-SKILL.md" \
+        && grep -qF '| DS-167 |' "$d/DECISOES-DA-SKILL.md" ;;
+    *) return 1 ;;
+  esac
+}
+AK_CASOS="ak_100_legitimo ak_100_no_lugar_de_null_proibido ak_por_tipo_proibe_o_disfarce
+ak_selecao_corrigida_pelo_fator ak_exemplo_troca_o_ramo ak_ds_registradas"
+ak_nome() { printf '%s' "$1" | tr '_' '-'; }
+for ak_c in $AK_CASOS; do
+  ak_caso "$ak_c" "$AK_SK"; ak_rc=$?
+  afirma "$(ak_nome "$ak_c")" "$ak_rc" "lido da arvore do contrato em $AK_SK"
+done
+
+# --------------------------------------------------------- mutantes
+AKW="$(mktemp -d)"
+ak_copia() { rm -rf "$AKW/$1"; mkdir -p "$AKW/$1"; cp -R "$AK_SK/." "$AKW/$1/"; printf '%s' "$AKW/$1"; }
+ak_muta() { [ -f "$1/$2" ] || return 1; muta_lit "$1/$2" "$1/$2.m" "$3" "$4" && mv "$1/$2.m" "$1/$2"; }
+ak_mata() { local c; for c in $AK_CASOS; do ak_caso "$c" "$1" || { printf '%s' "$c"; return; }; done; }
+ak_mutante() { # ak_mutante <nome> <rc da geracao> <dir> <caso que TEM de matar>...
+  local nome="$1" rcg="$2" d="$3" c vivos=""; shift 3
+  if [ "$rcg" -eq 0 ]; then for c in "$@"; do ak_caso "$c" "$d" && vivos="$vivos$c "; done; fi
+  [ "$rcg" -eq 0 ] && [ -z "$vivos" ]; local rc=$?
+  afirma "$nome" "$rc" "morto por: $* ${vivos:+— SOBREVIVEU a: $vivos}(rc geracao=$rcg)"
+}
+AK_CTL="$(ak_copia controle)"
+AK_K="$(ak_mata "$AK_CTL")"; [ -z "$AK_K" ]; ak_rc=$?
+afirma "akm-controle-copia-intacta-sobrevive" "$ak_rc" "${AK_K:-nenhum caso reprova a copia sem mutacao}"
+
+# m1 — o 1.00 medido deixa de ser declarado legitimo no schema.
+AK_M="$(ak_copia m1)"
+ak_muta "$AK_M" references/00-schema.md "$AK_LIT_SCH_100" 'Nada a dizer sobre 1.00'
+ak_mutante "akm-mutante-1-schema-sem-o-1.00-medido" $? "$AK_M" ak_100_legitimo
+# m2 — a proibicao do DISFARCE desaparece: `1.00` passaria a poder substituir `null`.
+AK_M="$(ak_copia m2)"
+ak_muta "$AK_M" references/00-schema.md 'O que a DS-46 proíbe é `1.00` **no lugar de**' 'Qualquer valor serve'
+ak_mutante "akm-mutante-2-schema-sem-a-proibicao-do-disfarce" $? "$AK_M" ak_100_no_lugar_de_null_proibido
+# m3 — a regra por tipo volta a proibir o VALOR, nao o disfarce (a forma antiga ressuscita).
+AK_M="$(ak_copia m3)"
+ak_muta "$AK_M" references/00-schema.md "$AK_LIT_SCH_POR_TIPO" \
+  'Nenhum item de `calibracao_por_tipo` grava `1.00` como fator ativo'
+ak_mutante "akm-mutante-3-por-tipo-volta-a-proibir-o-valor" $? "$AK_M" ak_por_tipo_proibe_o_disfarce
+# m4 — a selecao do caminho critico volta a somar a media CRUA.
+AK_M="$(ak_copia m4)"
+ak_muta "$AK_M" references/07-estimativa.md "$AK_LIT_EST_SEL" \
+  '`caminho(t) = media_task(t) + máximo dos caminho(anteriores)`'
+ak_mutante "akm-mutante-4-selecao-volta-a-media-crua" $? "$AK_M" ak_selecao_corrigida_pelo_fator
+# m5 — o template perde a frase da selecao corrigida.
+AK_M="$(ak_copia m5)"
+ak_muta "$AK_M" assets/TEMPLATE-ESTIMATIVA.md "$AK_LIT_TPL_SEL" 'A cadeia e a mais longa.'
+ak_mutante "akm-mutante-5-template-sem-a-selecao-corrigida" $? "$AK_M" ak_selecao_corrigida_pelo_fator
+# m6 — o exemplo do ramo que troca e apagado: a regra fica sem o caso que a demonstra.
+AK_M="$(ak_copia m6)"
+ak_muta "$AK_M" references/07-estimativa.md "$AK_LIT_EST_EXEMPLO_NUM" 'os dois ramos empatam'
+ak_mutante "akm-mutante-6-exemplo-sem-os-numeros-do-ramo" $? "$AK_M" ak_exemplo_troca_o_ramo
+# m7 — DS-172/DS-173 apagadas do registro.
+AK_M="$(ak_copia m7)"
+ak_muta "$AK_M" DECISOES-DA-SKILL.md '| DS-172 |' '| DS-172-apagada |'
+ak_mutante "akm-mutante-7-ds172-apagada" $? "$AK_M" ak_ds_registradas
+# m8 — a DS-172 deixa de dizer QUAL parte das decisoes anteriores ela substitui.
+AK_M="$(ak_copia m8)"
+ak_muta "$AK_M" DECISOES-DA-SKILL.md 'substitui a parte incompatível da DS-46' 'ignora a DS-46'
+ak_mutante "akm-mutante-8-ds172-sem-a-substituicao-explicita" $? "$AK_M" ak_ds_registradas
+
+rm -rf "$AKW"
 
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"

@@ -45,6 +45,8 @@ Uma entrada é comparável quando bate no tipo **e** em pelo menos um dos outros
 
 Com menos de 3 entradas elegíveis do tipo, o desvio é ruído: **não** aplique fator, e diga na saída que o histórico tem entradas insuficientes daquele tipo. Entrada daquele tipo com `desvio: null` não entra nessa conta — o item da `calibracao` pode existir com `fator_ativo: false`, e é o `fator_ativo` que manda.
 
+**Fator exatamente `1,00` é fator, e se aplica (DS-172).** Com 3 ou mais entradas elegíveis cuja média de `desvio` dá exatamente `1,00` — `1,00`, `1,00`, `1,00`; ou `0,90`, `1,00`, `1,10`; ou qualquer conjunto que arredonde a `1,00` pelas duas casas half-up da DS-160 —, o canônico tem `fator_ativo: true` e o fator é `1,00`. Aplique-o e declare-o como qualquer outro: multiplicar por `1,00` não muda a faixa, mas **declarar** `1,00` diz ao leitor que este tipo tem histórico suficiente e que o projeto acerta a estimativa dele — informação que `null` não carrega, porque `null` significa "não há fator para aplicar". A proibição da DS-46 continua intacta no outro sentido: `1,00` **no lugar de** `null` — sem histórico, com menos de 3 elegíveis, ou com o canônico inativo — segue proibido.
+
 **Conferência do bloco persistido, nunca confiança cega (DS-165).** Antes de aplicar o `desvio_medio` persistido, recompute o canônico daquele `tipo_task` a partir dos `desvio` já persistidos nas `entradas` — nunca de `real / estimado_media`, que é a razão bruta e não o que a calibração agrega: `entradas` = a contagem das elegíveis (DS-164), `desvio_medio` = a média delas pela precisão da DS-160, `fator_ativo` = `true` a partir de 3. Confira esse canônico contra o bloco `calibracao` gravado no `HISTORICO.md`.
 
 - **Bate, com fator ativo no canônico:** aplique o `desvio_medio` persistido, como já descrito acima. A origem da calibração (DS-165) é `persistido`.
@@ -219,9 +221,11 @@ O paralelismo declarado no plano é respeitado na agregação. A saída separa d
 Como achar o caminho crítico, a partir de `depende_de` e do `caminho_critico` que a F4 declara (se a F4 já rodou; se não, derive dos `depende_de`):
 
 1. Monte o grafo das tasks estimadas: aresta de A para B quando B declara A em `depende_de`.
-2. Para cada task, `caminho(t) = media_task(t) + máximo dos caminho(anteriores)`, ou `media_task(t)` se `depende_de` é `[]`.
-3. O caminho crítico é a cadeia que produz o maior `caminho(t)`. Guarde a lista de ids dessa cadeia.
+2. Para cada task, `caminho(t) = media_task(t) * fator(t) + máximo dos caminho(anteriores)`, ou `media_task(t) * fator(t)` se `depende_de` é `[]`. **A duração que seleciona o caminho é a já corrigida pelo `fator(t)` do tipo daquela task, nunca a média crua (DS-173)** — `fator(t)` é o do item de `calibracao_por_tipo` cujo `tipo_task` é o de `t`, e `1` quando aquele tipo não tem fator ativo, exatamente como na agregação do Passo 5 (DS-167).
+3. O caminho crítico é a cadeia que produz o maior `caminho(t)` assim corrigido. Guarde a lista de ids dessa cadeia.
 4. Agregue essa cadeia — e **só** ela — pelo mesmo método PERT + quadratura.
+
+**Exemplo em que o fator troca o ramo crítico.** Dois ramos paralelos, um task cada: `T-01.01`, tipo `config`, `media_task` `10,00`; e `T-02.01`, tipo `integracao_externa`, `media_task` `9,00`. Pelas médias cruas o ramo crítico seria o de `T-01.01` (`10,00 > 9,00`). Com os fatores dos respectivos tipos — `config` com `0,80`, `integracao_externa` com `1,20` — as durações corrigidas são `8,00` e `10,80`, e o ramo crítico é o de `T-02.01`. Selecionar pela média crua aqui publica duas coisas erradas de uma vez: a **lista de ids** da cadeia aponta um ramo que não limita o calendário, e o `caminho_critico` agregado sai menor que o real. Com fator igual nos dois ramos a escolha não muda — é a **diferença** entre os fatores que troca o ramo, e é por isso que a correção não pode esperar a agregação.
 
 Duas tasks paralelizáveis somam no esforço total e **não** somam no caminho crítico. Por isso os dois números são diferentes, e a saída explica a diferença em uma frase, nomeando o que roda em paralelo.
 
@@ -308,7 +312,7 @@ Grave em `docs/sprintx/features/<slug>/00-ESTIMATIVA.md`, a partir de `assets/TE
 
 - `esforco_total_min` / `esforco_total_max` e `caminho_critico_min` / `caminho_critico_max` são **números** (horas), nunca strings com unidade. A unidade está em `unidade: h`.
 - Os quatro nunca são iguais dois a dois de forma a produzir número único: `min < max` sempre. Se `min == max`, você produziu número único — refaça.
-- `fator_correcao_aplicado` é o fator **efetivamente aplicado** (DS-165), e a **origem da calibração** tem três estados possíveis: `null`, origem `nenhum — canônico sem fator ativo`, quando o canônico tem `fator_ativo: false` (menos de 3 entradas elegíveis, ou `HISTORICO.md` ausente) — **mesmo que o bloco gravado divergente dissesse `fator_ativo: true`**; ou, com o canônico ativo, o `desvio_medio` dele — origem `persistido` quando a conferência bate contra o bloco `calibracao` gravado, `recomputado` quando diverge —, copiado com as mesmas duas casas (`1.16`, `1.20`). Nunca `1.00` disfarçando ausência de fator (DS-46).
+- `fator_correcao_aplicado` é o fator **efetivamente aplicado** (DS-165), e a **origem da calibração** tem três estados possíveis: `null`, origem `nenhum — canônico sem fator ativo`, quando o canônico tem `fator_ativo: false` (menos de 3 entradas elegíveis, ou `HISTORICO.md` ausente) — **mesmo que o bloco gravado divergente dissesse `fator_ativo: true`**; ou, com o canônico ativo, o `desvio_medio` dele — origem `persistido` quando a conferência bate contra o bloco `calibracao` gravado, `recomputado` quando diverge —, copiado com as mesmas duas casas (`1.16`, `1.20`). Nunca `1.00` disfarçando ausência de fator (DS-46) — mas `1.00` **medido** é fator legítimo e vai gravado como `1.00`, nunca convertido em `null` (DS-172).
 - `calibracao_por_tipo` (DS-166) leva uma linha por `tipo_task` presente, em ordem lexical, com
   `fator`, `origem` e `divergencia` conforme a conferência da DS-165 aplicada a cada tipo.
   `fator_correcao_aplicado` é derivado dela (ver Passo 1): número quando todos os tipos

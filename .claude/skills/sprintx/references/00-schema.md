@@ -520,6 +520,16 @@ Regras duras deste kind:
   decimais** do `kind: estimativa_historico` (ex.: `1.25`, e `1.20` para o desvio de `1,2`).
   Nunca `1.00` para disfarçar ausência de fator (DS-46): neutro declarado é indistinguível
   de fator inventado, e a ausência se diz com `null`.
+- **`1.00` medido é um fator legítimo, e é obrigatório gravá-lo (DS-172).** Quando
+  o canônico daquele tipo tem `fator_ativo: true` e a média dos `desvio` elegíveis é exatamente
+  `1.00` — depois do arredondamento de duas casas half-up da DS-160 —, o fator **é** `1.00`, e
+  vai gravado assim: ele diz "este tipo tem histórico suficiente e o projeto acerta a estimativa
+  dele", que é um fato medido, não a ausência de um. O que a DS-46 proíbe é `1.00` **no lugar de**
+  `null`: sem `HISTORICO.md`, com menos de 3 entradas elegíveis ou com o canônico
+  `fator_ativo: false`, o valor é `null` e a origem é `nenhum — canônico sem fator ativo` —
+  nunca `1.00`. Os dois estados continuam distinguíveis exatamente porque um é número e o outro
+  é `null`; converter o `1.00` medido em `null` seria a mentira simétrica, e apagaria do projeto
+  justamente o tipo melhor calibrado que ele tem.
 - `confianca` segue o enum `confianca`; `confianca_motivo` é uma linha derivada dos sinais.
   Sem `docs/sprintx/estimativas/HISTORICO.md`, `confianca` nunca é `alta`. Divergência entre o
   bloco `calibracao` persistido e o canônico recomputado (DS-165) também limita `confianca` a
@@ -533,7 +543,10 @@ Regras duras deste kind:
   canônico sem fator ativo`, DS-165) e `divergencia` (`confere` \| `diverge com valores` \| `não
   se aplica — HISTORICO.md ausente`, DS-165) — os mesmos três estados da DS-165, só que
   calculados por tipo, nunca um único canônico para o trabalho inteiro.
-  **Nenhum item de `calibracao_por_tipo` grava `1.00` como fator ativo** (a mesma proibição da DS-46, por tipo).
+  **Nenhum item de `calibracao_por_tipo` usa `1.00` no lugar de `null`** (a mesma proibição da
+  DS-46, por tipo): tipo sem fator ativo grava `fator: null` e `origem: nenhum — canônico sem
+  fator ativo`. `fator: 1.00` só aparece — e aí é **obrigatório** — quando o canônico daquele
+  tipo tem `fator_ativo: true` e a média dos desvios elegíveis é exatamente `1.00` (DS-172).
   `calibracao_por_tipo` é `[]` apenas quando não há nenhuma task estimada — na prática, sempre
   tem ao menos um item quando há tasks.
 - **O escalar legado `fator_correcao_aplicado` é derivado da coleção, nunca gravado à parte.**
