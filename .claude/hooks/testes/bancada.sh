@@ -7300,6 +7300,247 @@ AG_ROTA_OC="$(conta "$H/../../.opencode/plugin/sprintx.ts" 'comum/rastro-post.sh
 afirma "ag13-rotas-compartilham-o-mesmo-hook" "$AG_RC" "rotas para comum/rastro-post.sh: claude-code=$AG_ROTA_CC opencode=$AG_ROTA_OC; cut -c em codigo de hook: ${AG_CUT:-nenhum}"
 rm -rf "$AG_T"
 
+echo "== AH. serializacao do rastro: todo controle JSON escapado, marcador sem colisao, falha de escrita nao mascarada (PR#12) =="
+# Tres defeitos independentes da serializacao, todos alcancaveis pelo mesmo payload — um comando
+# de suite que leva caractere de controle (barra de progresso, cor de terminal, separador de
+# registro). O JSON do harness os entrega escapados (U+0001 vira a sequencia de seis bytes que
+# comeca em barra-u); o que o rastro fazia com eles e que estava errado:
+#
+#   1. COLISAO DE MARCADOR. `rastro_json_campo_em` escondia a barra escapada atras do byte 0x01
+#      antes de decodificar as sequencias U+XXXX, e devolvia esse marcador a barra no fim. Um
+#      U+0001 do proprio payload decodifica para o MESMO byte 0x01: na volta ele virava barra
+#      invertida. "a<U+0001>b" saia "a\b" — valor corrompido, e divergente do que o jq entrega
+#      na mesma leitura, quebrando a paridade que o contrato promete entre as duas rotas.
+#   2. BYTE DE CONTROLE CRU NO JSONL. `rastro_json_escape_em` escapava so barra, aspa, TAB, CR e
+#      LF. Todo o resto de U+0000..U+001F ia CRU para dentro da string JSON — e JSON proibe
+#      controle cru dentro de string: a linha gravada deixava de ser JSON valido e o leitor do
+#      rastro perde o arquivo a partir dali, o mesmo estrago do byte UTF-8 partido da secao AG.
+#   3. CLASSIFICACAO DE ESCRITA MASCARADA. `rastro_grava_trabalho` punha `divergente`/`invalido`
+#      em RASTRO_GRAVACAO DEPOIS de tentar gravar a linha de diagnostico — por cima do `falha`
+#      que a propria tentativa acabara de deixar. Com a gravacao impossivel, o escritor publico
+#      da skill anunciava "feche a task aberta do outro trabalho" (codigo 4, contrato) quando o
+#      fato era que nada podia ser escrito (codigo 5, ambiente): diagnostico publico com a causa
+#      errada, e o unico codigo que avisa o agente que o rastro parou de aceitar linha se perdia.
+#
+# Nenhum caso escreve a sequencia de escape a mao: os payloads saem de `json.dumps`, que escapa
+# controle por obrigacao do proprio formato — e por isso o teste exerce o escape REAL do harness.
+AH_T="$(mktemp -d)"
+AH_H="$(cd "$H" && pwd)"
+AH_SK="$(cd "$H/../skills/sprintx" && pwd)"
+
+# PATH sem jq, mesma tecnica e mesma justificativa das secoes W e AG (espelho de symlinks dos
+# diretorios que tem jq), com espelho proprio porque cada secao apaga o seu no fim.
+ah_path_sem_jq() {
+  local d f espelho novo="" i=0 IFS=:
+  for d in $PATH; do
+    [ -n "$d" ] || continue
+    if [ -x "$d/jq" ]; then
+      i=$((i+1)); espelho="$AH_T/bin$i"
+      if [ ! -d "$espelho" ]; then
+        mkdir -p "$espelho"
+        for f in "$d"/*; do
+          [ -e "$f" ] || continue
+          [ "${f##*/}" = jq ] && continue
+          ln -sf "$f" "$espelho/${f##*/}" 2>/dev/null
+        done
+      fi
+      novo="$novo:$espelho"
+    else
+      novo="$novo:$d"
+    fi
+  done
+  printf '%s' "${novo#:}"
+}
+AH_SEMJQ="$(ah_path_sem_jq)"
+if PATH="$AH_SEMJQ" command -v jq >/dev/null 2>&1; then AH_RC=1
+else PATH="$AH_SEMJQ" command -v grep >/dev/null 2>&1; AH_RC=$?
+fi
+afirma "ah0-sandbox-esconde-jq-e-serve-o-resto" "$AH_RC" "PATH do caso sem jq, com grep"
+
+# Os bytes 0x01..0x1F, todos, menos o NUL — que nao cabe numa variavel de shell e por isso nunca
+# chega ao serializador. `printf -v` + `%b` constroem cada byte sem criar processo.
+ah_todos_controles() {
+  local i c
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31; do
+    printf -v c '\\%03o' "$i"; printf '%b' "$c"
+  done
+}
+
+# Extrator isolado, o mesmo molde da secao W: le a chave pelo helper publico e grava o valor CRU
+# num arquivo, para a comparacao nao passar por substituicao de comando (que come byte do fim).
+cat > "$AH_T/extrai.sh" <<'SH'
+. "$1/comum/rastro.sh"
+IFS= read -r -d '' J < "$2"
+V="$(rastro_tool_input_get "$J" command)"
+printf '%s' "$V" > "$3"
+SH
+# Serializador isolado: escapa o texto do arquivo e monta UMA string JSON com ele.
+cat > "$AH_T/serializa.sh" <<'SH'
+. "$1/comum/rastro.sh"
+IFS= read -r -d '' TEXTO < "$2"
+rastro_json_escape_em E "$TEXTO"
+printf '{"detalhe":"%s"}' "$E" > "$3"
+SH
+# Gravador isolado: o desfecho publico de uma gravacao, como a skill o le (DS-159).
+cat > "$AH_T/grava.sh" <<'SH'
+. "$1/comum/rastro.sh"
+rastro_grava_trabalho "$2" "$3" task_iniciada skill ok "evento de prova" '[]' '"sessao":"seg@1","harness":"seg"'
+printf '%s' "${RASTRO_GRAVACAO:-vazio}"
+SH
+
+ah_payload() { # ah_payload <arquivo-com-o-comando> <cwd> <arquivo-de-saida>
+  python3 -c '
+import json, sys
+texto = open(sys.argv[1], "rb").read().decode("utf-8")
+linha = json.dumps({"cwd": sys.argv[2], "tool_name": "Bash", "tool_input": {"command": texto}})
+open(sys.argv[3], "w", encoding="utf-8").write(linha + "\0")
+' "$1" "$2" "$3"
+}
+ah_bytes() { od -An -c < "$1" | tr -s ' \n' ' '; }
+
+# ---------------------------------------------------------------- 1. leitura do payload
+ah_leitura() { # ah_leitura <nome> <texto> <detalhe do caso>
+  local nome="$1" det="$3" rc
+  printf '%s' "$2" > "$AH_T/fonte.txt"
+  ah_payload "$AH_T/fonte.txt" /x "$AH_T/payload.json"
+  PATH="$AH_SEMJQ" bash "$AH_T/extrai.sh" "$AH_H" "$AH_T/payload.json" "$AH_T/sem.txt"
+  bash "$AH_T/extrai.sh" "$AH_H" "$AH_T/payload.json" "$AH_T/com.txt"
+  cmp -s "$AH_T/sem.txt" "$AH_T/fonte.txt" && cmp -s "$AH_T/com.txt" "$AH_T/fonte.txt"; rc=$?
+  [ "$rc" -eq 0 ] || det="sem-jq=[$(ah_bytes "$AH_T/sem.txt")] com-jq=[$(ah_bytes "$AH_T/com.txt")] esperado=[$(ah_bytes "$AH_T/fonte.txt")]"
+  afirma "$nome" "$rc" "$det"
+}
+printf -v AH_CTRL 'a\001b\002c'
+ah_leitura "ah1-controle-sobrevive-nas-duas-rotas" "$AH_CTRL" \
+  "U+0001 e U+0002 do payload voltam como os proprios bytes, com jq e sem jq"
+printf -v AH_MIX 'd:\\ e a\001b\002c'
+ah_leitura "ah2-barra-escapada-e-controle-no-mesmo-valor" "$AH_MIX" \
+  "barra invertida literal e controle convivem: nenhum dos dois vira o outro"
+printf -v AH_BARRA 'x\\y'
+ah_leitura "ah3-barra-escapada-sozinha-nao-regride" "$AH_BARRA" \
+  "a barra escapada continua decodificada (guarda contra consertar 1 quebrando 2)"
+printf -v AH_BSN 'p\\nq'
+ah_leitura "ah4-barra-literal-seguida-de-n-nao-vira-quebra" "$AH_BSN" \
+  "barra invertida seguida de 'n' e barra + n, nunca uma quebra de linha"
+AH_TODOS="$(ah_todos_controles)"
+ah_leitura "ah5-todo-controle-de-0x01-a-0x1f-sobrevive" "$AH_TODOS" \
+  "os 31 bytes de controle do payload voltam identicos nas duas rotas"
+
+# ---------------------------------------------------------------- 2. escrita da string JSON
+cat > "$AH_T/confere-json.py" <<'PY'
+import json, sys
+bruto = open(sys.argv[1], 'rb').read()
+cru = sorted(set(b for b in bruto if b < 0x20))
+assert not cru, 'byte(s) de controle CRU na string JSON: %r' % cru
+valor = json.loads(bruto.decode('utf-8'))['detalhe']   # falha se nao for JSON valido
+esperado = open(sys.argv[2], 'rb').read().decode('utf-8')
+assert valor == esperado, 'detalhe=%r esperado=%r' % (valor, esperado)
+PY
+ah_serializa() { # ah_serializa <nome> <texto> <detalhe do caso>
+  local nome="$1" det="$3" rc
+  printf '%s\0' "$2" > "$AH_T/texto.bin"
+  printf '%s' "$2" > "$AH_T/esperado.txt"
+  bash "$AH_T/serializa.sh" "$AH_H" "$AH_T/texto.bin" "$AH_T/linha.json"
+  python3 "$AH_T/confere-json.py" "$AH_T/linha.json" "$AH_T/esperado.txt" 2>"$AH_T/erro"; rc=$?
+  [ "$rc" -eq 0 ] || det="$(tr '\n' ' ' < "$AH_T/erro" | tr -s ' ' | tail -c 200)"
+  afirma "$nome" "$rc" "$det"
+}
+ah_serializa "ah6-serializa-controle-sem-byte-cru" "$AH_CTRL" \
+  "U+0001 e U+0002 saem escapados; a string e JSON valido e volta identica"
+ah_serializa "ah7-serializa-os-31-controles" "$AH_TODOS" \
+  "0x01..0x1F todos escapados, nenhum byte cru, round-trip exato"
+printf -v AH_ASPAS 'a"b\\c\011d\012e'
+ah_serializa "ah8-aspa-barra-tab-e-quebra-nao-regridem" "$AH_ASPAS" \
+  "aspa, barra, TAB e LF continuam escapados (guarda contra regressao do escape antigo)"
+
+# ---------------------------------------------------------------- 3. ponta a ponta pelo hook
+# O payload vai ao hook PostToolUse real; o oraculo le o jsonl GRAVADO como UTF-8 estrito e JSON
+# estrito, e confere o `detalhe` byte a byte. A fixture nao tem reivindicacao, entao o destino e
+# docs/eventos/sem-trabalho.jsonl (DS-155).
+AH_JSONL="$AH_T/repo/docs/eventos/sem-trabalho.jsonl"
+cat > "$AH_T/confere-jsonl.py" <<'PY'
+import json, sys
+bruto = open(sys.argv[1], 'rb').read()
+assert bruto.endswith(b'\n'), 'a linha gravada nao termina em LF'
+corpo = bruto[:-1]
+cru = sorted(set(b for b in corpo if b < 0x20))
+assert not cru, 'byte(s) de controle CRU no jsonl: %r' % cru
+evento = json.loads(corpo.decode('utf-8'))             # UTF-8 e JSON estritos
+assert evento['evento'] == 'suite_executada', 'evento gravado: %r' % evento['evento']
+esperado = open(sys.argv[2], 'rb').read().decode('utf-8')
+assert evento['detalhe'] == esperado, 'detalhe=%r esperado=%r' % (evento['detalhe'], esperado)
+PY
+ah_hook() { # ah_hook <nome> <comando> <rota> <PATH do caso>
+  local nome="$1" cmd="$2" rota="$3" caminho="$4" rc det
+  rm -rf "$AH_T/repo"; mkdir -p "$AH_T/repo/.git" "$AH_T/repo/docs/eventos"
+  printf '%s' "$cmd" > "$AH_T/cmd.txt"
+  printf '%s' "$cmd" > "$AH_T/esp-hook.txt"
+  ah_payload "$AH_T/cmd.txt" "$AH_T/repo" "$AH_T/p-hook.json"
+  (cd "$AH_T/repo" && PATH="$caminho" bash "$AH_H/comum/rastro-post.sh") < "$AH_T/p-hook.json" >/dev/null 2>&1
+  python3 "$AH_T/confere-jsonl.py" "$AH_JSONL" "$AH_T/esp-hook.txt" 2>"$AH_T/erro"; rc=$?
+  if [ "$rc" -eq 0 ]; then det="jsonl utf-8 e json estritos, sem controle cru, detalhe exato"
+  else det="$(tr '\n' ' ' < "$AH_T/erro" | tr -s ' ' | tail -c 200)"; fi
+  afirma "$nome-$rota" "$rc" "$det"
+}
+printf -v AH_SUITE 'npm test -- a\001b\002c\011d\033[0me\037f'
+for AH_ROTA in com-jq sem-jq; do
+  AH_PATH="$PATH"; [ "$AH_ROTA" = sem-jq ] && AH_PATH="$AH_SEMJQ"
+  ah_hook "ah9-suite-executada-com-controle-no-comando" "$AH_SUITE" "$AH_ROTA" "$AH_PATH"
+done
+
+# ---------------------------------------------------------------- 4. classificacao da gravacao
+# A fixture: a sessao `seg@1` reivindica o trabalho `outro`; pedir gravacao em `alvo` cai no ramo
+# `divergente`, e pedir num slug torto cai no ramo `invalido`. Os dois tentam gravar a linha de
+# diagnostico em docs/eventos/sem-trabalho.jsonl — e e essa tentativa que a fixture faz FALHAR,
+# trocando o arquivo por um DIRETORIO de mesmo nome (sem mexer em permissao, que varia de
+# plataforma): `printf >>` sobre diretorio nao escreve, e `[ -f ]` o mantem fora da varredura.
+# Os dois casos "gravavel" sao o controle: sem eles, um conserto que sempre devolvesse `falha`
+# passaria — e `divergente`/`invalido` sao exatamente a informacao que o codigo 4 publica.
+ah_fixture() { # ah_fixture <sem-trabalho gravavel: sim|nao>
+  rm -rf "$AH_T/g"; mkdir -p "$AH_T/g/.git" "$AH_T/g/docs/eventos"
+  mkdir -p "$AH_T/g/docs/sprintx/features/alvo/sprint-01"
+  printf '%s\n' '---' 'tasks:' '  - id: T-01.01' '---' \
+    > "$AH_T/g/docs/sprintx/features/alvo/sprint-01/tasks.md"
+  printf '%s\n' '{"ts":"2026-10-01T10:00:00Z","expx_eventos":1,"trabalho_id":"outro","ferramenta":"sprintx","origem":"skill","evento":"task_iniciada","fase":"f6","task":"T-09.09","agente":"principal","resultado":"ok","detalhe":null,"arquivos":[],"sessao":"seg@1","harness":"seg"}' \
+    > "$AH_T/g/docs/eventos/outro.jsonl"
+  if [ "$1" = sim ]; then : > "$AH_T/g/docs/eventos/sem-trabalho.jsonl"
+  else mkdir -p "$AH_T/g/docs/eventos/sem-trabalho.jsonl"; fi
+}
+ah_classifica() { # ah_classifica <gravavel> <pedido> -> ecoa RASTRO_GRAVACAO
+  ah_fixture "$1"
+  (cd "$AH_T/g" && EXPX_SESSAO=seg@1 EXPX_HARNESS=seg \
+    bash "$AH_T/grava.sh" "$AH_H" "$AH_T/g" "$2" 2>/dev/null)
+}
+AH_G="$(ah_classifica sim alvo)"
+[ "$AH_G" = divergente ]
+afirma "ah10-divergente-continua-divergente-quando-grava" $? "RASTRO_GRAVACAO=$AH_G (esperado divergente)"
+AH_G="$(ah_classifica nao alvo)"
+[ "$AH_G" = falha ]
+afirma "ah11-divergente-sem-poder-gravar-e-falha" $? "RASTRO_GRAVACAO=$AH_G (esperado falha, nao divergente)"
+AH_G="$(ah_classifica sim 'fora/do/lugar')"
+[ "$AH_G" = invalido ]
+afirma "ah12-invalido-continua-invalido-quando-grava" $? "RASTRO_GRAVACAO=$AH_G (esperado invalido)"
+AH_G="$(ah_classifica nao 'fora/do/lugar')"
+[ "$AH_G" = falha ]
+afirma "ah13-invalido-sem-poder-gravar-e-falha" $? "RASTRO_GRAVACAO=$AH_G (esperado falha, nao invalido)"
+
+# E o codigo PUBLICO que o agente le: 5 e "ambiente, nada pode ser escrito"; 4 e "contrato, feche
+# a task do outro trabalho". Com a gravacao impossivel, o codigo publico tem de ser 5.
+ah_publico() { # ah_publico <gravavel> -> ecoa o codigo de saida do escritor da skill
+  local rc
+  ah_fixture "$1"
+  (cd "$AH_T/g" && SPRINTX_RAIZ="$AH_T/g" EXPX_SESSAO=seg@1 EXPX_HARNESS=seg \
+    bash "$AH_SK/scripts/rastro.sh" task-iniciada alvo T-01.01 >/dev/null 2>&1)
+  rc=$?; printf '%s' "$rc"
+}
+AH_RC_PUB="$(ah_publico sim)"
+[ "$AH_RC_PUB" = 4 ]
+afirma "ah14-escritor-da-skill-diz-4-na-divergencia" $? "exit=$AH_RC_PUB (esperado 4: contrato)"
+AH_RC_PUB="$(ah_publico nao)"
+[ "$AH_RC_PUB" = 5 ]
+afirma "ah15-escritor-da-skill-diz-5-sem-poder-gravar" $? "exit=$AH_RC_PUB (esperado 5: ambiente, nunca 4)"
+
+rm -rf "$AH_T"
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"
 [ "$pulado" -eq 0 ] || echo "  ATENCAO: skip interno e buraco de cobertura da sprintx nesta plataforma, nao dependencia externa."
