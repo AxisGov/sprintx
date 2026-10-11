@@ -47,8 +47,17 @@ case "$FERRAMENTA" in
           RES="falha"
         elif printf '%s' "$SAIDA" | grep -qE '(^|[[:space:]])(FAILED|FAIL)([[:space:]]|$)'; then
           RES="falha"
+        elif printf '%s' "$SAIDA" | grep -qE '(^|[[:space:]])(\[ERROR\]|BUILD[[:space:]]+FAILURE)([[:space:]]|$)'; then
+          RES="falha"
         fi
-        rastro_grava "$RAIZ" suite_executada hook "$RES" "$(printf '%s' "$CMD" | cut -c1-120)" '[]'
+        # `detalhe` e uma linha pelo contrato. Normalize quebras antes de cortar em 120 BYTES,
+        # sem partir caractere UTF-8 multibyte e sem depender da locale: `cut -c` faria o corte
+        # depender da locale e o repetiria por linha (ver rastro_corta_utf8_em).
+        DETALHE="${CMD//$'\r\n'/ }"
+        DETALHE="${DETALHE//$'\r'/ }"
+        DETALHE="${DETALHE//$'\n'/ }"
+        rastro_corta_utf8_em DETALHE "$DETALHE" 120
+        rastro_grava "$RAIZ" suite_executada hook "$RES" "$DETALHE" '[]'
         ;;
     esac
     ;;

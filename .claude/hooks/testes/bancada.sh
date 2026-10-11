@@ -7138,6 +7138,168 @@ af_mutante "afm-mutante-5-ds167-ds168-apagadas" $? "$AF_M" \
 
 rm -rf "$AFW"
 
+echo "== AG. suite_executada.detalhe corta em 120 BYTES sem partir UTF-8, com e sem jq (5533410/bb1378f) =="
+# `cut -c1-120` nao serve para cortar o detalhe de `suite_executada`, por dois motivos
+# independentes:
+#
+#   1. o comportamento de `-c` (byte ou caractere) depende da locale do processo que roda o
+#      hook, que o hook nao controla. Sem locale UTF-8 o corte e por byte e deixa a sequencia
+#      multibyte do limite INCOMPLETA: o byte-lider (0xC3, no defeito observado) fica pendurado
+#      sem o byte de continuacao (0x80-0xBF) que ele anuncia, e o jsonl do trabalho deixa de ser
+#      UTF-8 valido — o contrato expx-eventos exige UTF-8 valido, e o painel para de decodificar
+#      o arquivo inteiro a partir dali (visto em docs/eventos/sem-trabalho.jsonl);
+#   2. `cut` corta LINHA POR LINHA. Comando de suite multilinha passa inteiro, com cada linha
+#      cortada em 120 — o detalhe estoura o limite em vez de respeita-lo.
+#
+# O corte certo e sempre por byte, com a sequencia incompleta do fim removida INTEIRA
+# (`rastro_corta_utf8_em`). Cada caso monta um comando de suite com prefixo ASCII de (120-k)
+# bytes e o caractere de <largura> bytes repetido, de forma que o limite de 120 caia exatamente
+# depois de k bytes do primeiro desses caracteres:
+#
+#   k <  largura -> sequencia incompleta no fim: tem de sumir inteira
+#   k == largura -> sequencia completa terminando NO byte 120: tem de ser preservada (guarda
+#                   contra aparar demais, e o unico papel desses casos)
+#
+# O oraculo le o jsonl GRAVADO pelo hook real (nao a funcao isolada) como UTF-8 estrito e JSON
+# estrito, e compara o `detalhe` com o valor exato esperado, medindo o limite em BYTES, que e a
+# unidade do contrato. As duas rotas de leitura do payload sao exercidas: com jq (processo) e no
+# fallback sem jq (builtin) — e por elas que o comando chega ao corte.
+AG_T="$(mktemp -d)"
+AG_H="$(cd "$H" && pwd)"
+AG_JSONL="$AG_T/repo/docs/eventos/sem-trabalho.jsonl"
+
+# Um PATH equivalente ao atual, sem nenhum `jq` executavel: mesma tecnica da secao W (espelho de
+# symlinks dos diretorios que tem jq), com espelho proprio porque a secao W apaga o dela no fim.
+ag_path_sem_jq() {
+  local d f espelho novo="" i=0 IFS=:
+  for d in $PATH; do
+    [ -n "$d" ] || continue
+    if [ -x "$d/jq" ]; then
+      i=$((i+1)); espelho="$AG_T/bin$i"
+      if [ ! -d "$espelho" ]; then
+        mkdir -p "$espelho"
+        for f in "$d"/*; do
+          [ -e "$f" ] || continue
+          [ "${f##*/}" = jq ] && continue
+          ln -sf "$f" "$espelho/${f##*/}" 2>/dev/null
+        done
+      fi
+      novo="$novo:$espelho"
+    else
+      novo="$novo:$d"
+    fi
+  done
+  printf '%s' "${novo#:}"
+}
+AG_SEMJQ="$(ag_path_sem_jq)"
+
+# Fixture minima, como na secao Q: raiz com .git e docs/eventos. Sem reivindicacao de sessao no
+# rastro, o destino do evento e docs/eventos/sem-trabalho.jsonl (DS-155) — o arquivo do defeito.
+ag_roda() { # ag_roda <comando> <PATH do caso> [resposta da ferramenta]
+  rm -rf "$AG_T/repo"; mkdir -p "$AG_T/repo/.git" "$AG_T/repo/docs/eventos"
+  python3 -c "
+import json, sys
+print(json.dumps({'cwd': sys.argv[1], 'tool_name': 'Bash', 'tool_input': {'command': sys.argv[2]}, 'tool_response': sys.argv[3]}))
+" "$AG_T/repo" "$1" "${3-}" > "$AG_T/payload.json"
+  (cd "$AG_T/repo" && PATH="$2" bash "$AG_H/comum/rastro-post.sh") < "$AG_T/payload.json" >/dev/null 2>&1
+}
+ag_confere() { # ag_confere <detalhe esperado> — jsonl UTF-8 estrito, JSON estrito, detalhe exato
+  AG_ESPERADO="$1" python3 - "$AG_JSONL" 2>"$AG_T/erro" <<'PY'
+import json, os, sys
+bruto = open(sys.argv[1], 'rb').read()
+texto = bruto.decode('utf-8')  # UnicodeDecodeError se sobrou byte UTF-8 invalido
+linhas = [l for l in texto.splitlines() if l.strip()]
+assert len(linhas) == 1, 'esperava 1 linha no jsonl, veio %d' % len(linhas)
+evento = json.loads(linhas[0])  # falha se a linha nao for JSON valido
+assert evento['evento'] == 'suite_executada', 'evento gravado: %r' % evento['evento']
+detalhe = evento['detalhe']
+tam = len(detalhe.encode('utf-8'))
+assert tam <= 120, 'detalhe com %d bytes, o limite e 120' % tam
+esperado = os.environ['AG_ESPERADO']
+assert detalhe == esperado, 'detalhe=%r (%d bytes) esperado=%r' % (detalhe, tam, esperado)
+PY
+}
+ag_erro() { tr '\n' ' ' < "$AG_T/erro" | tail -c 180; }
+ag_caso() { # ag_caso <nome> <char> <largura> <k> <rota> <PATH do caso>
+  local nome="$1" ch="$2" largura="$3" k="$4" rota="$5" caminho="$6" enchimento prefixo esperado rc det
+  # "npm test -- " tem 12 bytes, logo 108-k de enchimento fecham os 120-k do prefixo. A troca de
+  # espaco por `x` e so no enchimento: em "npm test -- " ela desfaria o padrao de suite do hook.
+  printf -v enchimento '%*s' "$((108 - k))" ''
+  prefixo="npm test -- ${enchimento// /x}"
+  if [ "$k" -eq "$largura" ]; then esperado="$prefixo$ch"; else esperado="$prefixo"; fi
+  ag_roda "$prefixo$ch$ch$ch" "$caminho"
+  ag_confere "$esperado"; rc=$?
+  if [ "$rc" -eq 0 ]; then det="limite cai depois de $k de $largura bytes; jsonl utf-8, json valido, detalhe exato"
+  else det="$(ag_erro)"; fi
+  afirma "$nome-$rota" "$rc" "$det"
+}
+# Comando multilinha vira UMA linha de texto antes do corte, como exige o contrato de `detalhe`.
+# Aqui o byte 120 cai no meio do 'a' acentuado da SEGUNDA linha ja normalizada — prova as duas
+# coisas de uma vez: as quebras viram espaco e a sequencia incompleta do fim sai.
+ag_multilinha() { # ag_multilinha <rota> <PATH do caso>
+  local rota="$1" caminho="$2" enchimento l1 l2 l3 cmd esperado rc det
+  printf -v enchimento '%*s' 48 ''; l1="npm test -- ${enchimento// /x}"  # 60 bytes
+  printf -v l2 '%*s' 58 ''; l2="${l2// /y}"                              # bytes 62..119
+  printf -v l3 '%*s' 30 ''; l3="${l3// /z}"                              # depois do limite
+  cmd="$l1"$'\n'"$l2"'á'$'\n'"$l3"                                       # 'á' nos bytes 120 e 121
+  esperado="$l1 $l2"
+  ag_roda "$cmd" "$caminho"
+  ag_confere "$esperado"; rc=$?
+  if [ "$rc" -eq 0 ]; then det="3 linhas normalizadas em uma: 119 bytes, sem o 'a' acentuado partido"
+  else det="$(ag_erro)"; fi
+  afirma "ag11-multilinha-normalizado-em-uma-linha-$rota" "$rc" "$det"
+}
+# O espelho tem de esconder o jq E continuar servindo o resto: espelho vazio (ou apagado) faria
+# todos os casos sem jq passarem sem rodar nada. Na maquina sem jq e no-op, e as duas rotas
+# coincidem — como na secao W.
+ag_sandbox_valida() {
+  PATH="$AG_SEMJQ" command -v jq >/dev/null 2>&1 && return 1
+  PATH="$AG_SEMJQ" command -v bash >/dev/null 2>&1 || return 1
+  PATH="$AG_SEMJQ" command -v grep >/dev/null 2>&1 || return 1
+  return 0
+}
+ag_sandbox_valida; AG_RC=$?
+afirma "ag0-sandbox-esconde-jq-e-serve-o-resto" "$AG_RC" "PATH do caso sem jq, com bash e grep"
+
+for AG_ROTA in com-jq sem-jq; do
+  AG_PATH="$PATH"; [ "$AG_ROTA" = sem-jq ] && AG_PATH="$AG_SEMJQ"
+  ag_caso "ag1-2b-parte-1-de-2"   'á'  2 1 "$AG_ROTA" "$AG_PATH"
+  ag_caso "ag2-2b-completo"       'á'  2 2 "$AG_ROTA" "$AG_PATH"
+  ag_caso "ag3-3b-parte-1-de-3"   '€'  3 1 "$AG_ROTA" "$AG_PATH"
+  ag_caso "ag4-3b-parte-2-de-3"   '€'  3 2 "$AG_ROTA" "$AG_PATH"
+  ag_caso "ag5-3b-completo"       '€'  3 3 "$AG_ROTA" "$AG_PATH"
+  ag_caso "ag6-4b-parte-1-de-4"   '🚀' 4 1 "$AG_ROTA" "$AG_PATH"
+  ag_caso "ag7-4b-parte-2-de-4"   '🚀' 4 2 "$AG_ROTA" "$AG_PATH"
+  ag_caso "ag8-4b-parte-3-de-4"   '🚀' 4 3 "$AG_ROTA" "$AG_PATH"
+  ag_caso "ag9-4b-completo"       '🚀' 4 4 "$AG_ROTA" "$AG_PATH"
+  ag_caso "ag10-ascii-no-limite"  'Z'  1 1 "$AG_ROTA" "$AG_PATH"
+  ag_multilinha "$AG_ROTA" "$AG_PATH"
+done
+
+# Maven e uma suite suportada. Saidas canonicas de falha nao usam necessariamente a palavra
+# `FAIL` isolada: `[ERROR]` e `BUILD FAILURE` tambem precisam gravar resultado `falha`.
+ag_roda "mvn test" "$PATH" $'[ERROR] Failed to execute goal\n[INFO] BUILD FAILURE'
+python3 - "$AG_JSONL" 2>"$AG_T/erro" <<'PY'
+import json, sys
+evento = json.loads(open(sys.argv[1], encoding='utf-8').readline())
+assert evento['resultado'] == 'falha', 'resultado Maven=%r, esperado falha' % evento['resultado']
+PY
+AG_RC=$?
+afirma "ag12-maven-build-failure-e-falha" "$AG_RC" "[ERROR] e BUILD FAILURE classificam mvn test como falha"
+
+# A correcao mora num lugar so: as duas rotas que EXECUTAM o hook — settings.json do Claude Code
+# e o plugin do OpenCode — invocam o mesmo comum/rastro-post.sh, e nenhum hook volta a cortar
+# texto com `cut -c` (que e byte ou caractere conforme a locale, e corta linha por linha).
+ag_cut_em_codigo() { # usos de `cut -c` em CODIGO de hook (comentario que o cita nao conta)
+  grep -rn 'cut -c' "$H/comum" "$H/sprintx" 2>/dev/null | sed 's/^[^:]*:[0-9]*://' | grep -v '^[[:space:]]*#'
+}
+AG_CUT="$(ag_cut_em_codigo)"; AG_CUT="${AG_CUT//$'\n'/ | }"
+AG_ROTA_CC="$(conta "$H/../settings.json" 'comum/rastro-post.sh')"
+AG_ROTA_OC="$(conta "$H/../../.opencode/plugin/sprintx.ts" 'comum/rastro-post.sh')"
+[ -z "$AG_CUT" ] && [ "$AG_ROTA_CC" -eq 1 ] && [ "$AG_ROTA_OC" -eq 1 ]; AG_RC=$?
+afirma "ag13-rotas-compartilham-o-mesmo-hook" "$AG_RC" "rotas para comum/rastro-post.sh: claude-code=$AG_ROTA_CC opencode=$AG_ROTA_OC; cut -c em codigo de hook: ${AG_CUT:-nenhum}"
+rm -rf "$AG_T"
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"
 [ "$pulado" -eq 0 ] || echo "  ATENCAO: skip interno e buraco de cobertura da sprintx nesta plataforma, nao dependencia externa."
