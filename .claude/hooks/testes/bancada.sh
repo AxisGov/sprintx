@@ -7429,6 +7429,26 @@ AH_TODOS="$(ah_todos_controles)"
 ah_leitura "ah5-todo-controle-de-0x01-a-0x1f-sobrevive" "$AH_TODOS" \
   "os 31 bytes de controle do payload voltam identicos nas duas rotas"
 
+# O gerador normal acima usa json.dumps. Estes dois casos escrevem o JSON de entrada a mao para
+# fixar a fronteira que ele nao consegue distinguir: U+005C seguido de `n`, literal ou codificado
+# como outro U+XXXX, tem de virar barra + n — nunca LF. A rota com jq e o fallback sem jq precisam
+# devolver exatamente os mesmos dois bytes.
+ah_json_manual() { # ah_json_manual <nome> <valor JSON sem aspas> <valor esperado>
+  local nome="$1" codificado="$2" esperado="$3" rc det
+  printf '{"cwd":"/x","tool_name":"Bash","tool_input":{"command":"%s"}}\0' \
+    "$codificado" > "$AH_T/payload-manual.json"
+  printf '%s' "$esperado" > "$AH_T/esperado-manual.txt"
+  PATH="$AH_SEMJQ" bash "$AH_T/extrai.sh" "$AH_H" "$AH_T/payload-manual.json" "$AH_T/sem-manual.txt"
+  bash "$AH_T/extrai.sh" "$AH_H" "$AH_T/payload-manual.json" "$AH_T/com-manual.txt"
+  cmp -s "$AH_T/sem-manual.txt" "$AH_T/esperado-manual.txt" \
+    && cmp -s "$AH_T/com-manual.txt" "$AH_T/esperado-manual.txt" \
+    && cmp -s "$AH_T/sem-manual.txt" "$AH_T/com-manual.txt"; rc=$?
+  [ "$rc" -eq 0 ] || det="sem-jq=[$(ah_bytes "$AH_T/sem-manual.txt")] com-jq=[$(ah_bytes "$AH_T/com-manual.txt")] esperado=[$(ah_bytes "$AH_T/esperado-manual.txt")]"
+  afirma "$nome" "$rc" "${det:-barra + n literal, igual com jq e sem jq}"
+}
+ah_json_manual "ah5b-u005c-seguido-de-n-nao-vira-lf" '\u005cn' '\n'
+ah_json_manual "ah5c-u005c-e-u006e-nao-viram-lf" '\u005c\u006e' '\n'
+
 # ---------------------------------------------------------------- 2. escrita da string JSON
 cat > "$AH_T/confere-json.py" <<'PY'
 import json, sys
@@ -7542,6 +7562,62 @@ afirma "ah14-escritor-da-skill-diz-4-na-divergencia" $? "exit=$AH_RC_PUB (espera
 AH_RC_PUB="$(ah_publico nao)"
 [ "$AH_RC_PUB" = 5 ]
 afirma "ah15-escritor-da-skill-diz-5-sem-poder-gravar" $? "exit=$AH_RC_PUB (esperado 5: ambiente, nunca 4)"
+
+# ---------------------------------------------------------------- 5. mutantes dos tres contratos
+# Copias temporarias do helper real provam que os casos acima nao sao decorativos. Cada mutante
+# ressuscita exatamente um dos defeitos: reprocessar escapes curtos depois de U+XXXX, deixar os
+# controles exoticos crus e mascarar uma falha de escrita com a classe de contrato.
+AH_MUT="$AH_T/mutantes"
+ah_copia_rastro() { # ah_copia_rastro <nome> -> ecoa a raiz da copia
+  local d="$AH_MUT/$1"
+  mkdir -p "$d/comum"
+  cp "$AH_H/comum/rastro.sh" "$d/comum/rastro.sh"
+  printf '%s' "$d"
+}
+
+# m1 — simula a ordem antiga: o resultado de U+XXXX volta a passar pelos escapes curtos.
+AH_M1="$(ah_copia_rastro ordem-antiga)"
+AH_OLD_ORDER='          _v="$_out" ;;'
+IFS= read -r -d '' AH_NEW_ORDER <<'EOF' || true
+          _v="${_out//\\n/$'\n'}" ;;
+EOF
+muta_lit "$AH_M1/comum/rastro.sh" "$AH_M1/comum/rastro.sh.m" "$AH_OLD_ORDER" "$AH_NEW_ORDER" \
+  && mv "$AH_M1/comum/rastro.sh.m" "$AH_M1/comum/rastro.sh"
+AH_MRC=$?
+PATH="$AH_SEMJQ" bash "$AH_T/extrai.sh" "$AH_M1" "$AH_T/payload-manual.json" "$AH_T/m1.txt" 2>/dev/null
+[ "$AH_MRC" -eq 0 ] && ! cmp -s "$AH_T/m1.txt" "$AH_T/esperado-manual.txt"; AH_RC=$?
+afirma "ahm1-ordem-antiga-morre-no-u005c-u006e" "$AH_RC" \
+  "a copia que reprocessa escapes curtos nao devolve barra + n"
+
+# m2 — remove o escape generico que cobre os controles sem forma curta.
+AH_M2="$(ah_copia_rastro sem-controle-generico)"
+AH_OLD_CTRL='        s="${s//"$_b"/\\u00$_hex}"'
+AH_NEW_CTRL='        : # mutante: controle exotico fica cru'
+muta_lit "$AH_M2/comum/rastro.sh" "$AH_M2/comum/rastro.sh.m" "$AH_OLD_CTRL" "$AH_NEW_CTRL" \
+  && mv "$AH_M2/comum/rastro.sh.m" "$AH_M2/comum/rastro.sh"
+AH_MRC=$?
+printf '%s\0' "$AH_CTRL" > "$AH_T/m2.bin"
+printf '%s' "$AH_CTRL" > "$AH_T/m2-esperado.txt"
+bash "$AH_T/serializa.sh" "$AH_M2" "$AH_T/m2.bin" "$AH_T/m2.json" 2>/dev/null
+python3 "$AH_T/confere-json.py" "$AH_T/m2.json" "$AH_T/m2-esperado.txt" >/dev/null 2>&1
+AH_BAD=$?
+[ "$AH_MRC" -eq 0 ] && [ "$AH_BAD" -ne 0 ]; AH_RC=$?
+afirma "ahm2-sem-escape-generico-morre-no-json-estrito" "$AH_RC" \
+  "a copia deixa U+0001/U+0002 crus e o oraculo JSON estrito reprova"
+
+# m3 — volta a atribuir a classe depois da tentativa de gravacao, apagando `falha`.
+AH_M3="$(ah_copia_rastro mascara-falha)"
+AH_OLD_FALHA='  [ "${RASTRO_GRAVACAO:-}" = falha ] || RASTRO_GRAVACAO="$1"'
+AH_NEW_FALHA='  RASTRO_GRAVACAO="$1"'
+muta_lit "$AH_M3/comum/rastro.sh" "$AH_M3/comum/rastro.sh.m" "$AH_OLD_FALHA" "$AH_NEW_FALHA" \
+  && mv "$AH_M3/comum/rastro.sh.m" "$AH_M3/comum/rastro.sh"
+AH_MRC=$?
+ah_fixture nao
+AH_MUT_G="$(cd "$AH_T/g" && EXPX_SESSAO=seg@1 EXPX_HARNESS=seg \
+  bash "$AH_T/grava.sh" "$AH_M3" "$AH_T/g" alvo 2>/dev/null)"
+[ "$AH_MRC" -eq 0 ] && [ "$AH_MUT_G" != falha ]; AH_RC=$?
+afirma "ahm3-classe-que-mascara-falha-morre-na-precedencia" "$AH_RC" \
+  "a copia devolve $AH_MUT_G em vez de falha, e ah11/ah13 a rejeitam"
 
 rm -rf "$AH_T"
 
