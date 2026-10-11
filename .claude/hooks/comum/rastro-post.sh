@@ -39,7 +39,14 @@ case "$FERRAMENTA" in
       *"npm test"*|*"npm run test"*|*"yarn test"*|*"pnpm test"*|\
       *pytest*|*"go test"*|*"cargo test"*|*jest*|*vitest*|*rspec*|*phpunit*|*"dotnet test"*|*"mvn test"*)
         # resultado da suite: o painel quer saber se passou.
-        SAIDA="$(rastro_json_get "$ENTRADA" tool_response)"
+        #
+        # O texto sai pelo helper que aceita `tool_response` como string E como objeto (no Bash o
+        # Claude Code entrega `{"stdout":...,"stderr":...}`), nas duas rotas de leitura; e a cor
+        # do terminal e removida ANTES de classificar, porque Maven e Surefire colam a sequencia
+        # ANSI nos dois lados de `[ERROR]` e de `BUILD FAILURE` e assim apagam a fronteira de
+        # espaco em branco que os padroes abaixo procuram — suite vermelha gravada como `ok`.
+        rastro_tool_response_em SAIDA "$ENTRADA"
+        rastro_sem_ansi_em SAIDA "$SAIDA"
         RES="ok"
         # Cuidado com "0 failed", que e o caso VERDE e aparece em quase toda
         # saida de suite: o [1-9] no inicio do numero e o que separa os dois.

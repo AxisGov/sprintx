@@ -73,7 +73,7 @@ dependências estão satisfeitas; sem nenhuma, registre um bloqueio `task_reivin
    bash <raiz-da-skill>/scripts/rastro.sh task-iniciada <slug> <T-NN.MM>
    ```
 
-   O escritor grava `task_iniciada` com a identidade desta sessão, que ele mesmo deriva; é ela que faz o hook `escopo-da-task` aceitar as edições da task. Você não informa sessão nem harness, não copia identidade de mensagem nenhuma e não monta a linha à mão. Código diferente de `0`: nada foi gravado — siga a tabela de respostas de `references/08-rastro.md`. Grave `task: T-NN.MM` em `.expx/estado.json` (`references/09-estado.md`).
+   O escritor grava `task_iniciada` com a identidade desta sessão, que ele mesmo deriva; é ela que faz o hook `escopo-da-task` aceitar as edições da task. Você não informa sessão nem harness, não copia identidade de mensagem nenhuma e não monta a linha à mão. Código diferente de `0`: nada foi gravado e a task **não** está reivindicada — **não comece a editar**, porque o `escopo-da-task` barraria a primeira edição com `sessao_ambigua`; siga a tabela de respostas de `references/08-rastro.md`, que para os três `task_*` manda registrar bloqueio, nunca seguir sem o evento nem gravá-lo à mão. Grave `task: T-NN.MM` em `.expx/estado.json` (`references/09-estado.md`).
 
    **Passo 2.0 — obrigação de `fraco:teste`, antes de qualquer código de produto.** Liste as
    obrigações que a última F5 deixou:

@@ -134,13 +134,34 @@ rastro_identidade_em() {
 
 # Escapa uma string para caber dentro de um JSON string literal.
 # Ordem importa: a barra invertida primeiro, senao escapamos o que ja escapamos.
+#
+# JSON proibe caractere de controle CRU dentro de string (U+0000..U+001F). Escapar so TAB, CR e
+# LF deixava todo o resto passar inteiro — e um comando de suite com cor de terminal (ESC), barra
+# de progresso ou separador de registro grava uma linha que NAO e JSON valido: o leitor do rastro
+# perde o arquivo a partir dali, o mesmo estrago do byte UTF-8 partido que rastro_corta_utf8_em
+# evita. Os cinco controles com forma curta saem como `\b \t \n \f \r`; TODO o resto sai como
+# `\u00XX`. O NUL nao chega aqui — ele nao cabe numa variavel de shell.
+#
+# O `case` guarda o laco: payload normal nao tem controle exotico, e nesse caminho — o de sempre —
+# a funcao continua sendo so substituicao em massa, sem processo e sem iteracao (regra 1).
+RASTRO_CTRL_EXOTICOS=$'\001\002\003\004\005\006\007\013\016\017\020\021\022\023\024\025\026\027\030\031\032\033\034\035\036\037'
 rastro_json_escape_em() { # rastro_json_escape_em <var> <texto>
-  local s="$2"
+  local s="$2" _i _b _hex
   s="${s//\\/\\\\}"
   s="${s//\"/\\\"}"
+  s="${s//$'\b'/\\b}"
   s="${s//	/\\t}"
-  s="${s//$'\r'/\\r}"
   s="${s//$'\n'/\\n}"
+  s="${s//$'\f'/\\f}"
+  s="${s//$'\r'/\\r}"
+  case "$s" in
+    *["$RASTRO_CTRL_EXOTICOS"]*)
+      for _i in 1 2 3 4 5 6 7 11 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31; do
+        printf -v _hex '%02x' "$_i"
+        printf -v _b '\\%03o' "$_i"; printf -v _b '%b' "$_b"
+        s="${s//"$_b"/\\u00$_hex}"
+      done ;;
+  esac
   printf -v "$1" '%s' "$s"
 }
 rastro_json_escape() { local _e; rastro_json_escape_em _e "$1"; printf '%s' "$_e"; }
@@ -214,6 +235,13 @@ rastro_le_entrada_em() {
 # quando havia jq — e, por ser o PRIMEIRO ramo do case, engolia os demais escapes quando nao
 # havia: um unico acento (`\u00e9`) devolvia `content` numa linha so.
 #
+# A ORDEM dos tres passos e contrato, nao gosto. A barra escapada e escondida atras de um
+# marcador (o byte 0x01, que JSON nunca deixa cru no texto de origem); os escapes de forma
+# curta saem em massa; e so no fim as sequencias `\uXXXX` sao decodificadas, devolvendo o
+# marcador a barra PEDACO A PEDACO. Uma passada final de devolucao confundiria o marcador
+# com um `\u0001` do proprio payload, que decodifica para o mesmo byte: o controle do
+# payload voltava como barra invertida, divergindo do jq na mesma leitura.
+#
 # Limites deliberados: substituto solto (sem o par) fica literal, em vez de virar UTF-8
 # invalido — o jq recusa o documento inteiro nesse caso; e `\u0000` e descartado, porque NUL
 # nao cabe numa variavel de shell.
@@ -225,14 +253,27 @@ rastro_json_campo_em() {
     *\\*)
       # 1. esconde a barra escapada, para `\\u0041` nao ser lido como `\u0041`.
       _v="${_v//\\\\/$'\001'}"
-      # 2. \uXXXX, com par substituto.
+      # 2. os escapes de forma curta, em massa. Vem ANTES das sequencias U+XXXX: fazia-se o
+      #    contrario, e um U+005C decodificado (a propria barra invertida) virava a barra de
+      #    um escape seguinte — o texto U+005C + 'n' saia como quebra de linha em vez de
+      #    barra + n. Nenhuma destas substituicoes produz o byte do marcador: delas so saem
+      #    os controles que TEM forma curta.
+      _v="${_v//\\\"/\"}"; _v="${_v//\\\//\/}"
+      _v="${_v//\\n/$'\n'}"; _v="${_v//\\t/	}"; _v="${_v//\\r/$'\r'}"
+      _v="${_v//\\b/$'\b'}"; _v="${_v//\\f/$'\f'}"
+      # 3. as sequencias U+XXXX, com par substituto — e o marcador volta a ser barra CHUNK A
+      #    CHUNK, aqui dentro, nunca numa passada final sobre o resultado. Um U+0001 do
+      #    payload decodifica para exatamente o byte do marcador: a passada final nao
+      #    distinguia os dois e devolvia barra invertida no lugar do controle que o payload
+      #    trazia — valor corrompido, e divergente do que o jq entrega na mesma leitura. O
+      #    codepoint decodificado entra em `_out` ja pronto, e `_out` nunca e varrido de novo.
       case "$_v" in
         *\\u*)
           _t="$_v"; _out=""
           while [ -n "$_t" ]; do
             _pre="${_t%%\\u*}"
-            if [ "$_pre" = "$_t" ]; then _out="$_out$_t"; break; fi
-            _out="$_out$_pre"; _t="${_t#"$_pre"\\u}"
+            if [ "$_pre" = "$_t" ]; then _out="$_out${_t//$'\001'/\\}"; break; fi
+            _out="$_out${_pre//$'\001'/\\}"; _t="${_t#"$_pre"\\u}"
             case "$_t" in
               [0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]*) ;;
               *) _out="$_out\\u"; continue ;;
@@ -256,13 +297,10 @@ rastro_json_campo_em() {
             _out="$_out$_ch"
           done
           _v="$_out" ;;
-      esac
-      # 3. os demais escapes, sempre — nao mais presos a um ramo exclusivo.
-      _v="${_v//\\\"/\"}"; _v="${_v//\\\//\/}"
-      _v="${_v//\\n/$'\n'}"; _v="${_v//\\t/	}"; _v="${_v//\\r/$'\r'}"
-      _v="${_v//\\b/$'\b'}"; _v="${_v//\\f/$'\f'}"
-      # 4. devolve a barra escapada.
-      _v="${_v//$'\001'/\\}" ;;
+        # Sem nenhuma sequencia U+XXXX no valor, nada pode ter decodificado para o byte do
+        # marcador: ali a devolucao em massa continua segura, e e um passo so.
+        *) _v="${_v//$'\001'/\\}" ;;
+      esac ;;
   esac
   printf -v "$1" '%s' "$_v"
 }
@@ -295,6 +333,61 @@ rastro_tool_input_get() {
   fi
   rastro_json_campo_em _saida "$json" "$chave"
   printf '%s' "$_saida"
+}
+
+# RASTRO_ESC — o byte ESC, e RASTRO_ANSI a sequencia CSI que comeca nele. Removidas da saida de
+# uma suite ANTES de classificar o resultado: Maven e Surefire saem coloridos, e a cor cola um
+# `m` imediatamente antes de `[ERROR]` e outro depois de `BUILD FAILURE` — nenhuma fronteira de
+# espaco em branco existe ali, e a suite vermelha era gravada como `ok`.
+RASTRO_ESC=$'\033'
+RASTRO_ANSI="$RASTRO_ESC"'\[[0-9;?]*[ -/]*[@-~]'
+
+# rastro_sem_ansi_em <var> <texto> — o texto sem sequencia ANSI nenhuma.
+#
+# O `case` e o que paga: saida sem ESC — a de toda suite que nao pinta, que e a regra em runner
+# nao interativo — sai pela atribuicao direta, sem processo (regra 1 do contrato). So quando ha
+# cor de verdade um `sed` roda, e aí um processo e mais barato que classificar errado.
+rastro_sem_ansi_em() {
+  case "$2" in
+    *"$RASTRO_ESC"*)
+      printf -v "$1" '%s' "$(printf '%s' "$2" | sed -E "s/$RASTRO_ANSI//g; s/$RASTRO_ESC//g")" ;;
+    *) printf -v "$1" '%s' "$2" ;;
+  esac
+}
+
+# rastro_tool_response_em <var> <json> — o TEXTO da resposta da ferramenta, qualquer que seja a
+# forma dela.
+#
+# `tool_response` nao e sempre string: no Bash o Claude Code entrega um OBJETO
+# (`{"stdout":...,"stderr":...,"interrupted":...}`). Lido como string, isso dava:
+#   - com jq, `.tool_response` de um objeto impresso como JSON — onde a quebra de linha aparece
+#     ESCAPADA e o token de erro perde a fronteira de espaco que o classificador procurava;
+#   - sem jq, NADA: o casamento de `"chave": "valor"` nao casa objeto, e a saida vinha vazia —
+#     nenhuma suite era classificada como falha nessa rota.
+#
+# Aqui o texto sai das STRINGS de dentro da resposta, concatenadas por quebra de linha de
+# verdade: com jq por recursao (`..`), que cobre qualquer forma presente ou futura; sem jq, pelas
+# chaves de texto que o contrato do harness nomeia, pelo mesmo helper de sempre — e `"chave"` so
+# casa chave de verdade, porque dentro de uma string JSON toda aspa e escapada.
+RASTRO_RESP_CHAVES='stdout stderr output content error message'
+#
+# Os nomes locais daqui (`_tx`, `_acc`) NAO podem repetir os de rastro_json_campo_em (`_v`, `_t`,
+# `_out`, `_pre`, ...): `local` lá dentro cria a variavel de novo, e um `printf -v _v` escreveria
+# na copia interna dela em vez da de fora — que ficaria indefinida.
+rastro_tool_response_em() {
+  local _j="$2" _k _tx="" _acc=""
+  if command -v jq >/dev/null 2>&1; then
+    printf -v "$1" '%s' "$(printf '%s' "$_j" | jq -r '.tool_response? | .. | select(type == "string")' 2>/dev/null)"
+    return 0
+  fi
+  rastro_json_campo_em _tx "$_j" tool_response
+  if [ -n "$_tx" ]; then printf -v "$1" '%s' "$_tx"; return 0; fi
+  for _k in $RASTRO_RESP_CHAVES; do
+    rastro_json_campo_em _tx "$_j" "$_k"
+    [ -n "$_tx" ] && _acc="$_acc${_acc:+
+}$_tx"
+  done
+  printf -v "$1" '%s' "$_acc"
 }
 
 # ------------------------------------------------------------ trabalho_id
@@ -461,6 +554,21 @@ $arq	"}"; tam="${tam%%
   if printf '%s\n' "$linha" >> "$arq" 2>/dev/null; then RASTRO_GRAVACAO=gravado; else RASTRO_GRAVACAO=falha; fi
 }
 
+# _rastro_classifica <classe> — poe <classe> em RASTRO_GRAVACAO, a menos que a tentativa de
+# gravar a linha de diagnostico tenha acabado de FALHAR: nesse caso `falha` fica.
+#
+# A classe de CONTRATO (`invalido`, `divergente`) diz "a linha nao foi para onde voce pediu, e o
+# diagnostico esta em sem-trabalho.jsonl". Ela era atribuida depois da gravacao do diagnostico,
+# por cima do desfecho dela — e quando nem o diagnostico entrava, o publico anunciava a causa
+# errada: o escritor da skill (DS-159) respondia codigo 4, "corrija o slug" / "feche a task
+# aberta do outro trabalho", quando o fato era que NADA pode ser escrito (codigo 5, ambiente).
+# Nao poder escrever e o fato mais forte dos dois: ele invalida o proprio diagnostico, e e o
+# unico que avisa o agente de que o rastro parou de aceitar linha.
+_rastro_classifica() {
+  [ "${RASTRO_GRAVACAO:-}" = falha ] || RASTRO_GRAVACAO="$1"
+  return 0
+}
+
 # rastro_grava_trabalho <raiz> <trabalho_id|-> <evento> <origem> <resultado> <detalhe> [arquivos_json] [extras_json]
 #
 # Grava UMA linha JSON em docs/eventos/<trabalho_id>.jsonl — no rastro do
@@ -483,6 +591,10 @@ $arq	"}"; tam="${tam%%
 # por nao conseguir escrever o proprio rastro. O desfecho fica em RASTRO_GRAVACAO
 # (gravado | divergente | invalido | falha), para quem NAO pode falhar aberto — o
 # scripts/rastro.sh da skill (DS-159) — saber se a linha entrou onde pediu.
+#
+# `falha` tem precedencia sobre `divergente` e `invalido` (`_rastro_classifica`): quando nem
+# a linha de diagnostico entra, o desfecho publico e a falha de escrita, nunca a classe de
+# contrato — ela apontaria o agente para o conserto errado.
 rastro_grava_trabalho() {
   local raiz="$1" pedido="$2" evento="$3" origem="$4" resultado="$5" detalhe="$6"
   local arquivos="${7:-[]}" extras="${8:-}"
@@ -510,12 +622,12 @@ rastro_grava_trabalho() {
     elif ! rastro_trabalho_valido "$pedido"; then
       _rastro_linha "$dir/sem-trabalho.jsonl" sem-trabalho acao_bloqueada "$origem" bloqueado \
         "trabalho_id_invalido: $evento pedido para '$pedido'" '[]' ''
-      RASTRO_GRAVACAO=invalido
+      _rastro_classifica invalido
       return 0
     elif [ -n "$sessao_tid" ] && [ "$sessao_tid" != "$pedido" ]; then
       _rastro_linha "$dir/sem-trabalho.jsonl" sem-trabalho acao_bloqueada "$origem" bloqueado \
         "contexto_de_trabalho_divergente: $evento pedido em '$pedido', a sessao reivindica '$sessao_tid'" '[]' ''
-      RASTRO_GRAVACAO=divergente
+      _rastro_classifica divergente
       return 0
     else
       tid="$pedido"
@@ -659,6 +771,10 @@ function _rv_linha(   task, k, s, d) {
   if ((k in _rv_ri) && (_rv_r > _rv_ri[k] || (_rv_r == _rv_ri[k] && FNR < _rv_fi[k]))) return
   _rv_ri[k] = _rv_r; _rv_fi[k] = FNR; _rv_dono[k] = s; _rv_campo[k] = d
 }
+# O dono de UMA (trabalho, task): a sessao do task_iniciada mais recente, vazia quando o mais
+# recente e um fechamento ou quando o evento e legado (sem `sessao`). Mesma resolucao que
+# _rv_fim usa — nao e uma segunda regra de ownership, e o mesmo _rv_dono.
+function _rv_dono_de(t, task) { return _rv_dono[t SUBSEP task] }
 function _rv_fim(ses,   k, p, i, j, x) {
   RV_N = 0
   for (k in _rv_dono) {
@@ -669,6 +785,48 @@ function _rv_fim(ses,   k, p, i, j, x) {
   for (i = 2; i <= RV_N; i++) { x = RV_L[i]; for (j = i - 1; j >= 1 && RV_L[j] > x; j--) RV_L[j + 1] = RV_L[j]; RV_L[j + 1] = x }
 }
 '
+
+# rastro_dona_da_task_em <var> <raiz> <trabalho_id> <task>
+#
+# A sessao que tem AQUELA task daquele trabalho aberta agora, ou vazio quando ninguem tem — a
+# reivindicacao ativa da DS-150/153, resolvida pelo MESMO awk canonico que o escopo-da-task usa
+# (_RASTRO_AWK_REIV), e nao por uma segunda regra de ownership.
+#
+# Le o arquivo corrente E os rotacionados daquele trabalho: a reivindicacao pode estar em
+# <trabalho_id>.1.jsonl depois de uma rotacao, e um portao que olhasse so o corrente veria a task
+# como livre justamente quando o rastro acabou de crescer. A ordem "rotacionado antes do
+# corrente" do contrato sai do rank do nome do arquivo, dentro do awk — nenhum sort por fora.
+#
+# Dona indeterminada NAO e dona ausente (DS-174). Os dois fatos saem por caminhos diferentes:
+#
+#   ausencia CONCLUSIVA -> variavel vazia, retorno 0. Nao ha pasta docs/eventos, nao ha arquivo
+#     daquele trabalho, ou os arquivos foram lidos e nenhum evento reivindica aquela task.
+#   leitura INCONCLUSIVA -> variavel vazia, retorno NAO-ZERO. Ha arquivo candidato e falta `awk`
+#     (3), ou o `awk` nao conseguiu ler/processar o que existe (4).
+#
+# Falhar aberto aqui — devolver vazio com 0 quando a leitura nao se completou — faria o portao de
+# fechamento (DS-171) ler "task livre" exatamente no ambiente em que a prova de ownership esta
+# ilegivel. Quem NAO pode falhar aberto e quem chama (scripts/rastro.sh da skill, DS-159), e e
+# ele que traduz o retorno nao-zero em codigo de ambiente. Nenhum outro chamador existe: os tres
+# `task_*` que apenas ABREM a task nao passam por aqui, e por isso `awk` nao se torna
+# pre-requisito de `task-iniciada`.
+rastro_dona_da_task_em() { # rastro_dona_da_task_em <var> <raiz> <trabalho_id> <task>
+  local _raiz="$2" _t="$3" _k="$4" _dir _f _saida="" _rc=0 _arqs=()
+  printf -v "$1" '%s' ""
+  _dir="$_raiz/docs/eventos"
+  [ -d "$_dir" ] || return 0
+  for _f in "$_dir/$_t".jsonl "$_dir/$_t".[0-9]*.jsonl; do [ -f "$_f" ] && _arqs+=("$_f"); done
+  [ "${#_arqs[@]}" -gt 0 ] || return 0
+  if ! command -v awk >/dev/null 2>&1; then
+    _rc=3
+  else
+    _saida="$(LC_ALL=C awk -v t="$_t" -v k="$_k" "$_RASTRO_AWK_REIV"'
+    { _rv_linha() }
+    END { print _rv_dono_de(t, k) }' "${_arqs[@]}" 2>/dev/null)" || _rc=4
+  fi
+  [ "$_rc" -eq 0 ] || return "$_rc"
+  printf -v "$1" '%s' "$_saida"
+}
 
 # _rastro_varre <raiz> <sessao> — UMA passada de awk por docs/eventos/*.jsonl: RASTRO_REIV
 # recebe as reivindicacoes ativas da sessao (o formato de rastro_reivindicacoes_da_sessao,
