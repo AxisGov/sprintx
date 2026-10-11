@@ -7621,7 +7621,7 @@ afirma "ahm3-classe-que-mascara-falha-morre-na-precedencia" "$AH_RC" \
 
 rm -rf "$AH_T"
 
-echo "== AI. fechar task e do DONO da reivindicacao, e task_iniciada que nao grava falha fechada (PR#12) =="
+echo "== AI. fechar task e do DONO da reivindicacao; dona indeterminada nao e dona ausente (PR#12, PR#14) =="
 # Dois defeitos de ownership no escritor oficial dos eventos de reivindicacao (DS-159):
 #
 #   1. `task-concluida` e `task-bloqueada` nao olhavam QUEM tem a task aberta. A reivindicacao e
@@ -7695,6 +7695,56 @@ ai_linha() { # ai_linha <arquivo> <evento> <task> — a ultima linha daquele eve
 }
 AI_LEGADO='{"ts":"2026-09-26T10:23:54Z","expx_eventos":1,"trabalho_id":"fx","ferramenta":"sprintx","origem":"skill","evento":"task_iniciada","fase":"f6","task":"T-01.01","agente":"principal","resultado":"ok","detalhe":"legado","arquivos":[]}'
 
+# PR#14 — o escritor com OUTRO PATH, para separar "nao ha dona" de "nao deu para saber quem e".
+ai_w_path() { # ai_w_path <PATH> <arv> <dir> <sessao> <args do escritor...>
+  local p="$1" a="$2" d="$3" s="$4"; shift 4
+  AI_OUT="$(cd "$d" && env -u EXPX_SESSAO -u EXPX_HARNESS CLAUDECODE=1 CLAUDE_CODE_SESSION_ID="$s" \
+    PATH="$p" bash "$a/.claude/skills/sprintx/scripts/rastro.sh" "$@" 2>&1)"; AI_RC=$?
+}
+# PATH espelhado por link, com UM buraco: `awk`. Mesmo recurso do `aj_path_sem_jq` da secao AJ —
+# sem ele o caso nao distingue "sem awk" de "sem nada no PATH". O espelho e por diretorio REAL
+# (`pwd -P`), para `/bin` e `/usr/bin` nao pagarem dois espelhos iguais.
+ai_path_sem_awk() {
+  local d f real espelho novo="" IFS=:
+  for d in $PATH; do
+    [ -n "$d" ] || continue
+    if [ -x "$d/awk" ]; then
+      real="$(cd "$d" 2>/dev/null && pwd -P)" || real="$d"
+      espelho="$AI_T/semawk$(printf '%s' "$real" | tr -c 'A-Za-z0-9' '-')"
+      if [ ! -d "$espelho" ]; then
+        mkdir -p "$espelho"
+        for f in "$d"/*; do
+          [ -e "$f" ] || continue
+          [ "${f##*/}" = awk ] && continue
+          ln -sf "$f" "$espelho/${f##*/}" 2>/dev/null
+        done
+      fi
+      novo="$novo:$espelho"
+    else
+      novo="$novo:$d"
+    fi
+  done
+  printf '%s' "${novo#:}"
+}
+AI_SEMAWK="$(ai_path_sem_awk)"
+# `awk` que EXISTE e falha: o erro de leitura/execucao, deterministico em qualquer plataforma
+# (inclusive Git Bash, onde brincar com permissao de arquivo nao e confiavel). Nenhum chmod,
+# nada para restaurar no cleanup alem do proprio $AI_T.
+AI_AWKRUIM="$AI_T/awk-ruim"
+mkdir -p "$AI_AWKRUIM"
+printf '#!/usr/bin/env bash\nprintf "awk: nao consegui ler o rastro\\n" >&2\nexit 2\n' > "$AI_AWKRUIM/awk"
+chmod +x "$AI_AWKRUIM/awk"
+if ( PATH="$AI_SEMAWK"; hash -r; command -v awk >/dev/null 2>&1 ); then AI_SB=1
+else ( PATH="$AI_SEMAWK"; hash -r; command -v grep >/dev/null 2>&1 \
+         && command -v git >/dev/null 2>&1 && command -v bash >/dev/null 2>&1 ); AI_SB=$?
+fi
+afirma "ai0-sandbox-esconde-awk-e-serve-o-resto" "$AI_SB" "PATH sem awk, com grep, git e bash"
+if ( PATH="$AI_AWKRUIM:$AI_SEMAWK"; hash -r; command -v awk >/dev/null 2>&1 ) \
+   && ! ( PATH="$AI_AWKRUIM:$AI_SEMAWK" "$AI_AWKRUIM/awk" 'END{}' </dev/null >/dev/null 2>&1 ); then AI_SB=0
+else AI_SB=1
+fi
+afirma "ai0b-sandbox-tem-awk-que-existe-e-falha" "$AI_SB" "stub de awk visivel no PATH e com saida 2"
+
 # ---------------------------------------------------------------- os casos
 ai_dono() { # A: outra sessao nao fecha nem relibera a reivindicacao; o dono fecha
   local a="$1"; ai_fx
@@ -7761,6 +7811,75 @@ ai_outra_task() { # E: o portao e por (trabalho, task): a task irma de outra ses
   ai_w "$a" "$AI_FX" s1 task-concluida fx T-01.01 ok src/a.ts; [ "$AI_RC" -eq 0 ] || return 1
   return 0
 }
+# PR#14 — dona INDETERMINADA nao e dona ausente.
+#
+# `rastro_dona_da_task_em` tinha UM resultado para dois fatos: "ninguem tem esta task" e "nao deu
+# para saber quem tem". Sem `awk` no PATH, ou com erro de leitura em `docs/eventos/`, ela devolvia
+# vazio com retorno 0 — e o portao do dono lia isso como task livre. Resultado: o fechamento de
+# outra sessao passava justamente no ambiente em que a prova de ownership esta ilegivel, que e o
+# pior momento possivel para presumir ausencia. Agora a ausencia CONCLUSIVA (sem pasta, sem
+# arquivo do trabalho, ou nenhum evento daquela task nos arquivos lidos) continua vazia com
+# retorno 0, e o inconclusivo sai por retorno NAO-ZERO; o escritor o traduz em codigo 5 de
+# ambiente e nao grava o fechamento.
+#
+# `task-iniciada` fica fora: o portao e so dos dois fechamentos, e abrir task continua sem
+# dependencia nova de `awk` — a varredura de contexto da biblioteca segue falhando aberta.
+ai_sem_awk_outra_sessao() { # sem `awk`, a reivindicacao e ILEGIVEL, nao e inexistente
+  local a="$1"; ai_fx
+  ai_w "$a" "$AI_FX" s1 task-iniciada fx T-01.01; [ "$AI_RC" -eq 0 ] || return 1
+  ai_w_path "$AI_SEMAWK" "$a" "$AI_FX" s2 task-concluida fx T-01.01 "fecho eu" src/a.ts
+  [ "$AI_RC" -eq 5 ] || return 1
+  [ -z "$(ai_linha "$AI_FX/docs/eventos/fx.jsonl" task_concluida T-01.01)" ] || return 1
+  ai_w_path "$AI_SEMAWK" "$a" "$AI_FX" s2 task-bloqueada fx T-01.01 B-01
+  [ "$AI_RC" -eq 5 ] || return 1
+  [ -z "$(ai_linha "$AI_FX/docs/eventos/fx.jsonl" task_bloqueada T-01.01)" ] || return 1
+  # com `awk` de volta, a reivindicacao de s1 esta intacta: o codigo 4 de sempre, e o dono fecha
+  ai_w "$a" "$AI_FX" s2 task-concluida fx T-01.01 ok src/a.ts; [ "$AI_RC" -eq 4 ] || return 1
+  ai_w "$a" "$AI_FX" s1 task-concluida fx T-01.01 ok src/a.ts; [ "$AI_RC" -eq 0 ]
+}
+ai_sem_awk_a_propria_dona() { # nem a dona fecha: o portao nao SABE que ela e a dona
+  local a="$1"; ai_fx
+  ai_w "$a" "$AI_FX" s1 task-iniciada fx T-01.01; [ "$AI_RC" -eq 0 ] || return 1
+  ai_w_path "$AI_SEMAWK" "$a" "$AI_FX" s1 task-concluida fx T-01.01 ok src/a.ts
+  [ "$AI_RC" -eq 5 ] || return 1
+  [ -z "$(ai_linha "$AI_FX/docs/eventos/fx.jsonl" task_concluida T-01.01)" ] || return 1
+  printf '%s' "$AI_OUT" | grep -qF 'prerequisito_ausente' || return 1
+  # e nada foi reliberado: a task continua dela
+  ai_h "$a" "$AI_FX" s1 src/a.ts; ai_ok || return 1
+  ai_h "$a" "$AI_FX" s2 src/a.ts; ai_barra sessao_ambigua
+}
+ai_awk_com_erro() { # `awk` que existe e falha e inconclusivo, nos dois fechamentos
+  local a="$1"; ai_fx
+  ai_w "$a" "$AI_FX" s1 task-iniciada fx T-01.01; [ "$AI_RC" -eq 0 ] || return 1
+  ai_w_path "$AI_AWKRUIM:$PATH" "$a" "$AI_FX" s2 task-concluida fx T-01.01 ok src/a.ts
+  [ "$AI_RC" -eq 5 ] || return 1
+  [ -z "$(ai_linha "$AI_FX/docs/eventos/fx.jsonl" task_concluida T-01.01)" ] || return 1
+  ai_w_path "$AI_AWKRUIM:$PATH" "$a" "$AI_FX" s1 task-bloqueada fx T-01.01 B-01
+  [ "$AI_RC" -eq 5 ] || return 1
+  [ -z "$(ai_linha "$AI_FX/docs/eventos/fx.jsonl" task_bloqueada T-01.01)" ]
+}
+ai_ausencia_conclusiva() { # ausencia REAL continua conclusiva e nao vira erro
+  local a="$1"; ai_fx
+  # (i) Sem pasta docs/eventos nenhuma: conclusivo ANTES de precisar de `awk`. Este trecho e
+  # tambem o controle do sandbox — se o PATH espelhado quebrasse o escritor, aqui nao sairia 0.
+  [ ! -e "$AI_FX/docs/eventos" ] || return 1
+  ai_w_path "$AI_SEMAWK" "$a" "$AI_FX" s1 task-concluida fx T-01.01 "sem dona" src/a.ts
+  [ "$AI_RC" -eq 0 ] || return 1
+  [ -n "$(ai_linha "$AI_FX/docs/eventos/fx.jsonl" task_concluida T-01.01)" ] || return 1
+  # (ii) Pasta existente e nenhum arquivo DAQUELE trabalho: tambem conclusivo antes do `awk`.
+  ai_fx; mkdir -p "$AI_FX/docs/eventos" || return 1
+  ai_w_path "$AI_SEMAWK" "$a" "$AI_FX" s1 task-bloqueada fx T-01.01 B-01
+  [ "$AI_RC" -eq 0 ] || return 1
+  [ -n "$(ai_linha "$AI_FX/docs/eventos/fx.jsonl" task_bloqueada T-01.01)" ] || return 1
+  # (iii) Arquivo do trabalho ja existe, mas nenhum evento da T-01.02: conclusivo pelo `awk`.
+  ai_w "$a" "$AI_FX" s1 task-concluida fx T-01.02 ok src/b.ts; [ "$AI_RC" -eq 0 ] || return 1
+  # (iv) Mas arquivo candidato COM `awk` ausente nao e ausencia: e inconclusivo, mesmo que a
+  # task pedida nao tenha dono nenhum ali dentro.
+  ai_fx
+  ai_w "$a" "$AI_FX" s1 task-iniciada fx T-01.02; [ "$AI_RC" -eq 0 ] || return 1
+  ai_w_path "$AI_SEMAWK" "$a" "$AI_FX" s1 task-concluida fx T-01.01 ok src/a.ts
+  [ "$AI_RC" -eq 5 ]
+}
 # O contrato publico: a tabela de respostas de 08-rastro.md e o passo 1 da 06-execucao.md.
 AI_LIT_C5='nos três `task_*`, **falha fechado como o código `3`**'
 AI_LIT_C5_PORQUE='sem `task_iniciada` não há reivindicação, e o `escopo-da-task` barra a primeira edição da task'
@@ -7770,6 +7889,10 @@ AI_LIT_EXEC='nada foi gravado e a task **não** está reivindicada'
 AI_LIT_DONO='Fechar a task é do dono da reivindicação'
 # A contradicao exata que havia: a linha do codigo 5 mandando seguir, sem distinguir os task_*.
 AI_LIT_PROIBE_C5_ANTIGO='!ou a escrita falhou — **nada foi gravado** | siga sem o evento; não grave à mão'
+# PR#14 — o codigo 5 passa a nomear a terceira causa, e o limite arquitetural fica escrito.
+AI_LIT_C5_LEITURA='a **reivindicação não pôde ser lida**'
+AI_LIT_INDET='Dona indeterminada não é dona ausente'
+AI_LIT_TOCTOU='check-then-append'
 ai_doc() { # F: o contrato diz o fail-closed, e a contradicao antiga nao sobrevive
   local d="$1/.claude/skills/sprintx"
   ad_lit "$d/references/08-rastro.md" "$AI_LIT_C5" \
@@ -7779,6 +7902,21 @@ ai_doc() { # F: o contrato diz o fail-closed, e a contradicao antiga nao sobrevi
          "$d/references/08-rastro.md" "$AI_LIT_DONO" \
          "$d/references/08-rastro.md" "$AI_LIT_PROIBE_C5_ANTIGO" \
          "$d/references/06-execucao.md" "$AI_LIT_EXEC"
+}
+ai_doc_inconclusivo() { # H: o codigo 5 nomeia a reivindicacao ilegivel, e o limite esta escrito
+  local d="$1/.claude/skills/sprintx"
+  ad_lit "$d/references/08-rastro.md" "$AI_LIT_C5_LEITURA" \
+         "$d/references/08-rastro.md" "$AI_LIT_INDET" \
+         "$d/references/08-rastro.md" "$AI_LIT_TOCTOU"
+}
+ai_ds174() { # I: DS-174 registrada, append-only, e a DS-171 anterior intacta
+  local v d="$1/.claude/skills/sprintx"
+  v="$(grep -F '| DS-174 |' "$d/DECISOES-DA-SKILL.md" 2>/dev/null)"
+  [ -n "$v" ] || return 1
+  printf '%s' "$v" | grep -qiF 'indeterminada' || return 1
+  printf '%s' "$v" | grep -qiF 'check-then-append' || return 1
+  printf '%s' "$v" | grep -qiF 'task-iniciada' || return 1
+  grep -qF '| DS-171 |' "$d/DECISOES-DA-SKILL.md"
 }
 ai_ds() { # G: DS-171 registrada, append-only, e a DS-159 anterior intacta
   local v d="$1/.claude/skills/sprintx"
@@ -7790,7 +7928,8 @@ ai_ds() { # G: DS-171 registrada, append-only, e a DS-159 anterior intacta
 }
 
 AI_CASOS="ai_dono ai_dono_bloqueada ai_legado ai_rotacao ai_iniciada_fora_do_portao
-ai_outra_task ai_doc ai_ds"
+ai_outra_task ai_doc ai_ds ai_sem_awk_outra_sessao ai_sem_awk_a_propria_dona ai_awk_com_erro
+ai_ausencia_conclusiva ai_doc_inconclusivo ai_ds174"
 ai_nome() {
   case "$1" in
     ai_dono)           echo "ai1-outra-sessao-nao-fecha-nem-relibera" ;;
@@ -7801,6 +7940,12 @@ ai_nome() {
     ai_outra_task)     echo "ai6-portao-e-por-trabalho-e-task-nao-por-sessao-global" ;;
     ai_doc)            echo "ai7-contrato-do-codigo-5-falha-fechado-sem-contradicao" ;;
     ai_ds)             echo "ai8-ds171-registrada-append-only" ;;
+    ai_sem_awk_outra_sessao)   echo "ai9-sem-awk-outra-sessao-nao-fecha-nem-grava" ;;
+    ai_sem_awk_a_propria_dona) echo "ai10-sem-awk-nem-a-dona-fecha-e-nada-e-gravado" ;;
+    ai_awk_com_erro)   echo "ai11-erro-do-awk-e-inconclusivo-nao-e-ausencia" ;;
+    ai_ausencia_conclusiva)    echo "ai12-ausencia-real-continua-conclusiva-e-da-zero" ;;
+    ai_doc_inconclusivo)       echo "ai13-codigo-5-nomeia-reivindicacao-ilegivel" ;;
+    ai_ds174)          echo "ai14-ds174-registrada-append-only" ;;
   esac
 }
 AI_REAL="$(cd "$H/../.." && pwd)"
@@ -7850,6 +7995,30 @@ ai_mutante "aim-mutante-6-execucao-sem-o-aviso-de-nao-reivindicada" $? "$AIM" "a
 AIM="$(ai_arvore m7)" && muta_lit "$AIM/.claude/skills/sprintx/DECISOES-DA-SKILL.md" "$AIM/ds.m" '| DS-171 |' '| DS-171-apagada |' \
   && mv "$AIM/ds.m" "$AIM/.claude/skills/sprintx/DECISOES-DA-SKILL.md"
 ai_mutante "aim-mutante-7-ds171-apagada" $? "$AIM" "ai_ds"
+# m8 — PR#14: o retorno inconclusivo da leitura da dona volta a ser 0. A funcao continua devolvendo
+#      a variavel vazia; o que morre e a distincao entre "nao tem dona" e "nao deu para saber".
+AIM="$(ai_m m8 "$AI_L" '  [ "$_rc" -eq 0 ] || return "$_rc"' '  [ "$_rc" -eq 0 ] || return 0')"
+ai_mutante "aim-mutante-8-inconclusivo-vira-ausencia" $? "$AIM" \
+  "ai_sem_awk_outra_sessao ai_sem_awk_a_propria_dona ai_awk_com_erro"
+# m9 — o escritor volta a ignorar o retorno da leitura e compara DONA mesmo sem ter lido nada.
+AIM="$(ai_m m9 "$AI_W" '    if ! rastro_dona_da_task_em DONA "$RAIZ" "$SLUG" "$ALVO"; then' \
+  '    rastro_dona_da_task_em DONA "$RAIZ" "$SLUG" "$ALVO" || true; if false; then')"
+ai_mutante "aim-mutante-9-escritor-ignora-leitura-inconclusiva" $? "$AIM" \
+  "ai_sem_awk_outra_sessao ai_sem_awk_a_propria_dona ai_awk_com_erro"
+# m10 — a ausencia CONCLUSIVA por falta de arquivo do trabalho passa a ser erro: fechar task que
+#       nunca foi aberta, com a pasta de eventos ja existindo, deixa de valer.
+AIM="$(ai_m m10 "$AI_L" '  [ "${#_arqs[@]}" -gt 0 ] || return 0' '  [ "${#_arqs[@]}" -gt 0 ] || return 3')"
+ai_mutante "aim-mutante-10-sem-arquivo-do-trabalho-vira-erro" $? "$AIM" "ai_ausencia_conclusiva"
+# m13 — e a ausencia CONCLUSIVA por falta da propria pasta docs/eventos tambem.
+AIM="$(ai_m m13 "$AI_L" '  [ -d "$_dir" ] || return 0' '  [ -d "$_dir" ] || return 3')"
+ai_mutante "aim-mutante-13-pasta-de-eventos-ausente-vira-erro" $? "$AIM" "ai_ausencia_conclusiva"
+# m11 — a tabela do codigo 5 perde a reivindicacao ilegivel e volta a listar duas causas so.
+AIM="$(ai_m m11 "$AI_R/08-rastro.md" "$AI_LIT_C5_LEITURA" 'a escrita falhou')"
+ai_mutante "aim-mutante-11-codigo-5-sem-a-reivindicacao-ilegivel" $? "$AIM" "ai_doc_inconclusivo"
+# m12 — DS-174 apagada do registro.
+AIM="$(ai_arvore m12)" && muta_lit "$AIM/.claude/skills/sprintx/DECISOES-DA-SKILL.md" "$AIM/ds.m" '| DS-174 |' '| DS-174-apagada |' \
+  && mv "$AIM/ds.m" "$AIM/.claude/skills/sprintx/DECISOES-DA-SKILL.md"
+ai_mutante "aim-mutante-12-ds174-apagada" $? "$AIM" "ai_ds174"
 
 rm -rf "$AI_T"
 

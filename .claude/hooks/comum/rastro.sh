@@ -797,18 +797,35 @@ function _rv_fim(ses,   k, p, i, j, x) {
 # como livre justamente quando o rastro acabou de crescer. A ordem "rotacionado antes do
 # corrente" do contrato sai do rank do nome do arquivo, dentro do awk — nenhum sort por fora.
 #
-# Falha aberta como todo o resto daqui: sem pasta, sem arquivo ou sem awk utilizavel, devolve
-# vazio. Quem NAO pode falhar aberto e quem chama (scripts/rastro.sh da skill, DS-159).
+# Dona indeterminada NAO e dona ausente (DS-174). Os dois fatos saem por caminhos diferentes:
+#
+#   ausencia CONCLUSIVA -> variavel vazia, retorno 0. Nao ha pasta docs/eventos, nao ha arquivo
+#     daquele trabalho, ou os arquivos foram lidos e nenhum evento reivindica aquela task.
+#   leitura INCONCLUSIVA -> variavel vazia, retorno NAO-ZERO. Ha arquivo candidato e falta `awk`
+#     (3), ou o `awk` nao conseguiu ler/processar o que existe (4).
+#
+# Falhar aberto aqui — devolver vazio com 0 quando a leitura nao se completou — faria o portao de
+# fechamento (DS-171) ler "task livre" exatamente no ambiente em que a prova de ownership esta
+# ilegivel. Quem NAO pode falhar aberto e quem chama (scripts/rastro.sh da skill, DS-159), e e
+# ele que traduz o retorno nao-zero em codigo de ambiente. Nenhum outro chamador existe: os tres
+# `task_*` que apenas ABREM a task nao passam por aqui, e por isso `awk` nao se torna
+# pre-requisito de `task-iniciada`.
 rastro_dona_da_task_em() { # rastro_dona_da_task_em <var> <raiz> <trabalho_id> <task>
-  local _raiz="$2" _t="$3" _k="$4" _dir _f _arqs=()
+  local _raiz="$2" _t="$3" _k="$4" _dir _f _saida="" _rc=0 _arqs=()
   printf -v "$1" '%s' ""
   _dir="$_raiz/docs/eventos"
   [ -d "$_dir" ] || return 0
   for _f in "$_dir/$_t".jsonl "$_dir/$_t".[0-9]*.jsonl; do [ -f "$_f" ] && _arqs+=("$_f"); done
   [ "${#_arqs[@]}" -gt 0 ] || return 0
-  printf -v "$1" '%s' "$(LC_ALL=C awk -v t="$_t" -v k="$_k" "$_RASTRO_AWK_REIV"'
+  if ! command -v awk >/dev/null 2>&1; then
+    _rc=3
+  else
+    _saida="$(LC_ALL=C awk -v t="$_t" -v k="$_k" "$_RASTRO_AWK_REIV"'
     { _rv_linha() }
-    END { print _rv_dono_de(t, k) }' "${_arqs[@]}" 2>/dev/null)"
+    END { print _rv_dono_de(t, k) }' "${_arqs[@]}" 2>/dev/null)" || _rc=4
+  fi
+  [ "$_rc" -eq 0 ] || return "$_rc"
+  printf -v "$1" '%s' "$_saida"
 }
 
 # _rastro_varre <raiz> <sessao> — UMA passada de awk por docs/eventos/*.jsonl: RASTRO_REIV
