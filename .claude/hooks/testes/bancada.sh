@@ -8048,6 +8048,98 @@ import json
 d = {}
 json.dump(d, open('docs/eventos/fx.jsonl','w'))
 P" "interpretador multissegmento que escreve"
+# PR#14 (achado 2): o destino de `-t`/`--target-directory` pode vir ANEXADO a opcao. A regra olhava
+# so a forma canonica (`-t dir`, `--target-directory=dir`), entao bastava colar o destino na opcao
+# (`cp -tdocs/eventos/ origem`) ou abreviar a opcao longa, como o getopt do GNU aceita, para a
+# escrita no rastro ficar invisivel.
+aj_tr_viola "aj31-cp-com-destino-anexado-em-bloco-curto-e-escrita" \
+  'cp -atdocs/eventos/ /tmp/f.jsonl' "-at com o destino colado na opcao"
+aj_tr_viola "aj32-cp-com-destino-anexado-a-t-e-escrita" \
+  'cp -tdocs/eventos/ /tmp/f.jsonl' "-t com o destino colado"
+aj_tr_viola "aj33-mv-com-destino-anexado-a-t-e-escrita" \
+  'mv -tdocs/eventos/ /tmp/f.jsonl' "mv -t colado"
+aj_tr_viola "aj34-install-com-destino-anexado-em-bloco-curto-e-escrita" \
+  'install -Dtdocs/eventos/ /tmp/f.jsonl' "install -Dt colado"
+aj_tr_viola "aj35-cp-com-opcao-longa-abreviada-e-escrita" \
+  'cp --targ=docs/eventos/ /tmp/f.jsonl' "--targ e abreviacao de --target-directory"
+aj_tr_viola "aj36-cp-com-opcao-longa-quase-inteira-e-escrita" \
+  'cp --target-director=docs/eventos/ /tmp/f.jsonl' "--target-director tambem e prefixo valido"
+aj_tr_viola "aj37-cp-com-opcao-longa-inteira-nao-regride" \
+  'cp --target-directory=docs/eventos/ /tmp/f.jsonl' "a forma canonica continua pega"
+# `rsync -t` e preservar TEMPO, nao destino: ali o destino continua POSICIONAL, nas duas direcoes.
+aj_tr_viola "aj38-rsync-t-tem-destino-posicional-e-escreve" \
+  'rsync -t /tmp/f.jsonl docs/eventos/fx.jsonl' "-t do rsync e tempo; o destino e o 2o operando"
+aj_tr_le "aj39-rsync-t-lendo-o-rastro-e-leitura" \
+  'rsync -t docs/eventos/fx.jsonl /tmp/copia.jsonl' "-t do rsync nao transforma origem em destino"
+# E o destino na opcao, anexado ou nao, apontando PARA FORA continua sendo leitura do rastro.
+aj_tr_le "aj40-destino-anexado-fora-do-rastro-e-leitura" \
+  'cp -t/tmp/ docs/eventos/fx.jsonl' "-t/tmp/ com o rastro como ORIGEM"
+aj_tr_le "aj41-destino-separado-fora-do-rastro-e-leitura" \
+  'cp -at /tmp/ docs/eventos/fx.jsonl' "-at /tmp/ com o rastro como ORIGEM"
+aj_tr_le "aj42-no-target-directory-nao-e-abreviacao-de-target-directory" \
+  'cp --no-target-directory docs/eventos/fx.jsonl /tmp/copia.jsonl' "--no-... nao e prefixo de --target-directory"
+
+# PR#14 (achado 3): wrappers TRANSPARENTES. `env cp ...` escreve o mesmo arquivo que `cp ...`, mas a
+# regra julgava o `env` como se fosse o comando — nome fora de toda lista, segmento ignorado,
+# escrita invisivel. Agora o classificador atravessa o wrapper, e as opcoes dele, ate o comando real.
+aj_tr_viola "aj43-env-com-interpretador-que-escreve-e-escrita" \
+  "env python3 -c \"open('docs/eventos/fx.jsonl','a').write('{}')\"" "env nao esconde o python3"
+aj_tr_viola "aj44-env-com-cp-para-o-rastro-e-escrita" \
+  'env cp /tmp/f.jsonl docs/eventos/fx.jsonl' "env nao esconde o cp"
+aj_tr_viola "aj45-timeout-com-duracao-posicional-e-escrita" \
+  'timeout 5 cp /tmp/f.jsonl docs/eventos/fx.jsonl' "a duracao 5 nao e o comando real"
+aj_tr_viola "aj46-sudo-com-u-e-usuario-e-escrita" \
+  'sudo -u deploy cp /tmp/f.jsonl docs/eventos/fx.jsonl' "-u consome o usuario; o comando real e o cp"
+aj_tr_viola "aj47-xargs-com-i-e-marcador-e-escrita" \
+  'xargs -I F cp F docs/eventos/fx.jsonl' "-I consome o marcador F"
+aj_tr_viola "aj48-env-com-atribuicao-de-variavel-e-escrita" \
+  'env LC_ALL=C cp /tmp/f.jsonl docs/eventos/fx.jsonl' "VAR=valor depois do env nao e o comando"
+aj_tr_viola "aj49-env-por-caminho-absoluto-e-escrita" \
+  '/usr/bin/env cp /tmp/f.jsonl docs/eventos/fx.jsonl' "/usr/bin/env e o mesmo wrapper"
+aj_tr_viola "aj50-wrapper-com-destino-anexado-e-escrita" \
+  'env cp -tdocs/eventos/ /tmp/f.jsonl' "os dois achados juntos: wrapper + destino anexado"
+# Cada wrapper da lista, um por um: atras de todos o comando real e o mesmo `cp` que a regra
+# reprova sem wrapper nenhum.
+aj_tr_viola "aj51-wrapper-command-e-atravessado" \
+  'command cp /tmp/f.jsonl docs/eventos/fx.jsonl' "command"
+aj_tr_viola "aj52-wrapper-exec-e-atravessado" \
+  'exec cp /tmp/f.jsonl docs/eventos/fx.jsonl' "exec"
+aj_tr_viola "aj53-wrapper-builtin-e-atravessado" \
+  'builtin cp /tmp/f.jsonl docs/eventos/fx.jsonl' "builtin"
+aj_tr_viola "aj54-wrapper-nohup-e-atravessado" \
+  'nohup cp /tmp/f.jsonl docs/eventos/fx.jsonl' "nohup"
+aj_tr_viola "aj55-wrapper-nice-e-atravessado" \
+  'nice cp /tmp/f.jsonl docs/eventos/fx.jsonl' "nice"
+aj_tr_viola "aj56-wrapper-nice-com-n-e-valor-e-atravessado" \
+  'nice -n 5 cp /tmp/f.jsonl docs/eventos/fx.jsonl' "nice -n 5 (opcao com valor separado)"
+aj_tr_viola "aj57-wrapper-ionice-com-c-e-valor-e-atravessado" \
+  'ionice -c 2 cp /tmp/f.jsonl docs/eventos/fx.jsonl' "ionice -c 2 (opcao com valor separado)"
+aj_tr_viola "aj58-wrapper-stdbuf-com-valor-anexado-e-atravessado" \
+  'stdbuf -o0 cp /tmp/f.jsonl docs/eventos/fx.jsonl' "stdbuf -o0 (valor anexado, um token so)"
+aj_tr_viola "aj59-wrapper-setsid-e-atravessado" \
+  'setsid cp /tmp/f.jsonl docs/eventos/fx.jsonl' "setsid"
+aj_tr_viola "aj60-wrapper-winpty-e-atravessado" \
+  'winpty cp /tmp/f.jsonl docs/eventos/fx.jsonl' "winpty"
+aj_tr_viola "aj61-wrapper-sudo-e-atravessado" \
+  'sudo cp /tmp/f.jsonl docs/eventos/fx.jsonl' "sudo"
+aj_tr_viola "aj62-wrapper-doas-e-atravessado" \
+  'doas cp /tmp/f.jsonl docs/eventos/fx.jsonl' "doas"
+aj_tr_viola "aj63-wrapper-time-e-atravessado" \
+  'time cp /tmp/f.jsonl docs/eventos/fx.jsonl' "time"
+aj_tr_viola "aj64-wrapper-timeout-com-opcao-longa-e-duracao-e-atravessado" \
+  'timeout --signal=KILL 5 cp /tmp/f.jsonl docs/eventos/fx.jsonl' "timeout com opcao longa antes da duracao"
+aj_tr_viola "aj65-wrappers-encadeados-sao-atravessados" \
+  'nohup nice sudo cp /tmp/f.jsonl docs/eventos/fx.jsonl' "tres wrappers em fila"
+# E os controles de LEITURA atras de wrapper: atravessar o wrapper nao pode inventar escrita.
+aj_tr_le "aj66-env-com-cat-e-leitura" 'env cat docs/eventos/fx.jsonl' "env cat"
+aj_tr_le "aj67-timeout-com-grep-e-leitura" \
+  'timeout 5 grep write docs/eventos/fx.jsonl' 'timeout 5 grep, com write como PADRAO do grep'
+aj_tr_le "aj68-env-copiando-o-rastro-para-fora-e-leitura" \
+  'env cp docs/eventos/fx.jsonl /tmp/copia.jsonl' "env cp com o rastro como ORIGEM"
+aj_tr_le "aj69-env-com-interpretador-que-so-le-e-leitura" \
+  "env python3 -c \"print(open('docs/eventos/fx.jsonl').read())\"" "env python3 apenas lendo"
+aj_tr_le "aj70-sudo-com-u-e-usuario-lendo-e-leitura" \
+  'sudo -u deploy cat docs/eventos/fx.jsonl' "-u consumido, e o comando real e cat"
 if [ "$AJ_TR_OK" = 1 ]; then
   aj_bom > "$AJ_T/tr-bom"; AJ_V="$(aj_verifica "$AJ_T/tr-bom")"
   [ -z "$AJ_V" ]
@@ -8094,34 +8186,61 @@ aj_copia() { # aj_copia <nome> — copia de .claude/hooks
   cp -R "$AJ_H/comum" "$AJ_H/sprintx" "$AJ_H/testes" "$r/"
   printf '%s' "$r"
 }
-aj_mutante() { # aj_mutante <nome> <rc da geracao> <raiz-hooks> <o que TEM de mudar de veredito>
-  local nome="$1" rcg="$2" r="$3" tipo="$4" rc=1 det
-  det="(rc geracao=$rcg)"
+# aj_def_cmd <tipo> — o comando-sonda de cada defeito de classificacao de comando. Um por tipo,
+# para que cada mutante seja julgado por UM comando, e so por ele.
+aj_def_cmd() {
+  case "$1" in
+    anexada)   printf 'cp -tdocs/eventos/ /tmp/f.jsonl' ;;
+    abreviada) printf 'cp --targ=docs/eventos/ /tmp/f.jsonl' ;;
+    longa)     printf 'cp --target-directory=docs/eventos/ /tmp/f.jsonl' ;;
+    opcao)     printf 'cp -t docs/eventos/ /tmp/f.jsonl' ;;
+    wrapper)   printf 'env cp /tmp/f.jsonl docs/eventos/fx.jsonl' ;;
+    wrapopt)   printf 'sudo -u deploy cp /tmp/f.jsonl docs/eventos/fx.jsonl' ;;
+    duracao)   printf 'timeout 5 cp /tmp/f.jsonl docs/eventos/fx.jsonl' ;;
+  esac
+}
+aj_defeito() { # aj_defeito <raiz-hooks> <tipo> — 0 quando AQUELA arvore exibe o defeito do tipo
+  local r="$1" tipo="$2" rc=1 guarda="$AJ_H"
+  AJ_H="$r"
+  case "$tipo" in
+    saida)   aj_roda objeto "$AJ_ERR_ANSI" "$PATH"; [ "$(aj_resultado)" = ok ] && rc=0 ;;
+    saida-sj) aj_roda objeto "$AJ_ERR_ANSI" "$AJ_SEMJQ"; [ "$(aj_resultado)" != falha ] && rc=0 ;;
+    ordem)   aj_rastro "$AJ_T/o.jsonl" arquivo_alterado:src/contador.sh task_iniciada:- arquivo_alterado:test/dobro.test.sh
+             ( . "$r/testes/transcrito-agente.sh"
+               rastro_edicao_depois_do_claim "$AJ_T/o.jsonl" T-01.01 "$AJ_RE" ) && rc=0 ;;
+    manual)  { aj_bom; aj_ev Bash '{"command":"cp /tmp/f.jsonl docs/eventos/fx.jsonl"}'; } > "$AJ_T/trm"
+             ( . "$r/testes/transcrito-agente.sh"; transcrito_verifica "$AJ_T/trm" 1111-2222 fx T-01.01 || : ) \
+               | grep -q '^rastro_manual:' || rc=0 ;;
+    leitura) { aj_bom; aj_ev Bash '{"command":"cat docs/eventos/fx.jsonl"}'; } > "$AJ_T/trl"
+             [ -n "$( . "$r/testes/transcrito-agente.sh"; transcrito_verifica "$AJ_T/trl" 1111-2222 fx T-01.01 || : )" ] && rc=0 ;;
+    destino) { aj_bom; aj_ev Bash '{"command":"cp /tmp/forjado.jsonl docs/eventos/fx.jsonl 2>/dev/null"}'; } > "$AJ_T/trd"
+             ( . "$r/testes/transcrito-agente.sh"; transcrito_verifica "$AJ_T/trd" 1111-2222 fx T-01.01 || : ) \
+               | grep -q '^rastro_manual:' || rc=0 ;;
+    pegajoso) { aj_bom
+               aj_ev Bash "$(python3 -c 'import json,sys; print(json.dumps({"command":sys.argv[1]}))' "$AJ_CMD_LE_B")"
+             } > "$AJ_T/trp"
+             [ -n "$( . "$r/testes/transcrito-agente.sh"; transcrito_verifica "$AJ_T/trp" 1111-2222 fx T-01.01 || : )" ] && rc=0 ;;
+    # Os defeitos de PR#14: cada um tem o seu comando-sonda, e o defeito e a sonda passar por
+    # leitura quando ela escreve no rastro.
+    anexada|abreviada|longa|opcao|wrapper|wrapopt|duracao)
+             { aj_bom
+               aj_ev Bash "$(python3 -c 'import json,sys; print(json.dumps({"command":sys.argv[1]}))' "$(aj_def_cmd "$tipo")")"
+             } > "$AJ_T/trw"
+             ( . "$r/testes/transcrito-agente.sh"; transcrito_verifica "$AJ_T/trw" 1111-2222 fx T-01.01 || : ) \
+               | grep -q '^rastro_manual:' || rc=0 ;;
+  esac
+  AJ_H="$guarda"
+  return "$rc"
+}
+aj_mutante() { # aj_mutante <nome> <rc da geracao> <raiz-hooks> <tipo que TEM de reverter> [tipos que NAO podem reverter...]
+  local nome="$1" rcg="$2" r="$3" tipo="$4" rc=1 carona="" c; shift 4
   if [ "$rcg" -eq 0 ]; then
-    local guarda="$AJ_H"; AJ_H="$r"
-    case "$tipo" in
-      saida)   aj_roda objeto "$AJ_ERR_ANSI" "$PATH"; [ "$(aj_resultado)" = ok ] && rc=0 ;;
-      saida-sj) aj_roda objeto "$AJ_ERR_ANSI" "$AJ_SEMJQ"; [ "$(aj_resultado)" != falha ] && rc=0 ;;
-      ordem)   aj_rastro "$AJ_T/o.jsonl" arquivo_alterado:src/contador.sh task_iniciada:- arquivo_alterado:test/dobro.test.sh
-               ( . "$r/testes/transcrito-agente.sh"
-                 rastro_edicao_depois_do_claim "$AJ_T/o.jsonl" T-01.01 "$AJ_RE" ) && rc=0 ;;
-      manual)  { aj_bom; aj_ev Bash '{"command":"cp /tmp/f.jsonl docs/eventos/fx.jsonl"}'; } > "$AJ_T/trm"
-               ( . "$r/testes/transcrito-agente.sh"; transcrito_verifica "$AJ_T/trm" 1111-2222 fx T-01.01 || : ) \
-                 | grep -q '^rastro_manual:' || rc=0 ;;
-      leitura) { aj_bom; aj_ev Bash '{"command":"cat docs/eventos/fx.jsonl"}'; } > "$AJ_T/trl"
-               [ -n "$( . "$r/testes/transcrito-agente.sh"; transcrito_verifica "$AJ_T/trl" 1111-2222 fx T-01.01 || : )" ] && rc=0 ;;
-      destino) { aj_bom; aj_ev Bash '{"command":"cp /tmp/forjado.jsonl docs/eventos/fx.jsonl 2>/dev/null"}'; } > "$AJ_T/trd"
-               ( . "$r/testes/transcrito-agente.sh"; transcrito_verifica "$AJ_T/trd" 1111-2222 fx T-01.01 || : ) \
-                 | grep -q '^rastro_manual:' || rc=0 ;;
-      pegajoso) { aj_bom
-                 aj_ev Bash "$(python3 -c 'import json,sys; print(json.dumps({"command":sys.argv[1]}))' "$AJ_CMD_LE_B")"
-               } > "$AJ_T/trp"
-               [ -n "$( . "$r/testes/transcrito-agente.sh"; transcrito_verifica "$AJ_T/trp" 1111-2222 fx T-01.01 || : )" ] && rc=0 ;;
-    esac
-    AJ_H="$guarda"
+    aj_defeito "$r" "$tipo" && rc=0
+    # Nao vale morrer de carona: o que o mutante NAO mexeu tem de continuar classificado certo.
+    for c in "$@"; do aj_defeito "$r" "$c" && carona="$carona$c "; done
   fi
-  [ "$rcg" -eq 0 ] && [ "$rc" -eq 0 ]
-  afirma "$nome" $? "o mutante volta ao defeito de '$tipo' $det"
+  [ "$rcg" -eq 0 ] && [ "$rc" -eq 0 ] && [ -z "$carona" ]
+  afirma "$nome" $? "o mutante volta ao defeito de '$tipo' (rc geracao=$rcg)${carona:+ — MORTE DE CARONA em: $carona}"
 }
 # m1 — a remocao de ANSI desaparece: a saida colorida volta a ser classificada como ok.
 AJR="$(aj_copia m1)" && muta_lit "$AJ_H/comum/rastro.sh" "$AJR/comum/rastro.sh" \
@@ -8154,6 +8273,38 @@ aj_mutante "ajm-mutante-6-destino-volta-a-ser-o-ultimo-token" $? "$AJR" destino
 AJR="$(aj_copia m7)" && muta_lit "$AJ_H/testes/transcrito-agente.sh" "$AJR/testes/transcrito-agente.sh" \
   '    if [[ $cab =~ ^($_TR_SO_LEEM)$ ]] && [[ $seg != *'"'"'('"'"'* ]]; then' '    if false; then'
 aj_mutante "ajm-mutante-7-interpretador-pegajoso-entre-segmentos" $? "$AJR" pegajoso
+# PR#14 — os tres pedacos novos da regra, um mutante cada, e cada um julgado pelo seu comando-sonda
+# com os outros listados como controle de NAO-carona.
+#
+# m8 — o destino ANEXADO a opcao curta deixa de ser lido: `-tdocs/eventos/` volta a pegar o token
+# seguinte como destino, e a escrita fica invisivel. A forma separada (`-t dir`) nao e tocada.
+AJR="$(aj_copia m8)" && muta_lit "$AJ_H/testes/transcrito-agente.sh" "$AJR/testes/transcrito-agente.sh" \
+  'destino="${t#*t}"' 'destino=""'
+aj_mutante "ajm-mutante-8-opcao-curta-sem-o-destino-anexado" $? "$AJR" anexada opcao abreviada longa wrapper wrapopt duracao manual leitura
+# m9 — a opcao longa volta a exigir o nome INTEIRO: `--targ=` deixa de ser abreviacao valida.
+AJR="$(aj_copia m9)" && muta_lit "$AJ_H/testes/transcrito-agente.sh" "$AJR/testes/transcrito-agente.sh" \
+  'case target-directory in "$o"*) return 0 ;; esac' 'case target-directory in "$o") return 0 ;; esac'
+aj_mutante "ajm-mutante-9-opcao-longa-sem-abreviacao" $? "$AJR" abreviada longa anexada opcao wrapper wrapopt duracao manual leitura
+# m10 — a lista de wrappers transparentes desaparece: `env cp ...` volta a ser julgado como `env`,
+# nome fora de toda lista, segmento ignorado.
+AJR="$(aj_copia m10)" && muta_lit "$AJ_H/testes/transcrito-agente.sh" "$AJR/testes/transcrito-agente.sh" \
+  "_TR_WRAPPER='env|" "_TR_WRAPPER='naoexisteWRAPPER|"
+aj_mutante "ajm-mutante-10-sem-os-wrappers-transparentes" $? "$AJR" wrapper anexada opcao abreviada longa manual leitura
+# m11 — o consumo da opcao com valor em token SEPARADO desaparece: `sudo -u deploy cp ...` acha
+# `deploy` no lugar do `cp`. O wrapper sem opcao (`env cp`) e a duracao do `timeout` nao sao tocados.
+AJR="$(aj_copia m11)" && muta_lit "$AJ_H/testes/transcrito-agente.sh" "$AJR/testes/transcrito-agente.sh" \
+  'if [ -n "$oparg" ] && [[ $t =~ ^($oparg)$ ]]; then n=$((n + 2)); else n=$((n + 1)); fi' 'n=$((n + 1))'
+aj_mutante "ajm-mutante-11-sem-o-consumo-das-opcoes-do-wrapper" $? "$AJR" wrapopt wrapper duracao anexada opcao abreviada longa manual leitura
+# m12 — a duracao POSICIONAL do `timeout` deixa de ser consumida: o `5` passa por comando real.
+AJR="$(aj_copia m12)" && muta_lit "$AJ_H/testes/transcrito-agente.sh" "$AJR/testes/transcrito-agente.sh" \
+  'if [ "$cab" = timeout ] && [ "$n" -lt "${#tk[@]}" ]; then' 'if [ "$cab" = naotimeout ] && [ "$n" -lt "${#tk[@]}" ]; then'
+aj_mutante "ajm-mutante-12-sem-a-duracao-posicional-do-timeout" $? "$AJR" duracao wrapper wrapopt anexada opcao abreviada longa manual leitura
+# Controle da propria bateria: a copia SEM mutacao nenhuma nao exibe defeito nenhum.
+AJR="$(aj_copia controle)"; AJ_RC=0
+for aj_d in anexada abreviada longa opcao wrapper wrapopt duracao manual leitura destino pegajoso saida saida-sj ordem; do
+  aj_defeito "$AJR" "$aj_d" && { AJ_RC=1; AJ_VIVO="${AJ_VIVO-}$aj_d "; }
+done
+afirma "ajm-controle-copia-intacta-nao-exibe-defeito" "$AJ_RC" "${AJ_VIVO-nenhum defeito na copia sem mutacao}"
 
 rm -rf "$AJ_T"
 

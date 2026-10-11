@@ -55,6 +55,26 @@ _TR_SO_LEEM='cat|tac|grep|egrep|fgrep|zgrep|rg|jq|yq|head|tail|wc|nl|od|xxd|cmp|
 # `json.load` e `print(...)` passam — conferir o rastro e permitido, escrever nele nao e.
 _TR_INTERP='python[0-9.]*|perl|ruby|node'
 _TR_INTERP_ESCREVE="write|writelines|write_text|write_bytes|writeFile|appendFile|copyfile|copytree|copy2|shutil|os\.rename|os\.replace|json\.dump|yaml\.dump|open\([^)]*['\"][awx][+bt]*['\"]"
+# Wrappers TRANSPARENTES: executam OUTRO comando sem mudar o arquivo que ele escreve. `env cp ...`,
+# `timeout 5 cp ...` e `sudo cp ...` escrevem exatamente o que `cp ...` escreve, e julgar o wrapper
+# como se fosse o comando era nao achar escrita nenhuma — nome fora de toda lista, segmento
+# ignorado. O basename da linha do `cab` ja resolve `/usr/bin/env`.
+#
+# LIMITE REGISTRADO, sem promessa de cobertura: wrapper que recebe o comando como SCRIPT numa string
+# (`bash -c '...'`, `sh -c`, `cmd //c`, `powershell -Command`) NAO e atravessado aqui. O argumento
+# ali e um programa inteiro, com citacao e expansao proprias; cobrir isso pede um parser de shell,
+# nao um nome a mais nesta lista.
+_TR_WRAPPER='env|command|exec|builtin|nohup|nice|ionice|stdbuf|setsid|winpty|sudo|doas|time|timeout|xargs'
+
+# _tr_opcao_destino <opcao longa> — 0 quando a opcao e `--target-directory` ou uma ABREVIACAO dela
+# (`--targ`, `--target-director`), que o getopt do GNU aceita igual a forma inteira.
+# `--no-target-directory` nao e prefixo dela e nao casa.
+_tr_opcao_destino() {
+  local o="${1#--}"
+  [ -n "$o" ] || return 1
+  case target-directory in "$o"*) return 0 ;; esac
+  return 1
+}
 
 # _tr_escreve_no_rastro <comando> — 0 quando o comando ESCREVE em docs/eventos.
 #
@@ -70,7 +90,7 @@ _TR_INTERP_ESCREVE="write|writelines|write_text|write_bytes|writeFile|appendFile
 # dentro de aspas separa um segmento a mais, o que no maximo torna a auditoria mais rigorosa, e
 # rigor a mais numa certificacao e barato. Falso NEGATIVO e que seria caro.
 _tr_escreve_no_rastro() {
-  local c="$1" seg cab t n i interp=0
+  local c="$1" seg cab t n i oparg interp=0
   [[ $c =~ $_TR_REDIR ]] && return 0
   [[ $c =~ $_TR_SED ]] && return 0
   case "$c" in *docs/eventos*) ;; *) return 1 ;; esac
@@ -78,11 +98,40 @@ _tr_escreve_no_rastro() {
     local tk=() op=() pula=0 destino="" origem=""
     read -r -a tk <<< "$seg"
     n=0
-    while [ "$n" -lt "${#tk[@]}" ]; do
-      case "${tk[$n]}" in *=*) n=$((n + 1)) ;; *) break ;; esac   # `VAR=valor cmd ...`
+    # Atravessa os wrappers transparentes ate o comando REAL. Cada volta come um wrapper, as
+    # opcoes dele — levando o valor junto quando a opcao recebe o valor em token SEPARADO, sem o
+    # que `sudo -u deploy cp ...` acharia `deploy` no lugar de `cp` — e a duracao posicional do
+    # `timeout`.
+    while :; do
+      while [ "$n" -lt "${#tk[@]}" ]; do
+        case "${tk[$n]}" in *=*) n=$((n + 1)) ;; *) break ;; esac   # `VAR=valor cmd ...`
+      done
+      [ "$n" -lt "${#tk[@]}" ] || break
+      cab="${tk[$n]##*/}"; cab="${cab%.exe}"
+      [[ $cab =~ ^($_TR_WRAPPER)$ ]] || break
+      case "$cab" in
+        sudo|doas) oparg='-[ugUChprtT]|--(user|group|host|prompt|role|type|chdir|other-user)' ;;
+        xargs)     oparg='-[IiLnPsdEae]|--(replace|max-lines|max-args|max-procs|max-chars|delimiter|eof|arg-file|process-slot-var)' ;;
+        env)       oparg='-[uSC]|--(unset|split-string|chdir)' ;;
+        timeout)   oparg='-[sk]|--(signal|kill-after)' ;;
+        nice)      oparg='-n|--adjustment' ;;
+        ionice)    oparg='-[cnpPu]|--(class|classdata|pid|pgid|uid)' ;;
+        stdbuf)    oparg='-[ioe]|--(input|output|error)' ;;
+        time)      oparg='-[fo]|--(format|output)' ;;
+        exec)      oparg='-a' ;;
+        *)         oparg='' ;;
+      esac
+      n=$((n + 1))
+      while [ "$n" -lt "${#tk[@]}" ]; do
+        t="${tk[$n]}"
+        case "$t" in -?*) ;; *) break ;; esac   # `-` sozinho e operando, nao opcao
+        if [ -n "$oparg" ] && [[ $t =~ ^($oparg)$ ]]; then n=$((n + 2)); else n=$((n + 1)); fi
+      done
+      # `timeout 5 cp ...`: a duracao e POSICIONAL. Sem comer esse token, o `5` passaria por
+      # comando real e a escrita atras dele ficaria invisivel.
+      if [ "$cab" = timeout ] && [ "$n" -lt "${#tk[@]}" ]; then n=$((n + 1)); fi
     done
     [ "$n" -lt "${#tk[@]}" ] || continue
-    cab="${tk[$n]##*/}"; cab="${cab%.exe}"
     # Os OPERANDOS do segmento, sem os tokens de redirecionamento: e entre eles, e so entre eles,
     # que origem e destino tem posicao.
     for ((i = n + 1; i < ${#tk[@]}; i++)); do
@@ -102,13 +151,23 @@ _tr_escreve_no_rastro() {
       continue
     fi
     if [[ $cab =~ ^($_TR_POR_DESTINO)$ ]]; then
-      # `-t dir` / `--target-directory=dir`: o destino esta na OPCAO. `rsync` fica fora porque ali
-      # `-t` e preservar data, e o destino continua posicional.
+      # `-t dir` / `--target-directory=dir`: o destino esta na OPCAO, e pode vir ANEXADO a ela —
+      # `-tdocs/eventos/`, `-atdocs/eventos/`, `--targ=docs/eventos/`. Aceitar so a forma canonica
+      # era o defeito: bastava colar o destino na opcao, ou abreviar a opcao longa, para a escrita
+      # ficar invisivel. `rsync` fica fora porque ali `-t` e preservar data, e o destino continua
+      # posicional.
       for ((i = 0; i < ${#op[@]}; i++)); do
-        case "${op[$i]}" in
-          --target-directory=*) destino="${op[$i]#*=}" ;;
-          --target-directory)   destino="${op[$((i + 1))]-}" ;;
-          -t|-[A-Za-z]*t)       [ "$cab" = rsync ] || destino="${op[$((i + 1))]-}" ;;
+        t="${op[$i]}"
+        case "$t" in
+          --*=*) _tr_opcao_destino "${t%%=*}" && destino="${t#*=}" ;;
+          --*)   _tr_opcao_destino "$t" && destino="${op[$((i + 1))]-}" ;;
+          -*t*)  if [ "$cab" != rsync ]; then
+                   # No bloco curto o `t` exige valor, entao o resto do token DEPOIS dele e o
+                   # valor; bloco terminado em `t` (`-t`, `-at`) pega o token seguinte. Em
+                   # cp/mv/install/ln o `t` minusculo so significa diretorio-alvo.
+                   destino="${t#*t}"
+                   [ -n "$destino" ] || destino="${op[$((i + 1))]-}"
+                 fi ;;
         esac
       done
       if [ -n "$destino" ]; then
