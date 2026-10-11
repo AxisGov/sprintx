@@ -7941,6 +7941,37 @@ aj_tr_le "aj13-grep-e-tail-sao-leitura"  'grep -c task_iniciada docs/eventos/fx.
 aj_tr_le "aj14-jq-e-wc-sao-leitura"      'jq -r .evento docs/eventos/fx.jsonl 2>/dev/null | wc -l' "jq + wc"
 aj_tr_le "aj15-python-read-e-leitura"    "python3 -c \"print(open('docs/eventos/fx.jsonl').read())\"" "print(open(...).read())"
 aj_tr_le "aj16-copiar-o-rastro-para-fora-e-leitura" 'cp docs/eventos/fx.jsonl /tmp/copia.jsonl' "cp com docs/eventos como ORIGEM"
+# PR#12 (achado A): a decisao de destino de `cp`/`mv` olhava SO o ultimo token do segmento. Com
+# `2>/dev/null` ou `>/dev/null` no fim, o ultimo token era o REDIRECIONAMENTO e o destino real
+# ficava invisivel; e `cp -t docs/eventos/ origem` nomeia o destino na OPCAO, nunca no fim.
+aj_tr_viola "aj23-cp-com-stderr-redirecionado-ainda-e-escrita" \
+  'cp /tmp/forjado.jsonl docs/eventos/fx.jsonl 2>/dev/null' "2>/dev/null nao e o destino"
+aj_tr_viola "aj24-cp-com-stdout-redirecionado-ainda-e-escrita" \
+  'cp -v /tmp/f.jsonl docs/eventos/fx.jsonl >/dev/null' ">/dev/null nao e o destino"
+aj_tr_viola "aj25-cp-com-target-directory-e-escrita" \
+  'cp -t docs/eventos/ /tmp/f.jsonl' "-t nomeia o destino"
+aj_tr_viola "aj26-dd-escrevendo-no-rastro-e-escrita" \
+  'dd if=/tmp/f.jsonl of=docs/eventos/fx.jsonl' "dd com o rastro em of="
+# E as leituras seguem permitidas: redirecionar stderr nao transforma origem em destino, e `dd`
+# nomeia os dois lados — `if=` e ORIGEM.
+aj_tr_le "aj27-copiar-para-fora-com-redirecao-e-leitura" \
+  'cp docs/eventos/fx.jsonl /tmp/copia.jsonl 2>/dev/null' "cp com docs/eventos como ORIGEM"
+aj_tr_le "aj28-dd-lendo-o-rastro-e-leitura" \
+  'dd if=docs/eventos/fx.jsonl of=/tmp/copia.jsonl' "dd com docs/eventos em if="
+# PR#12 (achado B): o estado "um interpretador apareceu" era PEGAJOSO entre segmentos. Depois de
+# `python3 -c "..."`, o segmento seguinte herdava o estado de escrita, e `grep -c write` reprovava
+# porque a palavra `write` estava ali como PADRAO do grep, nao como primitiva de escrita.
+AJ_CMD_LE_B="python3 -c \"import json; print(json.load(open('/tmp/a.json')))\" ; grep -c write docs/eventos/fx.jsonl"
+aj_tr_le "aj29-leitura-depois-de-interpretador-nao-herda-escrita" "$AJ_CMD_LE_B" \
+  "o segmento que toca o rastro e leitura"
+# E o que a herencia entre segmentos existe para pegar continua pego: heredoc de um interpretador
+# que REALMENTE escreve no rastro, com a primitiva de escrita numa linha depois da chamada.
+aj_tr_viola "aj30-heredoc-de-interpretador-que-escreve-continua-violando" \
+  "python3 - <<'P'
+import json
+d = {}
+json.dump(d, open('docs/eventos/fx.jsonl','w'))
+P" "interpretador multissegmento que escreve"
 if [ "$AJ_TR_OK" = 1 ]; then
   aj_bom > "$AJ_T/tr-bom"; AJ_V="$(aj_verifica "$AJ_T/tr-bom")"
   [ -z "$AJ_V" ]
@@ -8003,6 +8034,13 @@ aj_mutante() { # aj_mutante <nome> <rc da geracao> <raiz-hooks> <o que TEM de mu
                  | grep -q '^rastro_manual:' || rc=0 ;;
       leitura) { aj_bom; aj_ev Bash '{"command":"cat docs/eventos/fx.jsonl"}'; } > "$AJ_T/trl"
                [ -n "$( . "$r/testes/transcrito-agente.sh"; transcrito_verifica "$AJ_T/trl" 1111-2222 fx T-01.01 || : )" ] && rc=0 ;;
+      destino) { aj_bom; aj_ev Bash '{"command":"cp /tmp/forjado.jsonl docs/eventos/fx.jsonl 2>/dev/null"}'; } > "$AJ_T/trd"
+               ( . "$r/testes/transcrito-agente.sh"; transcrito_verifica "$AJ_T/trd" 1111-2222 fx T-01.01 || : ) \
+                 | grep -q '^rastro_manual:' || rc=0 ;;
+      pegajoso) { aj_bom
+                 aj_ev Bash "$(python3 -c 'import json,sys; print(json.dumps({"command":sys.argv[1]}))' "$AJ_CMD_LE_B")"
+               } > "$AJ_T/trp"
+               [ -n "$( . "$r/testes/transcrito-agente.sh"; transcrito_verifica "$AJ_T/trp" 1111-2222 fx T-01.01 || : )" ] && rc=0 ;;
     esac
     AJ_H="$guarda"
   fi
@@ -8029,6 +8067,17 @@ aj_mutante "ajm-mutante-4-auditoria-sem-cp-e-mv" $? "$AJR" manual
 AJR="$(aj_copia m5)" && muta_lit "$AJ_H/testes/transcrito-agente.sh" "$AJR/testes/transcrito-agente.sh" \
   '  case "$c" in *docs/eventos*) ;; *) return 1 ;; esac' '  case "$c" in *docs/eventos*) return 0 ;; *) return 1 ;; esac'
 aj_mutante "ajm-mutante-5-blacklist-reprova-leitura" $? "$AJR" leitura
+# m6 — a decisao de destino volta a olhar so o ULTIMO token do segmento: com `2>/dev/null` no fim,
+# o destino real fica invisivel e `cp origem docs/eventos/x 2>/dev/null` passa.
+AJR="$(aj_copia m6)" && muta_lit "$AJ_H/testes/transcrito-agente.sh" "$AJR/testes/transcrito-agente.sh" \
+  '        # Forma posicional: o primeiro operando e ORIGEM, qualquer outro e destino.' \
+  '        op=("${tk[$((${#tk[@]} - 1))]}")'
+aj_mutante "ajm-mutante-6-destino-volta-a-ser-o-ultimo-token" $? "$AJR" destino
+# m7 — o estado do interpretador volta a ser PEGAJOSO entre segmentos: o `grep -c write` do
+# segmento seguinte herda a escrita e a leitura do rastro reprova.
+AJR="$(aj_copia m7)" && muta_lit "$AJ_H/testes/transcrito-agente.sh" "$AJR/testes/transcrito-agente.sh" \
+  '    if [[ $cab =~ ^($_TR_SO_LEEM)$ ]] && [[ $seg != *'"'"'('"'"'* ]]; then' '    if false; then'
+aj_mutante "ajm-mutante-7-interpretador-pegajoso-entre-segmentos" $? "$AJR" pegajoso
 
 rm -rf "$AJ_T"
 

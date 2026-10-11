@@ -33,11 +33,24 @@ transcrito_usos() {
 
 _TR_REDIR='(>|tee([[:space:]]+-a)?)[[:space:]]*[^[:space:]|;&]*docs/eventos'
 _TR_SED='sed[[:space:]]+-i[^|;&]*docs/eventos'
-# Comandos cujo destino e o ULTIMO operando. `cp docs/eventos/x /tmp/` copia o rastro PARA FORA:
-# e leitura. O que viola e docs/eventos como DESTINO — por isso a regra olha a posicao.
+# Comandos em que o PRIMEIRO operando e origem e os demais, destino. `cp docs/eventos/x /tmp/`
+# copia o rastro PARA FORA: e leitura. O que viola e docs/eventos como DESTINO — por isso a regra
+# olha a posicao. Olhar so o ULTIMO token era o defeito: `cp origem docs/eventos/x 2>/dev/null`
+# termina no redirecionamento, e `cp -t docs/eventos/ origem` nomeia o destino na OPCAO.
 _TR_POR_DESTINO='cp|mv|install|rsync|ln'
-# Comandos que escrevem no arquivo que nomeiam, em qualquer posicao.
+# Comandos que escrevem no arquivo que nomeiam, em qualquer posicao. `dd` e a excecao: nomeia os
+# dois lados, `if=` origem e `of=` destino — tratado a parte.
 _TR_SO_ESCREVEM='tee|truncate|dd|shred'
+# Tokens de redirecionamento (`>f`, `>>f`, `2>/dev/null`, `<f`, `<<P`): nao sao operandos, e
+# confundi-los com operando esconde o destino real. O segundo padrao e o operador SOZINHO
+# (`cp a b > /dev/null`), em que o nome do arquivo vem no token seguinte.
+_TR_TOKEN_REDIR='^[0-9]*(>|<)'
+_TR_TOKEN_REDIR_SO='^[0-9]*(>>?|<<?)$'
+# Comandos de LEITURA conhecidos, que nao escrevem no arquivo que nomeiam. Existem para cortar o
+# estado PEGAJOSO do interpretador: num comando de varios segmentos, `python3 -c "..."` ligava o
+# estado de escrita e o segmento seguinte o herdava, entao `grep -c write docs/eventos/fx.jsonl`
+# reprovava pela palavra `write` — que ali e o PADRAO do grep, nao primitiva nenhuma.
+_TR_SO_LEEM='cat|tac|grep|egrep|fgrep|zgrep|rg|jq|yq|head|tail|wc|nl|od|xxd|cmp|md5sum|sha1sum|sha256sum|cut|sort|uniq|column|awk|sed|less|more'
 # Interpretadores, e as primitivas de ESCRITA deles. Nenhuma casa uma leitura: `open(...).read()`,
 # `json.load` e `print(...)` passam — conferir o rastro e permitido, escrever nele nao e.
 _TR_INTERP='python[0-9.]*|perl|ruby|node'
@@ -48,19 +61,21 @@ _TR_INTERP_ESCREVE="write|writelines|write_text|write_bytes|writeFile|appendFile
 # Nao e blacklist de mencao, e e deliberado: reprovar toda aparicao de `docs/eventos` reprovaria
 # `cat`, `grep`, `jq`, `tail` e `wc` — a LEITURA do rastro, que o contrato permite e que o agente
 # usa para conferir o que gravou. A regra olha o PAPEL do caminho em cada segmento do comando:
-# destino de redirecao/tee/sed -i, ultimo operando de cp/mv/install/rsync/ln, arquivo nomeado por
-# um comando que so escreve, ou argumento de interpretador junto de uma primitiva de escrita.
+# destino de redirecao/tee/sed -i, destino (nao a origem) de cp/mv/install/rsync/ln, `of=` do dd,
+# arquivo nomeado por um comando que so escreve, ou argumento de interpretador junto de uma
+# primitiva de escrita. Tokens de redirecionamento saem antes da conta das posicoes, e um segmento
+# encabecado por comando de leitura conhecido nao herda escrita do segmento anterior.
 #
 # Os segmentos saem de `|`, `;` e `&` virando quebra de linha — aproximacao deliberada: separador
 # dentro de aspas separa um segmento a mais, o que no maximo torna a auditoria mais rigorosa, e
 # rigor a mais numa certificacao e barato. Falso NEGATIVO e que seria caro.
 _tr_escreve_no_rastro() {
-  local c="$1" seg cab ult n interp=0
+  local c="$1" seg cab t n i interp=0
   [[ $c =~ $_TR_REDIR ]] && return 0
   [[ $c =~ $_TR_SED ]] && return 0
   case "$c" in *docs/eventos*) ;; *) return 1 ;; esac
   while IFS= read -r seg; do
-    local tk=()
+    local tk=() op=() pula=0 destino="" origem=""
     read -r -a tk <<< "$seg"
     n=0
     while [ "$n" -lt "${#tk[@]}" ]; do
@@ -68,11 +83,60 @@ _tr_escreve_no_rastro() {
     done
     [ "$n" -lt "${#tk[@]}" ] || continue
     cab="${tk[$n]##*/}"; cab="${cab%.exe}"
-    ult="${tk[$((${#tk[@]} - 1))]}"
+    # Os OPERANDOS do segmento, sem os tokens de redirecionamento: e entre eles, e so entre eles,
+    # que origem e destino tem posicao.
+    for ((i = n + 1; i < ${#tk[@]}; i++)); do
+      t="${tk[$i]}"
+      if [ "$pula" = 1 ]; then pula=0; continue; fi
+      if [[ $t =~ $_TR_TOKEN_REDIR ]]; then
+        [[ $t =~ $_TR_TOKEN_REDIR_SO ]] && pula=1
+        continue
+      fi
+      op+=("$t")
+    done
+    # Um leitor conhecido nao escreve, e nao herda estado de escrita de segmento anterior. O `(`
+    # desqualifica a linha: `cut = open('docs/eventos/x','w')` dentro de um heredoc de python tem
+    # nome de comando de leitura no inicio e nao e leitura nenhuma.
+    if [[ $cab =~ ^($_TR_SO_LEEM)$ ]] && [[ $seg != *'('* ]]; then
+      interp=0
+      continue
+    fi
     if [[ $cab =~ ^($_TR_POR_DESTINO)$ ]]; then
-      case "$ult" in *docs/eventos*) return 0 ;; esac
+      # `-t dir` / `--target-directory=dir`: o destino esta na OPCAO. `rsync` fica fora porque ali
+      # `-t` e preservar data, e o destino continua posicional.
+      for ((i = 0; i < ${#op[@]}; i++)); do
+        case "${op[$i]}" in
+          --target-directory=*) destino="${op[$i]#*=}" ;;
+          --target-directory)   destino="${op[$((i + 1))]-}" ;;
+          -t|-[A-Za-z]*t)       [ "$cab" = rsync ] || destino="${op[$((i + 1))]-}" ;;
+        esac
+      done
+      if [ -n "$destino" ]; then
+        case "$destino" in *docs/eventos*) return 0 ;; esac
+      else
+        # Forma posicional: o primeiro operando e ORIGEM, qualquer outro e destino.
+        for ((i = 0; i < ${#op[@]}; i++)); do
+          case "${op[$i]}" in -*) continue ;; esac
+          if [ -z "$origem" ]; then origem="${op[$i]}"; continue; fi
+          case "${op[$i]}" in *docs/eventos*) return 0 ;; esac
+        done
+      fi
     elif [[ $cab =~ ^($_TR_SO_ESCREVEM)$ ]]; then
-      case "$seg" in *docs/eventos*) return 0 ;; esac
+      if [ "$cab" = dd ]; then
+        # `dd` nomeia os DOIS lados por opcao: so `of=` e destino. `if=docs/eventos/x` despeja o
+        # rastro na saida padrao, e e leitura — se a saida for redirecionada PARA o rastro, quem
+        # pega e a regra de redirecao, la em cima.
+        for ((i = 0; i < ${#op[@]}; i++)); do
+          case "${op[$i]}" in of=*) destino="${op[$i]#of=}" ;; if=*) origem="${op[$i]#if=}" ;; esac
+        done
+        if [ -n "$destino" ]; then
+          case "$destino" in *docs/eventos*) return 0 ;; esac
+        elif [ -z "$origem" ]; then
+          case "$seg" in *docs/eventos*) return 0 ;; esac
+        fi
+      else
+        case "$seg" in *docs/eventos*) return 0 ;; esac
+      fi
     fi
     [[ $cab =~ ^($_TR_INTERP)$ ]] && interp=1
     if [ "$interp" = 1 ]; then
