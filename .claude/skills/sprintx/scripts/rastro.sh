@@ -25,10 +25,16 @@
 # Codigos de saida — em todo codigo diferente de 0, NENHUMA linha entrou no rastro do trabalho:
 #   0  gravado
 #   3  identidade da sessao indisponivel neste processo (evento task-*)
-#   4  contrato: trabalho sem pasta, task fora do plano do trabalho, ou a sessao ja reivindica
-#      outro trabalho (contexto_de_trabalho_divergente, registrado em sem-trabalho.jsonl)
+#   4  contrato: trabalho sem pasta, task fora do plano do trabalho, a sessao ja reivindica
+#      outro trabalho (contexto_de_trabalho_divergente, registrado em sem-trabalho.jsonl), ou
+#      a task esta reivindicada por OUTRA sessao e este processo pediu para fecha-la
 #   5  ambiente: biblioteca do rastro nao encontrada (hooks da sprintx nao instalados) ou
 #      falha de escrita
+#
+# Nos tres `task-*`, todo codigo diferente de 0 e FAIL-CLOSED para quem executa: sem
+# `task_iniciada` gravado a task nao esta reivindicada, e o hook `escopo-da-task` barra a
+# primeira edicao dela com `sessao_ambigua`. Nao ha "siga sem o evento" para esses tres — nem
+# gravar a linha a mao: o caminho e registrar bloqueio (references/08-rastro.md).
 #   64 uso incorreto
 
 set -uo pipefail
@@ -132,6 +138,22 @@ elif [ "$EXIGE_IDENTIDADE" = 1 ]; then
 else
   EXTRAS='"sessao":null,"harness":null'
 fi
+
+# ------------------------------------------------------------ fechar e do dono
+# `task_concluida` e `task_bloqueada` SAO, para toda leitura do rastro, o fechamento da
+# reivindicacao daquela (trabalho, task): gravados por outra sessao, tiram do dono uma
+# reivindicacao que ele nunca fechou — a proxima edicao dele e barrada com `sessao_ambigua` — e
+# deixam a task reivindicavel por quem fechou. Falha fechada: nada gravado, codigo de contrato.
+#
+# O portao e so sobre FECHAR. Reivindicar por cima continua aceito aqui; quem avisa ou barra isso
+# e o hook `task-reivindicada`, pelo modo configurado — essa fronteira nao muda.
+case "$CMD" in
+  task-concluida|task-bloqueada)
+    rastro_dona_da_task_em DONA "$RAIZ" "$SLUG" "$ALVO"
+    if [ -n "$DONA" ] && [ "$DONA" != "${SESSAO:-}" ]; then
+      falha "$E_CONTRATO" "task $ALVO de '$SLUG' esta reivindicada pela sessao $DONA, nao por esta. $EVENTO NAO foi gravado: fechar a task de outra sessao encerraria e reliberaria a reivindicacao dela. Nao grave o evento a mao; se a outra sessao parou e a task precisa sair do caminho, registre um bloqueio task_reivindicada (scripts/bloqueios.sh registrar)."
+    fi ;;
+esac
 
 rastro_grava_trabalho "$RAIZ" "$SLUG" "$EVENTO" skill "$RESULTADO" "$DETALHE" "$ARQUIVOS" "$EXTRAS"
 case "${RASTRO_GRAVACAO:-falha}" in

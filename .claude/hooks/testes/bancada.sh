@@ -7541,6 +7541,238 @@ afirma "ah15-escritor-da-skill-diz-5-sem-poder-gravar" $? "exit=$AH_RC_PUB (espe
 
 rm -rf "$AH_T"
 
+echo "== AI. fechar task e do DONO da reivindicacao, e task_iniciada que nao grava falha fechada (PR#12) =="
+# Dois defeitos de ownership no escritor oficial dos eventos de reivindicacao (DS-159):
+#
+#   1. `task-concluida` e `task-bloqueada` nao olhavam QUEM tem a task aberta. A reivindicacao e
+#      o evento `task_iniciada` mais recente sem fechamento depois (DS-150/153) — e um fechamento
+#      gravado por OUTRA sessao e, para toda leitura do rastro, o fechamento dela: a sessao dona
+#      perdia a reivindicacao sem nunca ter fechado nada, e a primeira edicao seguinte dela era
+#      barrada com `sessao_ambigua`. Pior, a task liberada ficava reivindicavel por quem fechou.
+#      Agora o escritor falha fechado (codigo 4, nada gravado) quando o dono e outra sessao.
+#   2. `08-rastro.md` se contradizia no codigo `5`. A tabela de respostas mandava "siga sem o
+#      evento" — mas, com o `escopo-da-task` ativo, um `task_iniciada` que NAO foi gravado
+#      significa que a task NAO esta reivindicada: seguir e editar o primeiro arquivo da task
+#      para ser barrado com `sessao_ambigua`, exatamente o beco do piloto C7-C. O codigo `5` nos
+#      tres `task_*` passa a falhar fechado como o `3`: nao abra a task, nao grave a mao,
+#      registre bloqueio `prerequisito_ausente`. Para `fase-*`/`veredito-emitido`, que nenhum
+#      hook le, "siga sem o evento" continua certo — e a tabela passa a dizer os dois casos.
+#
+# O que esta correcao NAO faz, deliberadamente: nao muda a LEITURA do rastro (`_RASTRO_AWK_REIV`,
+# `_sessao_dona`) para ignorar um fechamento de outra sessao ja gravado. Linha de reivindicacao
+# escrita a mao e proibida pelo contrato (DS-159) e reprovada pela auditoria de transcrito
+# (`transcrito-agente.sh`, regra `rastro_manual`): fechar a porta no escritor fecha o caminho que
+# existe, sem quatro implementacoes de leitura divergindo sobre o que libera uma reivindicacao.
+AI_T="$(mktemp -d)"
+AI_H="$(cd "$H" && pwd)"
+AI_SK="$(cd "$H/../skills/sprintx" && pwd)"
+AI_N=0
+AI_RC=0; AI_OUT=""
+
+# Arvore no layout instalado, como a da secao U — e assim que o controle e os mutantes sao julgados.
+ai_arvore() { # ai_arvore <nome>
+  local r="$AI_T/arv/$1"
+  rm -rf "$r"; mkdir -p "$r/.claude/hooks/testes" "$r/.claude/skills"
+  cp -R "$AI_H/comum" "$AI_H/sprintx" "$r/.claude/hooks/"
+  cp "$AI_H/testes/transcrito-agente.sh" "$r/.claude/hooks/testes/"
+  cp -R "$AI_SK" "$r/.claude/skills/sprintx"
+  printf '%s' "$r"
+}
+ai_task() { # ai_task <id> <status> <arquivo em altera>
+  printf '  - id: %s\n    titulo: Task %s\n    status: %s\n    objetivo: obj\n    arquivos:\n      cria: []\n      altera: [%s]\n    teste_integracao: t\n    teste_funcional: t\n    criterio_aceite: c\n    depende_de: []\n    paralelizavel: false\n    concluida_em: null\n    suite: nao_executada\n' \
+    "$1" "$1" "$2" "$3"
+}
+ai_plano() { # ai_plano <dir> <slug> <status T-01.01> <status T-01.02>
+  local f="$1/docs/sprintx/features/$2/sprint-01/tasks.md"
+  mkdir -p "$(dirname "$f")"
+  { printf -- '---\nexpx_schema: 1\nexpx_tool: sprintx\nkind: tasks\ntrabalho_id: %s\nsprint_id: sprint-01\ntasks:\n' "$2"
+    ai_task T-01.01 "$3" src/a.ts
+    ai_task T-01.02 "$4" src/b.ts
+    printf -- '---\n'; } > "$f"
+}
+ai_fx() { # repo git novo com o trabalho fx (T-01.01 -> src/a.ts, T-01.02 -> src/b.ts)
+  AI_N=$((AI_N + 1)); AI_FX="$AI_T/fx$AI_N"
+  mkdir -p "$AI_FX/src"; git init -q --template= "$AI_FX" >/dev/null 2>&1
+  ai_plano "$AI_FX" fx em_andamento em_andamento
+}
+# O escritor, com a identidade que o Claude Code exporta — a derivada e `claude-code@<sessao>`.
+ai_w() { # ai_w <arv> <dir> <sessao> <args do escritor...>
+  local a="$1" d="$2" s="$3"; shift 3
+  AI_OUT="$(cd "$d" && env -u EXPX_SESSAO -u EXPX_HARNESS CLAUDECODE=1 CLAUDE_CODE_SESSION_ID="$s" \
+    bash "$a/.claude/skills/sprintx/scripts/rastro.sh" "$@" 2>&1)"; AI_RC=$?
+}
+ai_h() { # ai_h <arv> <dir> <sessao> <arquivo-relativo> — o escopo-da-task da arvore
+  local a="$1" d="$2" s="$3" rel="$4"
+  AI_OUT="$(printf '{"cwd":"%s","tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$d" "$d/$rel" \
+    | (cd "$d" && env -u EXPX_SESSAO -u EXPX_HARNESS CLAUDECODE=1 CLAUDE_CODE_SESSION_ID="$s" \
+        bash "$a/.claude/hooks/sprintx/escopo-da-task.sh") 2>&1)"; AI_RC=$?
+}
+ai_ok() { [ "$AI_RC" -eq 0 ] && [ -z "$AI_OUT" ]; }
+ai_barra() { [ "$AI_RC" -eq 2 ] && printf '%s' "$AI_OUT" | grep -qF "$1"; }
+ai_linha() { # ai_linha <arquivo> <evento> <task> — a ultima linha daquele evento, vazia se nao ha
+  [ -f "$1" ] || return 0
+  grep -F "\"evento\":\"$2\"" "$1" 2>/dev/null | grep -F "\"task\":\"$3\"" | tail -1
+}
+AI_LEGADO='{"ts":"2026-09-26T10:23:54Z","expx_eventos":1,"trabalho_id":"fx","ferramenta":"sprintx","origem":"skill","evento":"task_iniciada","fase":"f6","task":"T-01.01","agente":"principal","resultado":"ok","detalhe":"legado","arquivos":[]}'
+
+# ---------------------------------------------------------------- os casos
+ai_dono() { # A: outra sessao nao fecha nem relibera a reivindicacao; o dono fecha
+  local a="$1"; ai_fx
+  ai_w "$a" "$AI_FX" s1 task-iniciada fx T-01.01; [ "$AI_RC" -eq 0 ] || return 1
+  # s2 tenta fechar a task de s1, pelos dois eventos de fechamento
+  ai_w "$a" "$AI_FX" s2 task-concluida fx T-01.01 "fecho eu" src/a.ts; [ "$AI_RC" -eq 4 ] || return 1
+  printf '%s' "$AI_OUT" | grep -qF 'claude-code@s1' || return 1
+  [ -z "$(ai_linha "$AI_FX/docs/eventos/fx.jsonl" task_concluida T-01.01)" ] || return 1
+  ai_w "$a" "$AI_FX" s2 task-bloqueada fx T-01.01 B-01; [ "$AI_RC" -eq 4 ] || return 1
+  [ -z "$(ai_linha "$AI_FX/docs/eventos/fx.jsonl" task_bloqueada T-01.01)" ] || return 1
+  # a reivindicacao de s1 continua ATIVA, e a task continua dela: nao foi reliberada
+  ai_h "$a" "$AI_FX" s1 src/a.ts; ai_ok || return 1
+  ai_h "$a" "$AI_FX" s2 src/a.ts; ai_barra sessao_ambigua || return 1
+  # e o DONO fecha normalmente (controle: o portao nao quebra o caminho de sempre)
+  ai_w "$a" "$AI_FX" s1 task-concluida fx T-01.01 "suite parcial verde" src/a.ts; [ "$AI_RC" -eq 0 ] || return 1
+  [ -n "$(ai_linha "$AI_FX/docs/eventos/fx.jsonl" task_concluida T-01.01)" ] || return 1
+  ai_h "$a" "$AI_FX" s1 src/a.ts; ai_barra sessao_ambigua
+}
+ai_dono_bloqueada() { # B: o dono tambem bloqueia; e depois de fechada qualquer sessao reivindica
+  local a="$1"; ai_fx
+  ai_w "$a" "$AI_FX" s1 task-iniciada fx T-01.01; [ "$AI_RC" -eq 0 ] || return 1
+  ai_w "$a" "$AI_FX" s1 task-bloqueada fx T-01.01 B-01; [ "$AI_RC" -eq 0 ] || return 1
+  # sem dono aberto, a task volta a ser reivindicavel — inclusive por outra sessao
+  ai_w "$a" "$AI_FX" s2 task-iniciada fx T-01.01; [ "$AI_RC" -eq 0 ] || return 1
+  ai_h "$a" "$AI_FX" s2 src/a.ts; ai_ok || return 1
+  # e agora e s1 quem nao pode fechar
+  ai_w "$a" "$AI_FX" s1 task-concluida fx T-01.01 ok src/a.ts; [ "$AI_RC" -eq 4 ] || return 1
+  printf '%s' "$AI_OUT" | grep -qF 'claude-code@s2'
+}
+ai_legado() { # C: evento legado sem `sessao` nao reivindica (DS-150) e continua FECHAVEL
+  local a="$1"; ai_fx; mkdir -p "$AI_FX/docs/eventos"
+  printf '%s\n' "$AI_LEGADO" >> "$AI_FX/docs/eventos/fx.jsonl"
+  # nao reivindica: a primeira edicao continua barrada, como sempre
+  ai_h "$a" "$AI_FX" s1 src/a.ts; ai_barra sessao_ambigua || return 1
+  # e, porque nao reivindica, nao ha dono para proteger: o fechamento compativel segue valendo
+  ai_w "$a" "$AI_FX" s1 task-concluida fx T-01.01 "fechamento do legado"; [ "$AI_RC" -eq 0 ] || return 1
+  [ -n "$(ai_linha "$AI_FX/docs/eventos/fx.jsonl" task_concluida T-01.01)" ] || return 1
+  # o caminho contratado para seguir: reivindicar pelo escritor e ai sim editar
+  ai_w "$a" "$AI_FX" s1 task-iniciada fx T-01.01; [ "$AI_RC" -eq 0 ] || return 1
+  ai_h "$a" "$AI_FX" s1 src/a.ts; ai_ok
+}
+ai_rotacao() { # D: a reivindicacao no arquivo ROTACIONADO continua protegendo o dono
+  local a="$1"; ai_fx
+  ai_w "$a" "$AI_FX" s1 task-iniciada fx T-01.01; [ "$AI_RC" -eq 0 ] || return 1
+  mv "$AI_FX/docs/eventos/fx.jsonl" "$AI_FX/docs/eventos/fx.1.jsonl" || return 1
+  : > "$AI_FX/docs/eventos/fx.jsonl"
+  ai_w "$a" "$AI_FX" s2 task-concluida fx T-01.01 ok src/a.ts; [ "$AI_RC" -eq 4 ] || return 1
+  [ -z "$(ai_linha "$AI_FX/docs/eventos/fx.jsonl" task_concluida T-01.01)" ]
+}
+ai_iniciada_fora_do_portao() { # F: o portao e sobre FECHAR; abrir continua territorio do hook
+  local a="$1"; ai_fx
+  ai_w "$a" "$AI_FX" s1 task-iniciada fx T-01.01; [ "$AI_RC" -eq 0 ] || return 1
+  # Reivindicar por cima continua aceito pelo escritor: quem avisa/barra isso e o hook
+  # `task-reivindicada`, em aviso ou bloqueio. Este caso fixa a fronteira — a correcao e sobre
+  # FECHAR a task de outra sessao, nao sobre abrir.
+  ai_w "$a" "$AI_FX" s2 task-iniciada fx T-01.01; [ "$AI_RC" -eq 0 ] || return 1
+  ai_h "$a" "$AI_FX" s2 src/a.ts; ai_ok
+}
+ai_outra_task() { # E: o portao e por (trabalho, task): a task irma de outra sessao nao e afetada
+  local a="$1"; ai_fx
+  ai_w "$a" "$AI_FX" s1 task-iniciada fx T-01.01; [ "$AI_RC" -eq 0 ] || return 1
+  ai_w "$a" "$AI_FX" s2 task-iniciada fx T-01.02; [ "$AI_RC" -eq 0 ] || return 1
+  ai_w "$a" "$AI_FX" s2 task-concluida fx T-01.02 ok src/b.ts; [ "$AI_RC" -eq 0 ] || return 1
+  ai_w "$a" "$AI_FX" s1 task-concluida fx T-01.01 ok src/a.ts; [ "$AI_RC" -eq 0 ] || return 1
+  return 0
+}
+# O contrato publico: a tabela de respostas de 08-rastro.md e o passo 1 da 06-execucao.md.
+AI_LIT_C5='nos três `task_*`, **falha fechado como o código `3`**'
+AI_LIT_C5_PORQUE='sem `task_iniciada` não há reivindicação, e o `escopo-da-task` barra a primeira edição da task'
+AI_LIT_C5_INFO='Nos demais eventos (`fase-*`, `veredito-emitido`), que nenhum hook lê, siga sem o evento'
+AI_LIT_C4='a task está reivindicada por outra sessão'
+AI_LIT_EXEC='nada foi gravado e a task **não** está reivindicada'
+AI_LIT_DONO='Fechar a task é do dono da reivindicação'
+# A contradicao exata que havia: a linha do codigo 5 mandando seguir, sem distinguir os task_*.
+AI_LIT_PROIBE_C5_ANTIGO='!ou a escrita falhou — **nada foi gravado** | siga sem o evento; não grave à mão'
+ai_doc() { # F: o contrato diz o fail-closed, e a contradicao antiga nao sobrevive
+  local d="$1/.claude/skills/sprintx"
+  ad_lit "$d/references/08-rastro.md" "$AI_LIT_C5" \
+         "$d/references/08-rastro.md" "$AI_LIT_C5_PORQUE" \
+         "$d/references/08-rastro.md" "$AI_LIT_C5_INFO" \
+         "$d/references/08-rastro.md" "$AI_LIT_C4" \
+         "$d/references/08-rastro.md" "$AI_LIT_DONO" \
+         "$d/references/08-rastro.md" "$AI_LIT_PROIBE_C5_ANTIGO" \
+         "$d/references/06-execucao.md" "$AI_LIT_EXEC"
+}
+ai_ds() { # G: DS-171 registrada, append-only, e a DS-159 anterior intacta
+  local v d="$1/.claude/skills/sprintx"
+  v="$(grep -F '| DS-171 |' "$d/DECISOES-DA-SKILL.md" 2>/dev/null)"
+  [ -n "$v" ] || return 1
+  printf '%s' "$v" | grep -qiF 'reivindica' || return 1
+  printf '%s' "$v" | grep -qiF 'fecha' || return 1
+  grep -qF '| DS-159 |' "$d/DECISOES-DA-SKILL.md"
+}
+
+AI_CASOS="ai_dono ai_dono_bloqueada ai_legado ai_rotacao ai_iniciada_fora_do_portao
+ai_outra_task ai_doc ai_ds"
+ai_nome() {
+  case "$1" in
+    ai_dono)           echo "ai1-outra-sessao-nao-fecha-nem-relibera" ;;
+    ai_dono_bloqueada) echo "ai2-dono-bloqueia-e-a-task-volta-a-ser-reivindicavel" ;;
+    ai_legado)         echo "ai3-legado-sem-sessao-nao-reivindica-e-continua-fechavel" ;;
+    ai_rotacao)        echo "ai4-reivindicacao-no-rotacionado-protege-o-dono" ;;
+    ai_iniciada_fora_do_portao) echo "ai5-portao-e-sobre-fechar-nao-sobre-abrir" ;;
+    ai_outra_task)     echo "ai6-portao-e-por-trabalho-e-task-nao-por-sessao-global" ;;
+    ai_doc)            echo "ai7-contrato-do-codigo-5-falha-fechado-sem-contradicao" ;;
+    ai_ds)             echo "ai8-ds171-registrada-append-only" ;;
+  esac
+}
+AI_REAL="$(cd "$H/../.." && pwd)"
+for ai_c in $AI_CASOS; do
+  ai_nm="$(ai_nome "$ai_c")"; "$ai_c" "$AI_REAL" >/dev/null 2>&1; ai_rc=$?
+  afirma "$ai_nm" "$ai_rc" "arvore do repositorio"
+done
+
+# ---------------------------------------------------------------- mutantes
+# Copia do layout instalado; o controle e a copia sem mutacao. Cada mutante tem de morrer pelos
+# casos que o nomeiam — nao vale morrer de carona.
+ai_mutante() { # ai_mutante <nome> <rc da geracao> <arvore> <casos que TEM de matar>
+  local nome="$1" rc="$2" r="$3" c vivos=""
+  if [ "$rc" -eq 0 ]; then for c in $4; do "$c" "$r" >/dev/null 2>&1 && vivos="$vivos$c "; done; fi
+  [ "$rc" -eq 0 ] && [ -z "$vivos" ]; afirma "$nome" $? "morto por: $4 ${vivos:+— SOBREVIVEU a: $vivos}(rc geracao=$rc)"
+}
+AI_CTL="$(ai_arvore controle)"; AI_VIVO=""
+for ai_c in $AI_CASOS; do "$ai_c" "$AI_CTL" >/dev/null 2>&1 || AI_VIVO="$AI_VIVO $ai_c"; done
+[ -z "$AI_VIVO" ]; afirma "aim-controle-copia-intacta-sobrevive" $? "${AI_VIVO:+reprovada por:$AI_VIVO}"
+AI_W=".claude/skills/sprintx/scripts/rastro.sh"
+AI_L=".claude/hooks/comum/rastro.sh"
+AI_R=".claude/skills/sprintx/references"
+ai_m() { # ai_m <nome> <arquivo-relativo> <trecho> <troca> — arvore nova com UMA troca literal
+  local r; r="$(ai_arvore "$1")"
+  muta_lit "$r/$2" "$r/$2.m" "$3" "$4" && mv "$r/$2.m" "$r/$2" && printf '%s' "$r"
+}
+# m1 — o portao do dono desaparece: qualquer sessao volta a fechar a task de qualquer outra.
+AIM="$(ai_m m1 "$AI_W" 'if [ -n "$DONA" ] && [ "$DONA" != "${SESSAO:-}" ]; then' 'if false; then')"
+ai_mutante "aim-mutante-1-sem-portao-do-dono" $? "$AIM" "ai_dono ai_dono_bloqueada ai_rotacao"
+# m2 — o portao passa a valer para task-iniciada tambem: reivindicar depois de fechada reprova,
+#      e o legado deixa de ser fechavel pelo caminho compativel.
+AIM="$(ai_m m2 "$AI_W" '  task-concluida|task-bloqueada)' '  task-concluida|task-bloqueada|task-iniciada)')"
+ai_mutante "aim-mutante-2-portao-alcanca-task-iniciada" $? "$AIM" "ai_iniciada_fora_do_portao"
+# m3 — o dono sai de um arquivo so, sem o rotacionado: a reivindicacao rotacionada fica invisivel.
+AIM="$(ai_m m3 "$AI_L" 'for _f in "$_dir/$_t".jsonl "$_dir/$_t".[0-9]*.jsonl; do' 'for _f in "$_dir/$_t".jsonl; do')"
+ai_mutante "aim-mutante-3-dono-ignora-arquivo-rotacionado" $? "$AIM" "ai_rotacao"
+# m4 — o portao compara com a sessao errada (a do evento, nao a desta): o dono nao se reconhece.
+AIM="$(ai_m m4 "$AI_W" '[ "$DONA" != "${SESSAO:-}" ]' '[ "$DONA" = "${SESSAO:-}" ]')"
+ai_mutante "aim-mutante-4-portao-compara-invertido" $? "$AIM" "ai_dono ai_dono_bloqueada"
+# m5 — a tabela de respostas volta a mandar seguir sem o evento no codigo 5.
+AIM="$(ai_m m5 "$AI_R/08-rastro.md" "$AI_LIT_C5" 'siga sem o evento')"
+ai_mutante "aim-mutante-5-codigo-5-volta-a-mandar-seguir" $? "$AIM" "ai_doc"
+# m6 — a 06-execucao.md perde a frase que diz que a task NAO esta reivindicada.
+AIM="$(ai_m m6 "$AI_R/06-execucao.md" "$AI_LIT_EXEC" 'nada foi gravado')"
+ai_mutante "aim-mutante-6-execucao-sem-o-aviso-de-nao-reivindicada" $? "$AIM" "ai_doc"
+# m7 — DS-171 apagada do registro.
+AIM="$(ai_arvore m7)" && muta_lit "$AIM/.claude/skills/sprintx/DECISOES-DA-SKILL.md" "$AIM/ds.m" '| DS-171 |' '| DS-171-apagada |' \
+  && mv "$AIM/ds.m" "$AIM/.claude/skills/sprintx/DECISOES-DA-SKILL.md"
+ai_mutante "aim-mutante-7-ds171-apagada" $? "$AIM" "ai_ds"
+
+rm -rf "$AI_T"
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"
 [ "$pulado" -eq 0 ] || echo "  ATENCAO: skip interno e buraco de cobertura da sprintx nesta plataforma, nao dependencia externa."

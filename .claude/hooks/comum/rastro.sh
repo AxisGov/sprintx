@@ -716,6 +716,10 @@ function _rv_linha(   task, k, s, d) {
   if ((k in _rv_ri) && (_rv_r > _rv_ri[k] || (_rv_r == _rv_ri[k] && FNR < _rv_fi[k]))) return
   _rv_ri[k] = _rv_r; _rv_fi[k] = FNR; _rv_dono[k] = s; _rv_campo[k] = d
 }
+# O dono de UMA (trabalho, task): a sessao do task_iniciada mais recente, vazia quando o mais
+# recente e um fechamento ou quando o evento e legado (sem `sessao`). Mesma resolucao que
+# _rv_fim usa — nao e uma segunda regra de ownership, e o mesmo _rv_dono.
+function _rv_dono_de(t, task) { return _rv_dono[t SUBSEP task] }
 function _rv_fim(ses,   k, p, i, j, x) {
   RV_N = 0
   for (k in _rv_dono) {
@@ -726,6 +730,31 @@ function _rv_fim(ses,   k, p, i, j, x) {
   for (i = 2; i <= RV_N; i++) { x = RV_L[i]; for (j = i - 1; j >= 1 && RV_L[j] > x; j--) RV_L[j + 1] = RV_L[j]; RV_L[j + 1] = x }
 }
 '
+
+# rastro_dona_da_task_em <var> <raiz> <trabalho_id> <task>
+#
+# A sessao que tem AQUELA task daquele trabalho aberta agora, ou vazio quando ninguem tem — a
+# reivindicacao ativa da DS-150/153, resolvida pelo MESMO awk canonico que o escopo-da-task usa
+# (_RASTRO_AWK_REIV), e nao por uma segunda regra de ownership.
+#
+# Le o arquivo corrente E os rotacionados daquele trabalho: a reivindicacao pode estar em
+# <trabalho_id>.1.jsonl depois de uma rotacao, e um portao que olhasse so o corrente veria a task
+# como livre justamente quando o rastro acabou de crescer. A ordem "rotacionado antes do
+# corrente" do contrato sai do rank do nome do arquivo, dentro do awk — nenhum sort por fora.
+#
+# Falha aberta como todo o resto daqui: sem pasta, sem arquivo ou sem awk utilizavel, devolve
+# vazio. Quem NAO pode falhar aberto e quem chama (scripts/rastro.sh da skill, DS-159).
+rastro_dona_da_task_em() { # rastro_dona_da_task_em <var> <raiz> <trabalho_id> <task>
+  local _raiz="$2" _t="$3" _k="$4" _dir _f _arqs=()
+  printf -v "$1" '%s' ""
+  _dir="$_raiz/docs/eventos"
+  [ -d "$_dir" ] || return 0
+  for _f in "$_dir/$_t".jsonl "$_dir/$_t".[0-9]*.jsonl; do [ -f "$_f" ] && _arqs+=("$_f"); done
+  [ "${#_arqs[@]}" -gt 0 ] || return 0
+  printf -v "$1" '%s' "$(LC_ALL=C awk -v t="$_t" -v k="$_k" "$_RASTRO_AWK_REIV"'
+    { _rv_linha() }
+    END { print _rv_dono_de(t, k) }' "${_arqs[@]}" 2>/dev/null)"
+}
 
 # _rastro_varre <raiz> <sessao> — UMA passada de awk por docs/eventos/*.jsonl: RASTRO_REIV
 # recebe as reivindicacoes ativas da sessao (o formato de rastro_reivindicacoes_da_sessao,
