@@ -48,7 +48,10 @@ case "$FERRAMENTA" in
         elif printf '%s' "$SAIDA" | grep -qE '(^|[[:space:]])(FAILED|FAIL)([[:space:]]|$)'; then
           RES="falha"
         fi
-        rastro_grava "$RAIZ" suite_executada hook "$RES" "$(printf '%s' "$CMD" | cut -c1-120)" '[]'
+        # O detalhe e cortado em 120 BYTES sem partir caractere UTF-8 multibyte e sem depender
+        # da locale: `cut -c` faria as duas coisas erradas (ver rastro_corta_utf8_em).
+        rastro_corta_utf8_em DETALHE "$CMD" 120
+        rastro_grava "$RAIZ" suite_executada hook "$RES" "$DETALHE" '[]'
         ;;
     esac
     ;;

@@ -145,6 +145,48 @@ rastro_json_escape_em() { # rastro_json_escape_em <var> <texto>
 }
 rastro_json_escape() { local _e; rastro_json_escape_em _e "$1"; printf '%s' "$_e"; }
 
+# rastro_corta_utf8_em <var> <texto> [bytes] — o texto cortado em ate <bytes> bytes (padrao 120),
+# sem partir um caractere UTF-8 multibyte ao meio.
+#
+# `cut -c1-120` nao serve, por dois motivos independentes. O comportamento de `-c` (byte ou
+# caractere) depende da locale do processo que roda o hook, que o hook nao controla: sem locale
+# UTF-8 o corte e por byte e pode deixar o byte-lider de uma sequencia multibyte (0xC3, no
+# defeito observado em docs/eventos/sem-trabalho.jsonl) pendurado sem o byte de continuacao
+# (0x80-0xBF) que ele anuncia — jsonl com byte UTF-8 invalido, e o contrato expx-eventos exige
+# UTF-8 valido. E `cut` corta LINHA POR LINHA: comando de suite multilinha passa inteiro, com
+# cada linha cortada em 120, e o detalhe estoura o limite em vez de respeita-lo.
+#
+# Aqui o corte e SEMPRE por byte, sobre o texto inteiro, e so depois os ate 4 bytes finais sao
+# inspecionados: se o corte caiu no meio de uma sequencia (byte-lider que anuncia mais bytes do
+# que sobraram no fim), a sequencia incompleta INTEIRA sai. Sequencia que termina exatamente no
+# byte <n> fica — aparar a mais perderia um caractere valido.
+#
+# `local LC_ALL=C` e o que da semantica de BYTE as expansoes: o bash reconfigura a locale na
+# atribuicao, entao `${s:0:n}`, `${#s}` e `${s: -i:1}` contam bytes aqui dentro — e so aqui, o
+# `local` e desfeito na volta. Nenhum processo externo (regra 1 do contrato, DS-157): `head -c`
+# e `od` custariam de 0,5 a 2 s cada no Git Bash, e isto roda em PostToolUse.
+rastro_corta_utf8_em() { # rastro_corta_utf8_em <var> <texto> [bytes]
+  local LC_ALL=C
+  local _s="$2" _n="${3:-120}" _c _i=1 _b _tam
+  _c="${_s:0:$_n}"
+  while [ "$_i" -le 4 ] && [ "$_i" -le "${#_c}" ]; do
+    # Valor do i-esimo byte contado do fim: `"x` e o codigo de x para o printf builtin.
+    printf -v _b '%d' "\"${_c: -$_i:1}"
+    if [ "$_b" -lt 128 ]; then
+      break                                     # ASCII: o corte caiu em fronteira de caractere
+    elif [ "$_b" -ge 192 ]; then                 # byte-lider: quantos bytes ele anuncia?
+      if   [ "$_b" -ge 240 ]; then _tam=4
+      elif [ "$_b" -ge 224 ]; then _tam=3
+      else _tam=2
+      fi
+      [ "$_tam" -gt "$_i" ] && _c="${_c:0:$((${#_c} - _i))}"
+      break
+    fi
+    _i=$((_i + 1))                               # byte de continuacao: olha o byte anterior
+  done
+  printf -v "$1" '%s' "$_c"
+}
+
 # rastro_le_entrada_em <var> — o stdin inteiro do hook (o payload JSON). `mapfile -d ''`
 # (bash >= 4.4) le em blocos e sem processo; `read -d ''` leria um byte por chamada num
 # pipe, e `$(cat)` custa um processo. Bash mais antigo (macOS): `cat`, como sempre.
