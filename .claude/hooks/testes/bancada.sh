@@ -7195,12 +7195,12 @@ AG_SEMJQ="$(ag_path_sem_jq)"
 
 # Fixture minima, como na secao Q: raiz com .git e docs/eventos. Sem reivindicacao de sessao no
 # rastro, o destino do evento e docs/eventos/sem-trabalho.jsonl (DS-155) — o arquivo do defeito.
-ag_roda() { # ag_roda <comando> <PATH do caso>
+ag_roda() { # ag_roda <comando> <PATH do caso> [resposta da ferramenta]
   rm -rf "$AG_T/repo"; mkdir -p "$AG_T/repo/.git" "$AG_T/repo/docs/eventos"
   python3 -c "
 import json, sys
-print(json.dumps({'cwd': sys.argv[1], 'tool_name': 'Bash', 'tool_input': {'command': sys.argv[2]}}))
-" "$AG_T/repo" "$1" > "$AG_T/payload.json"
+print(json.dumps({'cwd': sys.argv[1], 'tool_name': 'Bash', 'tool_input': {'command': sys.argv[2]}, 'tool_response': sys.argv[3]}))
+" "$AG_T/repo" "$1" "${3-}" > "$AG_T/payload.json"
   (cd "$AG_T/repo" && PATH="$2" bash "$AG_H/comum/rastro-post.sh") < "$AG_T/payload.json" >/dev/null 2>&1
 }
 ag_confere() { # ag_confere <detalhe esperado> — jsonl UTF-8 estrito, JSON estrito, detalhe exato
@@ -7233,21 +7233,21 @@ ag_caso() { # ag_caso <nome> <char> <largura> <k> <rota> <PATH do caso>
   else det="$(ag_erro)"; fi
   afirma "$nome-$rota" "$rc" "$det"
 }
-# Comando multilinha e UM texto: o corte de 120 bytes atravessa o \n, nao se repete por linha.
-# Aqui o byte 120 cai no meio do 'a' acentuado da SEGUNDA linha — prova as duas coisas de uma
-# vez: o texto e cortado inteiro e a sequencia incompleta do fim sai.
+# Comando multilinha vira UMA linha de texto antes do corte, como exige o contrato de `detalhe`.
+# Aqui o byte 120 cai no meio do 'a' acentuado da SEGUNDA linha ja normalizada — prova as duas
+# coisas de uma vez: as quebras viram espaco e a sequencia incompleta do fim sai.
 ag_multilinha() { # ag_multilinha <rota> <PATH do caso>
   local rota="$1" caminho="$2" enchimento l1 l2 l3 cmd esperado rc det
   printf -v enchimento '%*s' 48 ''; l1="npm test -- ${enchimento// /x}"  # 60 bytes
   printf -v l2 '%*s' 58 ''; l2="${l2// /y}"                              # bytes 62..119
   printf -v l3 '%*s' 30 ''; l3="${l3// /z}"                              # depois do limite
   cmd="$l1"$'\n'"$l2"'á'$'\n'"$l3"                                       # 'á' nos bytes 120 e 121
-  esperado="$l1"$'\n'"$l2"
+  esperado="$l1 $l2"
   ag_roda "$cmd" "$caminho"
   ag_confere "$esperado"; rc=$?
-  if [ "$rc" -eq 0 ]; then det="3 linhas cortadas como texto unico: 119 bytes, sem o 'a' acentuado partido"
+  if [ "$rc" -eq 0 ]; then det="3 linhas normalizadas em uma: 119 bytes, sem o 'a' acentuado partido"
   else det="$(ag_erro)"; fi
-  afirma "ag11-multilinha-cortado-como-texto-unico-$rota" "$rc" "$det"
+  afirma "ag11-multilinha-normalizado-em-uma-linha-$rota" "$rc" "$det"
 }
 # O espelho tem de esconder o jq E continuar servindo o resto: espelho vazio (ou apagado) faria
 # todos os casos sem jq passarem sem rodar nada. Na maquina sem jq e no-op, e as duas rotas
@@ -7276,6 +7276,17 @@ for AG_ROTA in com-jq sem-jq; do
   ag_multilinha "$AG_ROTA" "$AG_PATH"
 done
 
+# Maven e uma suite suportada. Saidas canonicas de falha nao usam necessariamente a palavra
+# `FAIL` isolada: `[ERROR]` e `BUILD FAILURE` tambem precisam gravar resultado `falha`.
+ag_roda "mvn test" "$PATH" $'[ERROR] Failed to execute goal\n[INFO] BUILD FAILURE'
+python3 - "$AG_JSONL" 2>"$AG_T/erro" <<'PY'
+import json, sys
+evento = json.loads(open(sys.argv[1], encoding='utf-8').readline())
+assert evento['resultado'] == 'falha', 'resultado Maven=%r, esperado falha' % evento['resultado']
+PY
+AG_RC=$?
+afirma "ag12-maven-build-failure-e-falha" "$AG_RC" "[ERROR] e BUILD FAILURE classificam mvn test como falha"
+
 # A correcao mora num lugar so: as duas rotas que EXECUTAM o hook — settings.json do Claude Code
 # e o plugin do OpenCode — invocam o mesmo comum/rastro-post.sh, e nenhum hook volta a cortar
 # texto com `cut -c` (que e byte ou caractere conforme a locale, e corta linha por linha).
@@ -7286,7 +7297,7 @@ AG_CUT="$(ag_cut_em_codigo)"; AG_CUT="${AG_CUT//$'\n'/ | }"
 AG_ROTA_CC="$(conta "$H/../settings.json" 'comum/rastro-post.sh')"
 AG_ROTA_OC="$(conta "$H/../../.opencode/plugin/sprintx.ts" 'comum/rastro-post.sh')"
 [ -z "$AG_CUT" ] && [ "$AG_ROTA_CC" -eq 1 ] && [ "$AG_ROTA_OC" -eq 1 ]; AG_RC=$?
-afirma "ag12-rotas-compartilham-o-mesmo-hook" "$AG_RC" "rotas para comum/rastro-post.sh: claude-code=$AG_ROTA_CC opencode=$AG_ROTA_OC; cut -c em codigo de hook: ${AG_CUT:-nenhum}"
+afirma "ag13-rotas-compartilham-o-mesmo-hook" "$AG_RC" "rotas para comum/rastro-post.sh: claude-code=$AG_ROTA_CC opencode=$AG_ROTA_OC; cut -c em codigo de hook: ${AG_CUT:-nenhum}"
 rm -rf "$AG_T"
 
 echo
