@@ -96,6 +96,7 @@ contexto() { # contexto <slug>
   AUD="$PASTA/00-AUDITORIA.md"
   # Sem 00-PLANEJAMENTO.md nao ha eixo F6: le_planejamento sobrescreve.
   P_F6=legado; P_MAX6=null; P_N6=0; P_BLQ=""; P_CONG=""; P_ASS=null; P_RECUSA=""; P_PARC=""; W6_PARC=""
+  P_AUT6=ausente; P_AUT6_POR=""; P_AUT6_EM=""; P_AUT6_ORIGEM=""
 }
 
 hoje() { date +%Y-%m-%d; }
@@ -154,6 +155,19 @@ valida_orcamento_f6() {
     null) ;;
     *) positivo "$1" || falha "$E_CONTRATO" "max_replanejamentos_f6 invalido: '$1' (inteiro >= 1 ou null)"
        [ "$2" != null ] || falha "$E_CONTRATO" "max_replanejamentos_f6 sem orcamento_declarado_por: o teto precisa de dono" ;;
+  esac
+}
+
+# valida_dono_f6 <max6> <dono_compartilhado> <dono_tardio>
+# O teto positivo da F6 tem uma unica autoridade citavel: o dono compartilhado
+# vindo de `criar`, ou o dono do trio append-only da autorizacao tardia.
+valida_dono_f6() {
+  local max6="$1" compartilhado="$2" tardio="$3"
+  case "$max6" in
+    null) [ "$tardio" = null ] || falha "$E_CONTRATO" "autorizacao tardia da F6 sem max_replanejamentos_f6 positivo" ;;
+    *) positivo "$max6" || falha "$E_CONTRATO" "max_replanejamentos_f6 invalido: '$max6' (inteiro >= 1 ou null)"
+       [ "$compartilhado" != null ] || [ "$tardio" != null ] \
+         || falha "$E_CONTRATO" "max_replanejamentos_f6 sem autoridade: falta orcamento_declarado_por ou autorizacao_tardia_f6_por" ;;
   esac
 }
 
@@ -218,6 +232,34 @@ em_lista() { case " $2 " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 # As chaves do eixo F6, na ordem em que sao gravadas. Presentes todas, ou nenhuma
 # (planejamento anterior a este contrato: legado — nunca ganha orcamento retroativo).
 CHAVES_F6="max_replanejamentos_f6 replanejamentos_f6 bloqueios_replanejamento_f6 tasks_congeladas assinatura_congeladas"
+CHAVES_AUT6="autorizacao_tardia_f6_por autorizacao_tardia_f6_em autorizacao_tardia_f6_origem"
+
+# le_autorizacao_tardia_f6 — o trio e atomico e append-only. Ausente preserva
+# planejamentos antigos; presente so e valido depois de uma rodada F6 aberta.
+le_autorizacao_tardia_f6() {
+  local k tem=0 falta=0
+  for k in $CHAVES_AUT6; do if fm_presente "$k"; then tem=$((tem + 1)); else falta=$((falta + 1)); fi; done
+  if [ "$tem" -eq 0 ]; then
+    P_AUT6=ausente; P_AUT6_POR=""; P_AUT6_EM=""; P_AUT6_ORIGEM=""
+    return 0
+  fi
+  [ "$falta" -eq 0 ] || falha "$E_CONTRATO" "autorizacao tardia F6 incompleta: as chaves $CHAVES_AUT6 existem todas ou nenhuma"
+  P_AUT6=presente
+  fm_em P_AUT6_POR autorizacao_tardia_f6_por
+  fm_em P_AUT6_EM autorizacao_tardia_f6_em
+  fm_em P_AUT6_ORIGEM autorizacao_tardia_f6_origem
+  case "$P_AUT6_POR" in
+    [a-z]*) case "$P_AUT6_POR" in *[!a-z0-9_-]*) falha "$E_CONTRATO" "autorizacao_tardia_f6_por invalido: '$P_AUT6_POR'" ;; esac ;;
+    *) falha "$E_CONTRATO" "autorizacao_tardia_f6_por invalido: '$P_AUT6_POR'" ;;
+  esac
+  data_iso "$P_AUT6_EM" || falha "$E_CONTRATO" "autorizacao_tardia_f6_em invalido: '$P_AUT6_EM'"
+  [ "$P_AUT6_ORIGEM" = orcamento_f6_nao_declarado ] \
+    || falha "$E_CONTRATO" "autorizacao_tardia_f6_origem invalida: '$P_AUT6_ORIGEM'"
+  [ "$P_F6" = presente ] && positivo "$P_MAX6" && [ "$P_N6" -ge 1 ] \
+    || falha "$E_CONTRATO" "autorizacao tardia F6 exige eixo presente, teto positivo e ao menos uma rodada"
+  ! fm_presente recusa_replanejamento_f6 \
+    || falha "$E_CONTRATO" "autorizacao tardia F6 nao coexiste com recusa_replanejamento_f6"
+}
 
 # le_f6 — P_F6 (presente|legado), P_MAX6, P_N6, P_BLQ, P_CONG, P_ASS, P_PARC.
 le_f6() {
@@ -772,7 +814,10 @@ le_planejamento() {
   fm_em P_MAX max_reprovacoes_f5; fm_em P_POR orcamento_declarado_por
   fm_em P_ESTADO estado; fm_em P_REPROV reprovacoes; fm_em P_RECUSA recusa_replanejamento_f6
   le_f6
+  le_autorizacao_tardia_f6
   valida_orcamento "$P_MAX" "$P_POR" "$P_MAX6"
+  if [ "$P_AUT6" = presente ]; then valida_dono_f6 "$P_MAX6" "$P_POR" "$P_AUT6_POR"
+  else valida_dono_f6 "$P_MAX6" "$P_POR" null; fi
   case "$P_ESTADO" in
     null|aguardando_f3|aguardando_f4|aguardando_f5|replanejar|aprovado|orcamento_esgotado) ;;
     replanejar_execucao|replanejamento_execucao_esgotado) ;;
@@ -861,8 +906,14 @@ valida_recusa() {
 # ------------------------------------------------------------------ escrita
 
 # f6_herda — o eixo F6 a gravar (W6_*) comeca igual ao lido (P_*).
-f6_herda() { W6="$P_F6"; W6_MAX="$P_MAX6"; W6_N="$P_N6"; W6_BLQ="$P_BLQ"; W6_CONG="$P_CONG"; W6_ASS="$P_ASS"; W6_PARC="$P_PARC"; W_RECUSA="$P_RECUSA"; }
-f6_novo() { W6=presente; W6_MAX="$1"; W6_N=0; W6_BLQ=""; W6_CONG=""; W6_ASS=null; W6_PARC=""; W_RECUSA=""; }
+f6_herda() {
+  W6="$P_F6"; W6_MAX="$P_MAX6"; W6_N="$P_N6"; W6_BLQ="$P_BLQ"; W6_CONG="$P_CONG"; W6_ASS="$P_ASS"; W6_PARC="$P_PARC"; W_RECUSA="$P_RECUSA"
+  W_AUT6="$P_AUT6"; W_AUT6_POR="$P_AUT6_POR"; W_AUT6_EM="$P_AUT6_EM"; W_AUT6_ORIGEM="$P_AUT6_ORIGEM"
+}
+f6_novo() {
+  W6=presente; W6_MAX="$1"; W6_N=0; W6_BLQ=""; W6_CONG=""; W6_ASS=null; W6_PARC=""; W_RECUSA=""
+  W_AUT6=ausente; W_AUT6_POR=""; W_AUT6_EM=""; W_AUT6_ORIGEM=""
+}
 
 # parciais_yaml — o bloco parciais_replanejamento_f6 de W6_PARC, na forma que parciais_tsv le.
 parciais_yaml() {
@@ -883,7 +934,7 @@ lista_yaml() { if [ -z "$1" ]; then printf '[]'; else printf '[%s]' "$(printf '%
 # vem de W6_* (f6_herda/f6_novo); legado continua sem as chaves — nunca ganha
 # orcamento numa regravacao. W_RECUSA e o motivo do terminal recusado, e so dele.
 escreve() {
-  local max="$1" por="$2" estado="$3" reprov="$4" hist="$5" data tmp yaml prosa teto t6="" rodada6="" rec="" trec=""
+  local max="$1" por="$2" estado="$3" reprov="$4" hist="$5" data tmp yaml prosa teto t6="" rodada6="" rec="" trec="" aut6="" dono6="$2"
   [ -f "$TEMPLATE" ] || falha "$E_CONTRATO" "template ausente: assets/TEMPLATE-PLANEJAMENTO.md"
   data="$(hoje)"
   if [ "$estado" = replanejamento_execucao_recusado ]; then
@@ -918,8 +969,15 @@ EOF
   fi
   if [ "$max" = null ]; then teto="$reprov, sem teto"; else teto="$reprov de $max (teto declarado por \`$por\`)"; fi
   if [ "$W6" = presente ]; then
+    if [ "${W_AUT6:-ausente}" = presente ]; then
+      aut6="autorizacao_tardia_f6_por: $W_AUT6_POR
+autorizacao_tardia_f6_em: $W_AUT6_EM
+autorizacao_tardia_f6_origem: $W_AUT6_ORIGEM
+"
+      dono6="$W_AUT6_POR"
+    fi
     if [ "$W6_MAX" = null ]; then t6=" · replanejamentos da execução (F6): $W6_N, sem orçamento declarado"
-    else t6=" · replanejamentos da execução (F6): $W6_N de $W6_MAX (teto declarado por \`$por\`)"; fi
+    else t6=" · replanejamentos da execução (F6): $W6_N de $W6_MAX (teto declarado por \`$dono6\`)"; fi
     [ -n "$W6_BLQ" ] && rodada6="
 
 Rodada de replanejamento da execução ativa, aberta por: $(printf '%s' "$W6_BLQ" | sed 's/ /, /g'). Tasks concluídas congeladas: $(printf '%s' "$W6_CONG" | sed 's/ /, /g')."
@@ -931,8 +989,8 @@ Rodada de replanejamento da execução ativa, aberta por: $(printf '%s' "$W6_BLQ
   {
     printf -- '---\nexpx_schema: 1\nexpx_tool: sprintx\nkind: planejamento\ntrabalho_id: %s\n' "$SLUG"
     if [ "$W6" = presente ]; then
-      printf 'max_reprovacoes_f5: %s\nmax_replanejamentos_f6: %s\norcamento_declarado_por: %s\nestado: %s\n%sreprovacoes: %s\n' \
-        "$max" "$W6_MAX" "$por" "$estado" "$rec" "$reprov"
+      printf 'max_reprovacoes_f5: %s\nmax_replanejamentos_f6: %s\norcamento_declarado_por: %s\n%sestado: %s\n%sreprovacoes: %s\n' \
+        "$max" "$W6_MAX" "$por" "$aut6" "$estado" "$rec" "$reprov"
       printf 'replanejamentos_f6: %s\nbloqueios_replanejamento_f6: %s\ntasks_congeladas: %s\nassinatura_congeladas: %s\n' \
         "$W6_N" "$(lista_yaml "$W6_BLQ")" "$(lista_yaml "$W6_CONG")" "$W6_ASS"
       parciais_yaml

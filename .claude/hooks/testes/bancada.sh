@@ -1964,6 +1964,86 @@ recusa_replanejamento_f6: classes_mistas"
   git -C "$d" commit -q -m recusado -- docs/sprintx/features/menu/00-PLANEJAMENTO.md || return 1
   [ "$(kv "$(kpl "$s" "$d" fase menu)" fase)" = PARAR ]
 }
+# Contrato da autorizacao tardia do orcamento F6: o trio de auditoria e atomico,
+# preservado pelos escritores e suficiente para autorizar o eixo F6 sem forjar o dono compartilhado.
+k_aut_ativa() {
+  local s="$1" d="$2"
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  kpl "$s" "$d" replanejar-execucao menu >/dev/null || return 1
+  [ "$(fmv "$(kf "$d")/00-PLANEJAMENTO.md" estado)" = replanejar_execucao ]
+}
+k_aut_campos() {
+  local a="$1" por="${2:-}" em="${3:-}" origem="${4:-}"
+  K_AUT_POR="$por" K_AUT_EM="$em" K_AUT_ORIGEM="$origem" awk '
+    /^orcamento_declarado_por:/ {
+      print
+      if (length(ENVIRON["K_AUT_POR"])) print "autorizacao_tardia_f6_por: " ENVIRON["K_AUT_POR"]
+      if (length(ENVIRON["K_AUT_EM"])) print "autorizacao_tardia_f6_em: " ENVIRON["K_AUT_EM"]
+      if (length(ENVIRON["K_AUT_ORIGEM"])) print "autorizacao_tardia_f6_origem: " ENVIRON["K_AUT_ORIGEM"]
+      next
+    }
+    { print }
+  ' "$a" > "$K/aut.tmp" && mv "$K/aut.tmp" "$a"
+}
+k_aut_trio() {
+  k_aut_campos "$1" "${2:-usuario}" "${3:-2026-10-12}" "${4:-orcamento_f6_nao_declarado}"
+}
+k_aut_all_or_none() {
+  local s="$1" d a rc
+  d="$(kcopia "$FXP")"; k_aut_ativa "$s" "$d" || return 1; a="$(kf "$d")/00-PLANEJAMENTO.md"
+  k_aut_campos "$a" usuario '' '' || return 1
+  kpl "$s" "$d" fase menu >/dev/null; rc=$?; [ "$rc" -eq 4 ] || return 1
+  d="$(kcopia "$FXP")"; k_aut_ativa "$s" "$d" || return 1; a="$(kf "$d")/00-PLANEJAMENTO.md"
+  k_aut_campos "$a" usuario 2026-10-12 '' || return 1
+  kpl "$s" "$d" fase menu >/dev/null; rc=$?; [ "$rc" -eq 4 ]
+}
+k_aut_preserva_dono() {
+  local s="$1" d="$2" a; a="$(kf "$d")/00-PLANEJAMENTO.md"
+  k_aut_ativa "$s" "$d" || return 1; k_aut_trio "$a" usuario || return 1
+  git -C "$d" add -- "$a" && git -C "$d" commit -q -m 'audit late f6' -- "$a" || return 1
+  kpl "$s" "$d" avanca menu f3 >/dev/null || return 1
+  [ "$(fmv "$a" orcamento_declarado_por)" = buildx ] \
+    && [ "$(fmv "$a" autorizacao_tardia_f6_por)" = usuario ] \
+    && [ "$(fmv "$a" autorizacao_tardia_f6_em)" = 2026-10-12 ] \
+    && [ "$(fmv "$a" autorizacao_tardia_f6_origem)" = orcamento_f6_nao_declarado ]
+}
+k_aut_dono_tardio() {
+  local s="$1" d="$2" a rc; a="$(kf "$d")/00-PLANEJAMENTO.md"
+  k_aut_ativa "$s" "$d" || return 1
+  sed -e 's/^max_reprovacoes_f5: [0-9][0-9]*$/max_reprovacoes_f5: null/' -e 's/^orcamento_declarado_por: buildx$/orcamento_declarado_por: null/' "$a" > "$K/aut.tmp" && mv "$K/aut.tmp" "$a"
+  k_aut_trio "$a" usuario || return 1
+  git -C "$d" add -- "$a" && git -C "$d" commit -q -m 'late f6 owner' -- "$a" || return 1
+  kpl "$s" "$d" fase menu >/dev/null || return 1
+  kpl "$s" "$d" avanca menu f3 >/dev/null || return 1
+  [ "$(fmv "$a" orcamento_declarado_por)" = null ] \
+    && [ "$(fmv "$a" autorizacao_tardia_f6_por)" = usuario ] \
+    && [ "$(fmv "$a" autorizacao_tardia_f6_origem)" = orcamento_f6_nao_declarado ] || return 1
+  d="$(kcopia "$FXP")"; k_aut_ativa "$s" "$d" || return 1; a="$(kf "$d")/00-PLANEJAMENTO.md"
+  sed -e 's/^max_reprovacoes_f5: [0-9][0-9]*$/max_reprovacoes_f5: null/' -e 's/^orcamento_declarado_por: buildx$/orcamento_declarado_por: null/' "$a" > "$K/aut.tmp" && mv "$K/aut.tmp" "$a"
+  kpl "$s" "$d" fase menu >/dev/null; rc=$?
+  [ "$rc" -eq 4 ]
+}
+k_aut_valida_origem_data_recusa() {
+  local s="$1" d a rc caso
+  for caso in origem data recusa; do
+    d="$(kcopia "$FXP")"; k_aut_ativa "$s" "$d" || return 1; a="$(kf "$d")/00-PLANEJAMENTO.md"
+    case "$caso" in
+      origem) k_aut_trio "$a" usuario 2026-10-12 outra_origem ;;
+      data) k_aut_trio "$a" usuario ontem orcamento_f6_nao_declarado ;;
+      recusa)
+        k_aut_trio "$a" usuario || return 1
+        sed '/^estado: replanejar_execucao$/a recusa_replanejamento_f6: classes_mistas' "$a" > "$K/aut.tmp" && mv "$K/aut.tmp" "$a"
+        ;;
+    esac
+    kpl "$s" "$d" fase menu >/dev/null; rc=$?; [ "$rc" -eq 4 ] || return 1
+  done
+}
+k_aut_legado_valido() {
+  local s="$1" d="$2" a out; a="$(kf "$d")/00-PLANEJAMENTO.md"
+  out="$(kpl "$s" "$d" fase menu)" || return 1
+  [ "$(kv "$out" fase)" = F6 ] && ! fm_tem_k "$a" autorizacao_tardia_f6_por \
+    && ! fm_tem_k "$a" autorizacao_tardia_f6_em && ! fm_tem_k "$a" autorizacao_tardia_f6_origem
+}
 CASOS_K="k_inicia:FXP k_retomada:FX2 k_resolver_antes:FXP k_aprovacao:FXP k_segundo_defeito:FXP k_lacuna:FXP k_prerequisito:FXP
   k_legado_bloqueio:FXP k_mistura:FXP k_varios:FXP k_legado_orcamento:FXL k_sem_orcamento:FXN k_fronteira:FXP
   k_f5_nao_continua:FX5 k_f5_nao_esgota:FXP k_concluidas_protegidas:FXP k_task_nao_bloqueada:FXP
@@ -1983,6 +2063,14 @@ for par in k_inicia:k1-piloto-entra-em-replanejar-execucao k_retomada:k2-retomad
   k_f5_nao_esgota:k15-f5-esgota-no-terminal-existente k_concluidas_protegidas:k16-concluidas-congeladas-nos-portoes \
   k_task_nao_bloqueada:k17-task-do-bloqueio-precisa-estar-bloqueada; do
   roda_k "${par%%:*}" "$PL"; afirma "${par#*:}" $? "${par%%:*}"
+done
+for par in k_aut_all_or_none:k23-autorizacao-tardia-trio-all-or-none \
+  k_aut_preserva_dono:k24-autorizacao-tardia-preserva-dono-compartilhado \
+  k_aut_dono_tardio:k25-autorizacao-tardia-null-compartilhado-valido \
+  k_aut_valida_origem_data_recusa:k26-autorizacao-tardia-origem-data-e-recusa \
+  k_aut_legado_valido:k27-planejamento-antigo-continua-valido; do
+  d="$(kcopia "$FXP")"
+  "${par%%:*}" "$PL" "$d"; afirma "${par#*:}" $? "${par%%:*}"
 done
 
 # Contrato nos documentos: estados, comando da F6, resolucao, congelamento e decisoes.
