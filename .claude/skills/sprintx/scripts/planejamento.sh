@@ -1482,6 +1482,26 @@ fecha_rodada() {
   evento replanejamento_execucao_aprovado f5 - ok "replanejamento da execucao $P_N6 aprovado na F5 rodada $P_RODADAS: $(printf '%s' "$blq" | tr ' ' ',') resolvido(s); tasks concluidas intactas${parc:+; trabalho parcial preservado na arvore: $parc}"
 }
 
+# abre_rodada_f6 <B-NN ordenados> <maximo> [aut_por aut_em aut_origem] — aplica
+# e persiste uma rodada ja
+# validada. Os chamadores continuam responsaveis pelo orcamento, pelos bloqueios
+# e pela fronteira; este e o unico escritor da mutacao comum da rodada.
+abre_rodada_f6() {
+  local defeitos="$1" max6="$2" aut_por="${3-}" aut_em="${4-}" aut_origem="${5-}"
+  f6_herda
+  W6_MAX="$max6"
+  if [ -n "$aut_por$aut_em$aut_origem" ]; then
+    [ -n "$aut_por" ] && [ -n "$aut_em" ] && [ -n "$aut_origem" ] \
+      || falha "$E_CONTRATO" "auditoria tardia da F6 deve ser fornecida por inteiro ao abrir a rodada"
+    W_AUT6=presente; W_AUT6_POR="$aut_por"; W_AUT6_EM="$aut_em"; W_AUT6_ORIGEM="$aut_origem"
+  fi
+  calcula_congeladas
+  W6_N=$((P_N6 + 1)); W6_BLQ="$defeitos"; W6_CONG="$C_IDS"; W6_ASS="$C_ASS"; W6_PARC="$F_PARC"
+  escreve "$P_MAX" "$P_POR" replanejar_execucao "$P_REPROV" "$P_HIST"
+  evento replanejamento_execucao_iniciado f6 - ok "replanejamento da execucao $W6_N de $max6 aberto por [$defeitos]; reprovacoes da F5 continuam em $P_REPROV; congeladas [$W6_CONG]; trabalho parcial preservado [$(printf '%s\n' "$F_PARC" | awk -F'\t' 'NF { printf "%s%s", (n++ ? "," : ""), $1 }')]"
+  checkpoint
+}
+
 # replanejar-execucao — a F6 registrou defeito_de_plano: volta ao planejamento
 # pela revisao do plano (F3), congelando o que ja foi concluido.
 cmd_replanejar_execucao() {
@@ -1566,10 +1586,10 @@ EOF
   fi
   if [ -n "$motivo" ]; then recusa_duravel "$motivo" "$defeitos${outros:+ }$outros"; fi
 
-  f6_herda
   if [ "$P_N6" -ge "$P_MAX6" ]; then
     # Orcamento da F6 consumido: nenhuma rodada nova. Estado terminal proprio,
     # distinto de orcamento_esgotado (F5).
+    f6_herda
     escreve "$P_MAX" "$P_POR" replanejamento_execucao_esgotado "$P_REPROV" "$P_HIST"
     evento replanejamento_execucao_esgotado f6 - bloqueado "orcamento da F6 consumido ($P_N6 de $P_MAX6): defeito_de_plano [$defeitos] nao abre rodada nova"
     checkpoint
@@ -1592,11 +1612,7 @@ EOF
   done
   fronteira_segura
 
-  calcula_congeladas
-  W6_N=$((P_N6 + 1)); W6_BLQ="$defeitos"; W6_CONG="$C_IDS"; W6_ASS="$C_ASS"; W6_PARC="$F_PARC"
-  escreve "$P_MAX" "$P_POR" replanejar_execucao "$P_REPROV" "$P_HIST"
-  evento replanejamento_execucao_iniciado f6 - ok "replanejamento da execucao $W6_N de $P_MAX6 aberto por [$defeitos]; reprovacoes da F5 continuam em $P_REPROV; congeladas [$W6_CONG]; trabalho parcial preservado [$(printf '%s\n' "$F_PARC" | awk -F'\t' 'NF { printf "%s%s", (n++ ? "," : ""), $1 }')]"
-  checkpoint
+  abre_rodada_f6 "$defeitos" "$P_MAX6"
   le_planejamento
   printf 'replanejamento=iniciado\nestado=%s\nreprovacoes=%s\nmax_reprovacoes_f5=%s\nproxima=%s\n' \
     "$P_ESTADO" "$P_REPROV" "$P_MAX" "$(fase_do_estado "$P_ESTADO")"

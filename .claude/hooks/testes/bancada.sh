@@ -2044,6 +2044,60 @@ k_aut_legado_valido() {
   [ "$(kv "$out" fase)" = F6 ] && ! fm_tem_k "$a" autorizacao_tardia_f6_por \
     && ! fm_tem_k "$a" autorizacao_tardia_f6_em && ! fm_tem_k "$a" autorizacao_tardia_f6_origem
 }
+# L0. Caracterizacao do abridor compartilhado: congela o comportamento publico e
+# a persistencia antes de extrair a mutacao comum de `replanejar-execucao`.
+l_abridor_compartilhado() {
+  local s="$1" d="$2" f a ev out antes_i antes_c depois_i depois_c soma head_soma paths congeladas
+  f="$(kf "$d")"; a="$f/00-PLANEJAMENTO.md"; ev="$d/docs/eventos/menu.jsonl"
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  antes_i="$(grep -c '"evento":"replanejamento_execucao_iniciado"' "$ev" 2>/dev/null || true)"
+  antes_c="$(grep -c '"evento":"checkpoint_planejamento"' "$ev" 2>/dev/null || true)"
+  out="$(kpl "$s" "$d" replanejar-execucao menu)" || return 1
+  depois_i="$(grep -c '"evento":"replanejamento_execucao_iniciado"' "$ev" 2>/dev/null || true)"
+  depois_c="$(grep -c '"evento":"checkpoint_planejamento"' "$ev" 2>/dev/null || true)"
+  soma="$(cksum < "$a")"
+  head_soma="$(git -C "$d" show HEAD:docs/sprintx/features/menu/00-PLANEJAMENTO.md | cksum)"
+  paths="$(git -C "$d" show --pretty= --name-only HEAD | sed '/^$/d')"
+  congeladas='[T-01.01, T-01.02, T-01.03, T-01.04, T-02.01, T-02.02, T-02.03, T-02.04, T-03.01, T-03.02, T-03.03, T-03.04, T-04.01, T-04.02]'
+  [ "$soma" = "$head_soma" ] && [ $((depois_i - antes_i)) -eq 1 ] && [ $((depois_c - antes_c)) -eq 1 ] \
+    && [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" -eq 17 ] \
+    && [ "$(kv "$out" replanejamento)" = iniciado ] && [ "$(kv "$out" estado)" = replanejar_execucao ] \
+    && [ "$(kv "$out" reprovacoes)" = 2 ] && [ "$(kv "$out" max_reprovacoes_f5)" = 3 ] \
+    && [ "$(kv "$out" proxima)" = F3 ] && [ "$(kv "$out" replanejamentos_f6)" = 1 ] \
+    && [ "$(kv "$out" max_replanejamentos_f6)" = 1 ] && [ "$(kv "$out" replanejamento_execucao)" = ativo ] \
+    && [ "$(kv "$out" bloqueios_replanejamento_f6)" = B-01 ] \
+    && [ "$(fmv "$a" tasks_congeladas)" = "$congeladas" ] \
+    && [ "$(kv "$out" parciais_replanejamento_f6)" = '' ] \
+    && [ "$(fmv "$a" replanejamentos_f6)" = 1 ] && [ "$(fmv "$a" bloqueios_replanejamento_f6)" = '[B-01]' ] \
+    && [ "$(fmv "$a" parciais_replanejamento_f6)" = '[]' ] && [ "$(fmv "$a" assinatura_congeladas)" != null ] \
+    && [ "$(trailer "$d" Fase)" = f6 ] && [ "$(trailer "$d" Rodada)" = 1 ] \
+    && [ "$(trailer "$d" Estado)" = replanejar_execucao ] \
+    && grep -q '"evento":"replanejamento_execucao_iniciado".*"detalhe":"replanejamento da execucao 1 de 1 aberto por \[B-01\]' "$ev" \
+    && [ "$paths" = "docs/sprintx/features/menu/00-BLOQUEIOS.md
+docs/sprintx/features/menu/00-PLANEJAMENTO.md
+docs/sprintx/features/menu/sprint-04/tasks.md" ]
+}
+
+l_abridor_parametros() {
+  local s="$1" d="$2" r m f a ev out
+  r="$K/l0-parametros"; m="$r/scripts/planejamento.sh"
+  mkdir -p "$r/scripts" "$r/assets"
+  cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$r/assets/"
+  cp "$BL" "$SK/scripts/caminho-git.sh" "$r/scripts/"
+  muta_lit "$s" "$m" '  abre_rodada_f6 "$defeitos" "$P_MAX6"' \
+    '  abre_rodada_f6 "$defeitos" 9 usuario 2026-10-12 orcamento_f6_nao_declarado' || return 1
+  chmod +x "$m"
+  f="$(kf "$d")"; a="$f/00-PLANEJAMENTO.md"; ev="$d/docs/eventos/menu.jsonl"
+  kbl "$m" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  out="$(kpl "$m" "$d" replanejar-execucao menu)" || return 1
+  [ "$(fmv "$a" max_replanejamentos_f6)" = 9 ] \
+    && [ "$(fmv "$a" autorizacao_tardia_f6_por)" = usuario ] \
+    && [ "$(fmv "$a" autorizacao_tardia_f6_em)" = 2026-10-12 ] \
+    && [ "$(fmv "$a" autorizacao_tardia_f6_origem)" = orcamento_f6_nao_declarado ] \
+    && [ "$(fmv "$a" orcamento_declarado_por)" = buildx ] \
+    && [ "$(kv "$out" max_replanejamentos_f6)" = 9 ] \
+    && grep -q '"evento":"replanejamento_execucao_iniciado".*"detalhe":"replanejamento da execucao 1 de 9 aberto por \[B-01\]' "$ev"
+}
 CASOS_K="k_inicia:FXP k_retomada:FX2 k_resolver_antes:FXP k_aprovacao:FXP k_segundo_defeito:FXP k_lacuna:FXP k_prerequisito:FXP
   k_legado_bloqueio:FXP k_mistura:FXP k_varios:FXP k_legado_orcamento:FXL k_sem_orcamento:FXN k_fronteira:FXP
   k_f5_nao_continua:FX5 k_f5_nao_esgota:FXP k_concluidas_protegidas:FXP k_task_nao_bloqueada:FXP
@@ -2072,6 +2126,10 @@ for par in k_aut_all_or_none:k23-autorizacao-tardia-trio-all-or-none \
   d="$(kcopia "$FXP")"
   "${par%%:*}" "$PL" "$d"; afirma "${par#*:}" $? "${par%%:*}"
 done
+d="$(kcopia "$FXP")"; l_abridor_compartilhado "$PL" "$d"
+afirma "l0-abridor-compartilhado-preserva-replanejar-execucao" $? "stdout, eventos, checkpoint, eixo F6, checksum e paths"
+d="$(kcopia "$FXP")"; l_abridor_parametros "$PL" "$d"
+afirma "l0-abridor-parametros-persistem-teto-e-auditoria" $? "teto, trio tardio, dono compartilhado e evento"
 
 # Contrato nos documentos: estados, comando da F6, resolucao, congelamento e decisoes.
 SCHK="$SK/references/00-schema.md"
