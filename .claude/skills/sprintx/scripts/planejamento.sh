@@ -61,6 +61,7 @@ E_RECUSADO=2; E_PERSISTENCIA=3; E_CONTRATO=4; E_TRANSICAO=5; E_USO=64
 falha() { local c="$1"; shift; printf 'planejamento: %s\n' "$*" >&2; exit "$c"; }
 
 . "$SK/scripts/caminho-git.sh" || falha "$E_USO" "scripts/caminho-git.sh ausente"
+. "$SK/scripts/lib/trava-autorizacao-f6.sh" || falha "$E_USO" "scripts/lib/trava-autorizacao-f6.sh ausente"
 
 # ------------------------------------------------------------------ contexto
 

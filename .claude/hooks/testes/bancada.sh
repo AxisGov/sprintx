@@ -2081,9 +2081,10 @@ docs/sprintx/features/menu/sprint-04/tasks.md" ]
 l_abridor_parametros() {
   local s="$1" d="$2" r m f a ev out
   r="$K/l0-parametros"; m="$r/scripts/planejamento.sh"
-  mkdir -p "$r/scripts" "$r/assets"
+  mkdir -p "$r/scripts/lib" "$r/assets"
   cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$r/assets/"
   cp "$BL" "$SK/scripts/caminho-git.sh" "$r/scripts/"
+  cp "$SK/scripts/lib/trava-autorizacao-f6.sh" "$r/scripts/lib/"
   muta_lit "$s" "$m" '  abre_rodada_f6 "$defeitos" "$P_MAX6"' \
     '  abre_rodada_f6 "$defeitos" 9 usuario 2026-10-12 orcamento_f6_nao_declarado' || return 1
   chmod +x "$m"
@@ -2130,6 +2131,65 @@ d="$(kcopia "$FXP")"; l_abridor_compartilhado "$PL" "$d"
 afirma "l0-abridor-compartilhado-preserva-replanejar-execucao" $? "stdout, eventos, checkpoint, eixo F6, checksum e paths"
 d="$(kcopia "$FXP")"; l_abridor_parametros "$PL" "$d"
 afirma "l0-abridor-parametros-persistem-teto-e-auditoria" $? "teto, trio tardio, dono compartilhado e evento"
+
+TRAVA_AUT6="$SK/scripts/lib/trava-autorizacao-f6.sh"
+l_lock_obtem() {
+  local lib="$1" repo="$2" slug="$3"
+  ( . "$lib" || exit 1
+    adquire_trava_autorizacao_f6 "$repo" "$slug" || exit 1
+    printf '%s' "$TRAVA_AUT6_DIR"
+    libera_trava_autorizacao_f6
+    trap - EXIT HUP INT TERM
+  )
+}
+l_lock_caminho() {
+  [ -f "$TRAVA_AUT6" ] || return 1
+  local a b c
+  a="$(l_lock_obtem "$TRAVA_AUT6" "$W" menu)" || return 1
+  b="$(l_lock_obtem "$TRAVA_AUT6" "$WT" menu)" || return 1
+  c="$(l_lock_obtem "$TRAVA_AUT6" "$W" relatorios)" || return 1
+  [ "$a" != "$b" ] && [ "$a" != "$c" ] && [ "$b" != "$c" ]
+}
+l_lock_concorrente() {
+  [ -f "$TRAVA_AUT6" ] || return 1
+  local q="$K/lock-race" pid rc=0
+  mkdir -p "$q"
+  ( . "$TRAVA_AUT6" || exit 1
+    adquire_trava_autorizacao_f6 "$W" menu || exit 1
+    printf pronto > "$q/pronto"
+    while [ ! -f "$q/libera" ]; do sleep 1; done
+  ) & pid=$!
+  while [ ! -f "$q/pronto" ]; do kill -0 "$pid" 2>/dev/null || return 1; sleep 1; done
+  ( . "$TRAVA_AUT6" && adquire_trava_autorizacao_f6 "$W" menu ) >/dev/null 2>&1 && rc=1
+  : > "$q/libera"; wait "$pid" || rc=1
+  [ "$rc" -eq 0 ]
+}
+l_lock_trap() {
+  [ -f "$TRAVA_AUT6" ] || return 1
+  local q="$K/lock-trap" p rc=0
+  mkdir -p "$q"
+  ( . "$TRAVA_AUT6" || exit 1
+    adquire_trava_autorizacao_f6 "$W" menu || exit 1
+    printf '%s' "$TRAVA_AUT6_DIR" > "$q/path"
+    exit 7
+  ) >/dev/null 2>&1 || rc=$?
+  p="$(cat "$q/path" 2>/dev/null)"
+  [ "$rc" -eq 7 ] && [ -n "$p" ] && [ ! -e "$p" ]
+}
+l_lock_existente() {
+  [ -f "$TRAVA_AUT6" ] || return 1
+  local p rc=0
+  p="$(l_lock_obtem "$TRAVA_AUT6" "$W" menu)" || return 1
+  mkdir -p "$p"
+  ( . "$TRAVA_AUT6" && adquire_trava_autorizacao_f6 "$W" menu ) >/dev/null 2>&1 && rc=1
+  [ "$rc" -eq 0 ] && [ -d "$p" ]; rc=$?
+  rmdir "$p"
+  return "$rc"
+}
+l_lock_caminho; afirma "l-lock-1-caminho-por-worktree-e-slug" $? "git-path distingue worktree e slug"
+l_lock_concorrente; afirma "l-lock-2-concorrente-recusada" $? "uma aquisicao vence e a outra falha fechada"
+l_lock_trap; afirma "l-lock-3-trap-remove-so-a-propria" $? "exit 7 preservado e lock adquirido removido"
+l_lock_existente; afirma "l-lock-4-existente-nao-e-removida" $? "lock preexistente falha e permanece"
 
 # Contrato nos documentos: estados, comando da F6, resolucao, congelamento e decisoes.
 SCHK="$SK/references/00-schema.md"
@@ -2181,7 +2241,7 @@ afirma "k23-ds140-a-ds148-registradas" $? "$n de 7, mais DS-147 e DS-148"
 # casos designados; o controle, copia SEM mutacao na mesma estrutura, tem de sobreviver a
 # todos eles — se morrer, e a bancada que esta quebrada.
 MK="$K/mut"
-copia_skill_k() { mkdir -p "$MK/$1/scripts" "$MK/$1/assets"; cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$MK/$1/assets/"; cp "$BL" "$SK/scripts/caminho-git.sh" "$MK/$1/scripts/"; printf '%s/%s/scripts/planejamento.sh' "$MK" "$1"; }
+copia_skill_k() { mkdir -p "$MK/$1/scripts/lib" "$MK/$1/assets"; cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$MK/$1/assets/"; cp "$BL" "$SK/scripts/caminho-git.sh" "$MK/$1/scripts/"; cp "$SK/scripts/lib/trava-autorizacao-f6.sh" "$MK/$1/scripts/lib/"; printf '%s/%s/scripts/planejamento.sh' "$MK" "$1"; }
 mutante_k() { # mutante_k <nome> <rc da geracao> <script> <caso que TEM de matar>...
   local nome="$1" rc="$2" s="$3" c vivos=""; shift 3
   if [ "$rc" -eq 0 ]; then for c in "$@"; do roda_k "$c" "$s" && vivos="$vivos$c "; done; fi
@@ -2519,10 +2579,16 @@ esac
 EOF
 cat > "$MBIN/git" <<'EOF'
 #!/usr/bin/env bash
-if [ "$#" -eq 2 ] && [ "$1" = rev-parse ] && [ "$2" = --show-toplevel ]; then
-  t="$("$M_REALGIT" rev-parse --show-toplevel)" || exit $?
-  printf 'Z:/%s\n' "${t##*/}"; exit 0
-fi
+case " $* " in
+  *' rev-parse --show-toplevel '*|*' rev-parse --git-path '*)
+    t="$("$M_REALGIT" "$@")" || exit $?
+    case "$t" in
+      "$M_SIMT"/z/*) printf 'Z:/%s\n' "${t#"$M_SIMT"/z/}" ;;
+      *) printf '%s\n' "$t" ;;
+    esac
+    exit 0
+    ;;
+esac
 exec "$M_REALGIT" "$@"
 EOF
 chmod +x "$MBIN/cygpath" "$MBIN/git"
@@ -2581,6 +2647,16 @@ m_h() { # worktree vinculada: .git e arquivo, o Git devolve a raiz do worktree
 m_f_sim() { m_f m_sim "$1" "$MSIM/z"; }
 m_g_sim() { m_g m_sim "$1" "$MSIM/z"; }
 m_h_sim() { m_h m_sim "$1" "$MSIM/z"; }
+m_i() { # trava isolada: checkout principal e worktree vinculada sob caminhos Git for Windows
+  local r="$3/repo lock" wt="$3/repo lock--wt" lib="$2/scripts/lib/trava-autorizacao-f6.sh" a b
+  m_repo "$r" >/dev/null 2>&1 && git -C "$r" worktree add -q -b lock-wt "$wt" main >/dev/null 2>&1 || return 1
+  a="$(cd "$r" && "$1" bash -c '. "$1" || exit 1; adquire_trava_autorizacao_f6 "$2" menu || exit 1; printf "%s" "$TRAVA_AUT6_DIR"; libera_trava_autorizacao_f6' _ "$lib" "$r")" || return 1
+  b="$(cd "$wt" && "$1" bash -c '. "$1" || exit 1; adquire_trava_autorizacao_f6 "$2" menu || exit 1; printf "%s" "$TRAVA_AUT6_DIR"; libera_trava_autorizacao_f6' _ "$lib" "$wt")" || return 1
+  [ "$a" = "$r/.git/sprintx/travas/autorizacao-f6-menu.lock" ] \
+    && case "$b" in "$r/.git/worktrees/"*/sprintx/travas/autorizacao-f6-menu.lock) true ;; *) false ;; esac \
+    && [ ! -e "$a" ] && [ ! -e "$b" ] && m_sem_drive "$3"
+}
+m_i_sim() { m_i m_sim "$1" "$MSIM/z"; }
 
 m_a "$SK"; afirma "ma-sim-c-vira-posix" $? "C:/repo -> cygpath -u"
 m_b "$SK"; afirma "mb-sim-d-com-espaco" $? "D:/repo com espaço, argumento unico"
@@ -2590,6 +2666,7 @@ m_e "$SK"; afirma "me-sem-cygpath-no-op" $? "Linux/macOS: nada muda"
 m_f_sim "$SK"; afirma "mf-sim-planejamento-criar-na-raiz" $? "Z:/... normalizado, nada criado como Z:"
 m_g_sim "$SK"; afirma "mg-sim-bloqueios-registrar-listar-validar-resolver" $? "na raiz, do subdiretorio"
 m_h_sim "$SK"; afirma "mh-sim-worktree-vinculada" $? "raiz do worktree, nao a do principal"
+m_i_sim "$SK"; afirma "mi-sim-trava-normaliza-main-e-worktree" $? "Z:/... normalizado no gitdir correto"
 if command -v cygpath >/dev/null 2>&1; then
   [ "$(m_cg "$SK/scripts/caminho-git.sh" 'C:/repo')" = /c/repo ]; afirma "ma-real-gitbash-c" $? "cygpath real"
   [ "$(m_cg "$SK/scripts/caminho-git.sh" 'D:/repo com espaço')" = '/d/repo com espaço' ]; afirma "mb-real-gitbash-d-com-espaco" $? "cygpath real"
@@ -2604,7 +2681,8 @@ m_g m_real "$SK" "$MS/real"; afirma "mg-real-bloqueios" $? "git real do ambiente
 m_h m_real "$SK" "$MS/real"; afirma "mh-real-worktree" $? "git real do ambiente"
 for f in planejamento.sh bloqueios.sh; do
   [ "$(grep -c 'caminho_git "$t"' "$SK/scripts/$f")" -eq 1 ] || false
-done; afirma "m-uma-regra-dois-consumidores" $? "planejamento.sh e bloqueios.sh usam o helper"
+done && grep -q 'caminho_git' "$SK/scripts/lib/trava-autorizacao-f6.sh"
+afirma "m-uma-regra-tres-consumidores" $? "planejamento.sh, bloqueios.sh e trava usam o helper"
 [ "$(find "$SK/scripts" "$H" -name '*.sh' -not -path '*/testes/*' -exec grep -l 'cygpath' {} + | sed 's|.*/||' | sort -u)" = caminho-git.sh ]
 afirma "m-cygpath-so-no-helper" $? "nenhuma copia da regra fora de caminho-git.sh"
 
@@ -2721,9 +2799,10 @@ afirma "mm-mutante-11b-oraculo-so-sed-fica-cego" $? "leitor tolerante a CR conta
 # Mutantes dos scripts e do helper, em copia da skill (scripts/ + assets/). O controle, copia
 # sem mutacao, sobrevive a todos os casos; cada mutante morre pelos casos designados.
 copia_skill_m() {
-  local d="$MS/mut/$1"; rm -rf "$d"; mkdir -p "$d/scripts" "$d/assets"
+  local d="$MS/mut/$1"; rm -rf "$d"; mkdir -p "$d/scripts/lib" "$d/assets"
   cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$d/assets/"
   cp "$SK/scripts/planejamento.sh" "$SK/scripts/bloqueios.sh" "$SK/scripts/caminho-git.sh" "$d/scripts/"
+  cp "$SK/scripts/lib/trava-autorizacao-f6.sh" "$d/scripts/lib/"
   printf '%s' "$d"
 }
 m_troca() { muta_lit "$1" "$1.m" "$2" "$3" && mv "$1.m" "$1"; }
@@ -3658,7 +3737,7 @@ afirma "p11-segredo-mesma-lista-do-hook" $? "planejamento.sh e comum/segredo.sh"
 # Mutantes do S3-A, em copia da skill (como na K). Cada um morre pelo caso designado; o
 # controle, copia sem mutacao, sobrevive a todos.
 MP="$P/mut"
-copia_skill_p() { mkdir -p "$MP/$1/scripts" "$MP/$1/assets"; cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$MP/$1/assets/"; cp "$BL" "$SK/scripts/caminho-git.sh" "$MP/$1/scripts/"; printf '%s/%s/scripts/planejamento.sh' "$MP" "$1"; }
+copia_skill_p() { mkdir -p "$MP/$1/scripts/lib" "$MP/$1/assets"; cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$MP/$1/assets/"; cp "$BL" "$SK/scripts/caminho-git.sh" "$MP/$1/scripts/"; cp "$SK/scripts/lib/trava-autorizacao-f6.sh" "$MP/$1/scripts/lib/"; printf '%s/%s/scripts/planejamento.sh' "$MP" "$1"; }
 mutante_p() { # mutante_p <nome> <rc da geracao> <script> <caso que TEM de matar>...
   local nome="$1" rc="$2" s="$3" c vivos=""; shift 3
   if [ "$rc" -eq 0 ]; then for c in "$@"; do roda_p "$c" "$s" && vivos="$vivos$c "; done; fi
