@@ -1376,8 +1376,9 @@ cmd_avanca() {
   contexto "$1"
   local alvo="$2" novo
   case "$alvo" in f2|f3|f4|f5) ;; *) falha "$E_USO" "fase invalida: '$alvo' (f2|f3|f4|f5)" ;; esac
-  if [ "$alvo" = f2 ] && [ -f "$PASTA/00-PREDECESSORES.md" ]; then
-    bash "$SK/scripts/predecessores.sh" --validar "$SLUG" >/dev/null \
+  if [ "$alvo" = f2 ] && { [ -e "$PASTA/00-PREDECESSORES.md" ] || [ -L "$PASTA/00-PREDECESSORES.md" ]; }; then
+    [ ! -L "$PASTA/00-PREDECESSORES.md" ] \
+      && bash "$SK/scripts/predecessores.sh" --validar "$SLUG" >/dev/null \
       || falha "$E_CONTRATO" '00-PREDECESSORES.md invalido; F2 nao alterou estado, stage ou rastro'
   fi
   estado_efetivo

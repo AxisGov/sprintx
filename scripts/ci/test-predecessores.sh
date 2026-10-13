@@ -53,7 +53,11 @@ git_commit() {
 nova_fixture() {
   fx_n=$((fx_n + 1))
   FX="$K/fx-$fx_n"
-  git init -q -b main "$FX"
+  if [ "${1:-sha1}" = sha256 ]; then
+    git init -q --object-format=sha256 -b main "$FX"
+  else
+    git init -q -b main "$FX"
+  fi
   git -C "$FX" config user.email teste@fixture.invalid
   git -C "$FX" config user.name teste
   git -C "$FX" config core.autocrlf false
@@ -70,10 +74,17 @@ nova_fixture() {
   printf 'glob literal\n' > "$FX/docs/superpowers/specs/glob*.md"
   printf 'glob literal\n' > "$FX/docs/superpowers/specs/glob?.md"
   printf 'glob literal\n' > "$FX/docs/superpowers/specs/glob[1].md"
+  printf 'yaml inseguro\n' > "$FX/docs/superpowers/specs/a: b.md"
+  CONTROLE_PATH="docs/superpowers/specs/controle$(printf '\001').md"
+  TRAILING_PATH='docs/superpowers/specs/trailing '
+  printf 'controle inseguro\n' > "$FX/$CONTROLE_PATH"
+  printf 'espaco final inseguro\n' > "$FX/$TRAILING_PATH"
+  mkdir -p "$FX/src"
+  printf 'fora da origem\n' > "$FX/src/x.py"
   ln -s ft-pre-design.md "$FX/docs/superpowers/specs/ft-pre-link.md"
   printf 'evidencia interna\n' > "$FX/docs/sprintx/features/ft-pre/evidencia.md"
   printf 'entrega\n' > "$FX/docs/entregas/ft-pre/PR.md"
-  git init -q -b main "$FX/docs/superpowers/gitlink"
+  git init -q --object-format="$(git -C "$FX" rev-parse --show-object-format)" -b main "$FX/docs/superpowers/gitlink"
   git -C "$FX/docs/superpowers/gitlink" config user.email teste@fixture.invalid
   git -C "$FX/docs/superpowers/gitlink" config user.name teste
   printf 'subrepositorio\n' > "$FX/docs/superpowers/gitlink/README.md"
@@ -147,6 +158,25 @@ grupo_registro() {
   nova_fixture
   caso_rc 'recusa SHA informado pelo chamador' 64 pred --registrar ft-pre --origem superpowers \
     --papel especificacao --caminho "$SPEC" --commit-sha "$FX_SPEC_COMMIT"
+
+  nova_fixture sha256
+  caso_rc 'registra e valida OIDs SHA-256 completos' 0 registra especificacao "$SPEC"
+  caso_rc 'valida manifesto em repositorio SHA-256' 0 pred --validar ft-pre
+  [ "${#FX_SPEC_COMMIT}" -eq 64 ] && [ "${#FX_SPEC_BLOB}" -eq 64 ]
+  afirma 'manifesto preserva OIDs SHA-256 de 64 caracteres' $? 'OID SHA-256 foi truncado ou recusado'
+
+  nova_fixture
+  caso_rc 'precondicao da trava de registro' 0 registra especificacao "$SPEC"
+  local trava antes depois
+  trava="$(git -C "$FX" rev-parse --absolute-git-dir)/sprintx/predecessores-ft-pre.lock"
+  mkdir -p "$(dirname "$trava")"; mkdir "$trava"
+  before="$(hash_ou_ausente)"
+  caso_falha_com 'trava concorrente falha fechado' 'trava de registro ocupada' registra plano "$PLAN"
+  depois="$(hash_ou_ausente)"
+  [ "$before" = "$depois" ]; afirma 'trava concorrente preserva manifesto' $? "$before != $depois"
+  rmdir "$trava"
+  caso_rc 'registro pode ser repetido depois de liberar a trava' 0 registra plano "$PLAN"
+  caso_rc 'manifesto conserva as duas entradas depois da contencao' 0 pred --validar ft-pre
 }
 
 invalido_preserva() { # invalido_preserva <nome> <papel> <caminho>
@@ -173,9 +203,13 @@ grupo_caminhos() {
   invalido_preserva 'recusa glob colchete' especificacao 'docs/superpowers/specs/glob[1].md'
   nova_fixture
   printf 'nao rastreado com pathspec magic\n' > "$FX/:(top)README.md"
-  caso_falha_com 'pathspec magic continua caminho literal e nao rastreado' 'arquivo nao rastreado' registra especificacao ':(top)README.md'
+  caso_falha 'pathspec magic e recusada antes de chegar ao Git' registra especificacao ':(top)README.md'
   invalido_preserva 'recusa propria feature' especificacao 'docs/sprintx/features/ft-pre/evidencia.md'
   invalido_preserva 'recusa propria entrega' especificacao 'docs/entregas/ft-pre/PR.md'
+  invalido_preserva 'recusa caminho fora de docs/superpowers' especificacao 'src/x.py'
+  invalido_preserva 'recusa scalar YAML inseguro com dois-pontos e espaco' especificacao 'docs/superpowers/specs/a: b.md'
+  invalido_preserva 'recusa byte de controle em scalar YAML' especificacao "$CONTROLE_PATH"
+  invalido_preserva 'recusa espaco final normalizado por leitores YAML' especificacao "$TRAILING_PATH"
 }
 
 grupo_estado_git() {
@@ -282,6 +316,13 @@ grupo_schema() {
   caso_falha 'um item invalido reprova o conjunto inteiro' pred --validar ft-pre
 
   schema_invalido 'recusa scalar malformado' scalar
+
+  nova_fixture; manifesto_valido "$SPEC" especificacao "$FX_SPEC_COMMIT" "$FX_SPEC_BLOB"
+  mv "$MANIFESTO" "$MANIFESTO.real"; ln -s "$(basename "$MANIFESTO.real")" "$MANIFESTO"
+  caso_falha 'recusa manifesto como symlink valido' pred --validar ft-pre
+
+  nova_fixture; mkdir -p "$(dirname "$MANIFESTO")"; ln -s ausente.md "$MANIFESTO"
+  caso_falha 'recusa manifesto como symlink quebrado' pred --validar ft-pre
 }
 
 tem() { grep -qF "$2" "$1"; }
@@ -367,10 +408,31 @@ grupo_checkpoint() {
   caso_rc 'manifesto valido entra no checkpoint f2' 0 env SPRINTX_RAIZ="$FX" bash "$PL" avanca ft-pre f2
   git -C "$FX" cat-file -e HEAD:docs/sprintx/features/ft-pre/00-PREDECESSORES.md 2>/dev/null
   afirma 'checkpoint contem manifesto' $? '00-PREDECESSORES.md ausente do HEAD'
+
+  feature_para_checkpoint
+  manifesto_valido "$SPEC" especificacao "$FX_SPEC_COMMIT" "$FX_SPEC_BLOB"
+  mv "$MANIFESTO" "$MANIFESTO.real"; ln -s "$(basename "$MANIFESTO.real")" "$MANIFESTO"
+  plano="$FX/docs/sprintx/features/ft-pre/00-PLANEJAMENTO.md"
+  before_plano="$(cksum < "$plano")"; before_stage="$(git -C "$FX" diff --cached --name-status)"
+  if [ -f "$FX/docs/eventos/ft-pre.jsonl" ]; then before_rastro="$(cksum < "$FX/docs/eventos/ft-pre.jsonl")"; else before_rastro=ausente; fi
+  saida="$(env SPRINTX_RAIZ="$FX" bash "$PL" avanca ft-pre f2 2>&1)"; rc=$?
+  depois_plano="$(cksum < "$plano")"; depois_stage="$(git -C "$FX" diff --cached --name-status)"
+  if [ -f "$FX/docs/eventos/ft-pre.jsonl" ]; then depois_rastro="$(cksum < "$FX/docs/eventos/ft-pre.jsonl")"; else depois_rastro=ausente; fi
+  [ "$rc" -ne 0 ] && [ "$before_plano" = "$depois_plano" ] && [ "$before_stage" = "$depois_stage" ] && [ "$before_rastro" = "$depois_rastro" ]
+  afirma 'manifesto symlink impede avanca f2 sem efeitos' $? "rc=$rc saida=$saida"
 }
 
-GRUPOS='registro caminhos estado-git historia schema contrato checkpoint'
+grupo_dispatcher() {
+  echo '== dispatcher =='
+  caso_rc 'grupo desconhecido devolve erro de uso' 64 bash "$0" grupo-inexistente
+}
+
+GRUPOS='registro caminhos estado-git historia schema contrato checkpoint dispatcher'
 [ "$#" -gt 0 ] || set -- todos
+for pedido in "$@"; do
+  [ "$pedido" = todos ] && continue
+  case " $GRUPOS " in *" $pedido "*) ;; *) uso=1; printf 'grupo desconhecido: %s\n' "$pedido" >&2; exit 64 ;; esac
+done
 selecionado() {
   local pedido="$1" x
   shift
@@ -388,6 +450,7 @@ for grupo in $GRUPOS; do
       schema) grupo_schema ;;
       contrato) grupo_contrato ;;
       checkpoint) grupo_checkpoint ;;
+      dispatcher) grupo_dispatcher ;;
     esac
   fi
 done

@@ -90,11 +90,11 @@ A prosa abaixo do frontmatter repete os caminhos, a origem e o papel para leitur
 | Campo | Contrato |
 |---|---|
 | `trabalho_id` | Igual ao slug da pasta e ao trabalho que consumiu os documentos |
-| `caminho` | Caminho relativo à raiz Git, literal e canônico |
+| `caminho` | Caminho relativo à raiz Git, literal, canônico, sob `docs/superpowers/` e seguro como scalar YAML sem aspas |
 | `origem` | Nesta versão, somente `superpowers` |
 | `papel` | `especificacao` ou `plano` |
-| `commit_sha` | SHA completo do último commit que tocou o caminho no momento do registro |
-| `blob_oid` | OID do blob regular em `<commit_sha>:<caminho>` |
+| `commit_sha` | OID completo do último commit que tocou o caminho: 40 hexadecimais em SHA-1 ou 64 em SHA-256 |
+| `blob_oid` | OID completo do blob regular em `<commit_sha>:<caminho>`, no mesmo formato de objetos |
 | `criado_em`, `atualizado_em` | Datas ISO obtidas do sistema |
 
 `predecessores` contém pelo menos um item. Arquivo presente com lista vazia não equivale a
@@ -109,6 +109,9 @@ O registrador recusa:
 - prefixo `./`;
 - barra invertida;
 - caractere de glob (`*`, `?`, `[` ou `]`);
+- caminho fora de `docs/superpowers/`;
+- sequência insegura em scalar YAML sem aspas (byte fora de ASCII imprimível, espaço final,
+  `: `, `:` no fim, ` #` ou caractere de controle);
 - caminho duplicado;
 - symlink, submódulo, diretório ou arquivo especial;
 - caminho dentro da própria pasta da feature ou de `docs/entregas/<slug>/`;
@@ -172,7 +175,7 @@ predecessores.sh --validar <slug>
 predecessores.sh --listar <slug>
 ```
 
-`--registrar` calcula `commit_sha` e `blob_oid`; nunca aceita esses valores informados pelo agente. A gravação é atômica, preserva entradas anteriores, ordena pelo caminho e é idempotente quando a prova não mudou. O script não faz commit.
+`--registrar` calcula `commit_sha` e `blob_oid`; nunca aceita esses valores informados pelo agente. A gravação é atômica, preserva entradas anteriores, ordena pelo caminho e é idempotente quando a prova não mudou. Antes de ler o manifesto, adquire uma trava exclusiva por worktree e slug; contenda falha fechada e a trava só é removida por quem a adquiriu. O script não faz commit.
 
 `--validar` é somente leitura e aplica todas as regras de schema, caminho, história e blob que pertencem à SprintX.
 
@@ -352,7 +355,7 @@ A suíte deve provar pelo menos:
 1. registro de spec e plano limpos e rastreados;
 2. idempotência da mesma entrada;
 3. ordenação canônica e rejeição de duplicata;
-4. rejeição de caminho absoluto, `..`, glob e barra invertida;
+4. rejeição de caminho absoluto, fora de `docs/superpowers/`, inseguro para YAML, `..`, glob e barra invertida;
 5. rejeição de arquivo sujo, staged, não rastreado, removido, symlink e gitlink;
 6. cálculo automático de commit e blob;
 7. rejeição de origem e papel fora do enum;
@@ -361,6 +364,10 @@ A suíte deve provar pelo menos:
 10. recuperação capaz de criar manifesto depois do E8 sem tocar tasks;
 11. nenhum commit ou push feito pelo registrador;
 12. espelhos de Claude Code e OpenCode com o mesmo contrato.
+13. manifesto como symlink, inclusive quebrado, falha antes do checkpoint F2;
+14. repositório SHA-256 preserva OIDs completos de 64 caracteres;
+15. grupo de teste desconhecido devolve erro de uso;
+16. trava concorrente preserva o manifesto e permite repetição depois de liberada.
 
 ## 13. Testes da MergeX
 

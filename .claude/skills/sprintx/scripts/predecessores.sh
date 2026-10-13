@@ -8,6 +8,7 @@ E_PROVA=3
 E_CONTRATO=4
 E_USO=64
 TMP_ATOMICO=""
+LOCK_DIR=""
 trap '[ -z "$TMP_ATOMICO" ] || rm -f "$TMP_ATOMICO"' EXIT HUP INT TERM
 
 falha() { local rc="$1"; shift; printf 'predecessores: %s\n' "$*" >&2; exit "$rc"; }
@@ -41,9 +42,37 @@ valida_caminho() {
       falha "$E_CONTRATO" "caminho nao canonico: $p" ;;
   esac
   case "$p" in
+    docs/superpowers/*) ;;
+    *) falha "$E_CONTRATO" "predecessor fora de docs/superpowers: $p" ;;
+  esac
+  case "$p" in
+    *': '*|*:|*' #'*|*$'\t'*|*$'\n'*|*$'\r'*)
+      falha "$E_CONTRATO" "caminho inseguro para scalar YAML: $p" ;;
+  esac
+  LC_ALL=C
+  case "$p" in
+    *[!\ -~]*|*' ') falha "$E_CONTRATO" "caminho fora do subconjunto YAML seguro: $p" ;;
+  esac
+  case "$p" in
     docs/sprintx/features/"$SLUG"/*|docs/entregas/"$SLUG"/*)
       falha "$E_CONTRATO" "predecessor dentro do proprio trabalho: $p" ;;
   esac
+}
+
+resolve_formato_objetos() {
+  FORMATO_OBJETOS="$(git -C "$RAIZ" rev-parse --show-object-format 2>/dev/null)" \
+    || falha "$E_PROVA" 'nao foi possivel determinar o formato de objetos Git'
+  case "$FORMATO_OBJETOS" in
+    sha1) OID_LEN=40 ;;
+    sha256) OID_LEN=64 ;;
+    *) falha "$E_PROVA" "formato de objetos Git nao suportado: $FORMATO_OBJETOS" ;;
+  esac
+}
+
+valida_oid() { # valida_oid <oid> <rotulo>
+  local oid="$1" rotulo="$2"
+  [ "${#oid}" -eq "$OID_LEN" ] && case "$oid" in *[!0-9a-f]*) false ;; *) true ;; esac \
+    || falha "$E_CONTRATO" "$rotulo invalido"
 }
 
 modo_blob() { # modo_blob <rev> <path>; imprime modo TAB oid
@@ -59,7 +88,7 @@ modo_blob() { # modo_blob <rev> <path>; imprime modo TAB oid
 estado_pre_nascimento() {
   [ -f "$RAIZ/$PLANEJAMENTO_REL" ] || return 1
   git -C "$RAIZ" ls-files --error-unmatch -- "$PLANEJAMENTO_REL" >/dev/null 2>&1 && return 1
-  if [ -e "$MANIFESTO" ]; then
+  if [ -e "$MANIFESTO" ] || [ -L "$MANIFESTO" ]; then
     git -C "$RAIZ" ls-files --error-unmatch -- "$MANIFESTO_REL" >/dev/null 2>&1 && return 1
   fi
   return 0
@@ -91,10 +120,8 @@ prova_item() { # prova_item <path> <origem> <papel> <commit> <blob>
   valida_caminho "$caminho"
   [ "$origem" = superpowers ] || falha "$E_CONTRATO" "origem fora do enum: $origem"
   case "$papel" in especificacao|plano) ;; *) falha "$E_CONTRATO" "papel fora do enum: $papel" ;; esac
-  [ "${#commit}" -eq 40 ] && case "$commit" in *[!0-9a-f]*) false ;; *) true ;; esac \
-    || falha "$E_CONTRATO" "commit_sha invalido para $caminho"
-  [ "${#blob}" -eq 40 ] && case "$blob" in *[!0-9a-f]*) false ;; *) true ;; esac \
-    || falha "$E_CONTRATO" "blob_oid invalido para $caminho"
+  valida_oid "$commit" "commit_sha para $caminho"
+  valida_oid "$blob" "blob_oid para $caminho"
 
   [ "$(git -C "$RAIZ" rev-parse --is-shallow-repository 2>/dev/null)" = false ] \
     || falha "$E_PROVA" 'repositorio raso nao prova predecessores'
@@ -184,7 +211,7 @@ fecha_lista_para_topo() {
 
 parse_manifesto() { # parse_manifesto <file> <tsv>
   local arq="$1" out="$2" linha n=0 fechado=0 k v
-  [ -f "$arq" ] || falha "$E_CONTRATO" '00-PREDECESSORES.md ausente'
+  [ -f "$arq" ] && [ ! -L "$arq" ] || falha "$E_CONTRATO" '00-PREDECESSORES.md ausente ou nao regular'
   P_TSV="$out"; P_PATHS="$out.paths"; : > "$P_TSV"; : > "$P_PATHS"
   P_TOP_SEEN=""; P_SCHEMA=""; P_TOOL=""; P_KIND=""; P_TRAB=""; P_CRIADO=""; P_ATUAL=""; P_N=0; P_LIST_STATE=antes; zera_item
   while IFS= read -r linha || [ -n "$linha" ]; do
@@ -219,6 +246,14 @@ parse_manifesto() { # parse_manifesto <file> <tsv>
   case "$P_CRIADO" in [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;; *) falha "$E_CONTRATO" 'criado_em invalido' ;; esac
   case "$P_ATUAL" in [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;; *) falha "$E_CONTRATO" 'atualizado_em invalido' ;; esac
   rm -f "$P_PATHS"
+}
+
+adquire_trava_registro() {
+  local candidata
+  candidata="$(git -C "$RAIZ" rev-parse --absolute-git-dir 2>/dev/null)/sprintx/predecessores-$SLUG.lock"
+  mkdir -p "$(dirname "$candidata")" || falha "$E_CONTRATO" 'nao consegui preparar a trava de registro'
+  mkdir "$candidata" 2>/dev/null || falha "$E_CONTRATO" 'trava de registro ocupada'
+  LOCK_DIR="$candidata"
 }
 
 valida_tsv() {
@@ -270,8 +305,9 @@ cmd_registrar() {
   blob="${meta#*	}"
   prova_item "$caminho" "$origem" "$papel" "$commit" "$blob"
 
+  adquire_trava_registro
   t="$TMP_BASE/atuais.tsv"; : > "$t"; criado="$(date +%Y-%m-%d)"
-  if [ -f "$MANIFESTO" ]; then
+  if [ -e "$MANIFESTO" ] || [ -L "$MANIFESTO" ]; then
     valida_manifesto
     cp "$P_TSV_FINAL" "$t"
     criado="$P_CRIADO"
@@ -307,6 +343,7 @@ case "$CMD" in
   *) uso ;;
 esac
 RAIZ="$(resolve_raiz)"
+resolve_formato_objetos
 MANIFESTO_REL="docs/sprintx/features/$SLUG/00-PREDECESSORES.md"
 MANIFESTO="$RAIZ/$MANIFESTO_REL"
 PLANEJAMENTO_REL="docs/sprintx/features/$SLUG/00-PLANEJAMENTO.md"
@@ -315,6 +352,7 @@ limpa() {
   local rc=$?
   trap - EXIT HUP INT TERM
   [ -z "$TMP_ATOMICO" ] || rm -f "$TMP_ATOMICO"
+  [ -z "$LOCK_DIR" ] || rmdir "$LOCK_DIR" 2>/dev/null || true
   rm -rf "$TMP_BASE"
   exit "$rc"
 }

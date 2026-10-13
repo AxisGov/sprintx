@@ -32,7 +32,8 @@ old, new = sys.argv[2], sys.argv[3]
 text = p.read_text(encoding="utf-8")
 if old not in text:
     raise SystemExit(f"mutacao nao aplicada em {p}: {old!r}")
-p.write_text(text.replace(old, new), encoding="utf-8", newline="")
+with p.open("w", encoding="utf-8", newline="") as f:
+    f.write(text.replace(old, new))
 PY
 }
 
@@ -73,10 +74,33 @@ substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
   '[ "$oid_disco" = "$blob" ] || falha "$E_CONTRATO" "predecessor modificado: $caminho"'
 mata DISCO historia
 
-prepara PATHSPEC
+prepara PATHROOT
 substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
-  'export GIT_LITERAL_PATHSPECS=1' ': # mutante PATHSPEC reativa a magia de pathspec'
-mata PATHSPEC caminhos
+  '    docs/superpowers/*) ;;' '    *) ;; # mutante PATHROOT aceita qualquer raiz'
+mata PATHROOT caminhos
+
+prepara SYMLINKM
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '[ -f "$arq" ] && [ ! -L "$arq" ] || falha "$E_CONTRATO" '"'"'00-PREDECESSORES.md ausente ou nao regular'"'"'' \
+  '[ -f "$arq" ] || falha "$E_CONTRATO" '"'"'00-PREDECESSORES.md ausente ou nao regular'"'"''
+mata SYMLINKM schema
+
+prepara SCALARASCII
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '    *[!\ -~]*|*'"'"' '"'"') falha "$E_CONTRATO" "caminho fora do subconjunto YAML seguro: $p" ;;' \
+  '    __scalar_ascii_impossivel__) : # mutante SCALARASCII aceita controles e espaco final ;;'
+mata SCALARASCII caminhos
+
+prepara LOCKRMW
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '  mkdir "$candidata" 2>/dev/null || falha "$E_CONTRATO" '"'"'trava de registro ocupada'"'"'' \
+  '  mkdir "$candidata" 2>/dev/null || true # mutante LOCKRMW ignora contencao'
+mata LOCKRMW registro
+
+prepara SHA256M
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '    sha256) OID_LEN=64 ;;' '    sha256) OID_LEN=40 ;; # mutante SHA256M trunca o protocolo'
+mata SHA256M registro
 
 prepara ASSUME
 substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
