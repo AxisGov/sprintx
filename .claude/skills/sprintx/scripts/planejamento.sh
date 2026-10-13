@@ -81,6 +81,14 @@ valida_slug() {
 # Validacoes por padrao de shell, sem processo novo: no Windows cada fork custa caro.
 inteiro() { case "$1" in 0) return 0 ;; ""|0*|*[!0-9]*) return 1 ;; esac; return 0; }
 positivo() { case "$1" in ""|0*|*[!0-9]*) return 1 ;; esac; return 0; }
+decimal_le() {
+  local a="$1" b="$2"
+  [ "${#a}" -lt "${#b}" ] && return 0
+  [ "${#a}" -gt "${#b}" ] && return 1
+  [ "$a" = "$b" ] && return 0
+  [[ "$a" < "$b" ]]
+}
+decimal_ge() { decimal_le "$2" "$1"; }
 id_bloqueio() { case "$1" in B-[0-9][0-9]*) case "${1#B-}" in *[!0-9]*) return 1 ;; esac; return 0 ;; esac; return 1; }
 id_task() {
   case "$1" in T-[0-9][0-9]*.[0-9][0-9]*) ;; *) return 1 ;; esac
@@ -257,7 +265,7 @@ le_autorizacao_tardia_f6() {
   data_iso "$P_AUT6_EM" || falha "$E_CONTRATO" "autorizacao_tardia_f6_em invalido: '$P_AUT6_EM'"
   [ "$P_AUT6_ORIGEM" = orcamento_f6_nao_declarado ] \
     || falha "$E_CONTRATO" "autorizacao_tardia_f6_origem invalida: '$P_AUT6_ORIGEM'"
-  [ "$P_F6" = presente ] && positivo "$P_MAX6" && [ "$P_N6" -ge 1 ] \
+  [ "$P_F6" = presente ] && positivo "$P_MAX6" && positivo "$P_N6" \
     || falha "$E_CONTRATO" "autorizacao tardia F6 exige eixo presente, teto positivo e ao menos uma rodada"
   ! fm_presente recusa_replanejamento_f6 \
     || falha "$E_CONTRATO" "autorizacao tardia F6 nao coexiste com recusa_replanejamento_f6"
@@ -284,9 +292,9 @@ le_f6() {
   esac
   inteiro "$P_N6" || falha "$E_CONTRATO" "replanejamentos_f6 invalido: '$P_N6'"
   if [ "$P_MAX6" = null ]; then
-    [ "$P_N6" -eq 0 ] || falha "$E_CONTRATO" "replanejamentos_f6=$P_N6 sem orcamento da F6 declarado"
+    [ "$P_N6" = 0 ] || falha "$E_CONTRATO" "replanejamentos_f6=$P_N6 sem orcamento da F6 declarado"
   else
-    [ "$P_N6" -le "$P_MAX6" ] || falha "$E_CONTRATO" "replanejamentos_f6=$P_N6 acima do teto $P_MAX6"
+    decimal_le "$P_N6" "$P_MAX6" || falha "$E_CONTRATO" "replanejamentos_f6=$P_N6 acima do teto $P_MAX6"
   fi
   [ "$P_BLQ" != LIXO ] || falha "$E_CONTRATO" "bloqueios_replanejamento_f6 fora da forma [B-NN, ...]"
   [ "$P_CONG" != LIXO ] || falha "$E_CONTRATO" "tasks_congeladas fora da forma [T-NN.MM, ...]"
@@ -300,7 +308,7 @@ le_f6() {
     id_task "$x" || falha "$E_CONTRATO" "tasks_congeladas com id invalido: '$x'"
   done
   if [ -n "$P_BLQ" ]; then
-    [ "$P_N6" -ge 1 ] || falha "$E_CONTRATO" "rodada de replanejamento da execucao ativa com replanejamentos_f6=0"
+    positivo "$P_N6" || falha "$E_CONTRATO" "rodada de replanejamento da execucao ativa com replanejamentos_f6=0"
     case "$P_ASS" in [0-9]*-[0-9]*) case "${P_ASS%%-*}${P_ASS#*-}" in *[!0-9]*) P_ASS=LIXO ;; esac ;; *) P_ASS=LIXO ;; esac
     [ "$P_ASS" != LIXO ] || falha "$E_CONTRATO" "rodada ativa sem assinatura_congeladas valida"
   else
@@ -842,7 +850,7 @@ le_planejamento() {
       # no maximo uma sequencia assim por replanejamento da execucao ja aceito.
       if [ "$ultimo" = sim ]; then
         reabertas=$((reabertas + 1))
-        [ "$reabertas" -le "$P_N6" ] || falha "$E_CONTRATO" "rodada $r depois de um veredito sim sem replanejamento da execucao que a abrisse"
+        decimal_le "$reabertas" "$P_N6" || falha "$E_CONTRATO" "rodada $r depois de um veredito sim sem replanejamento da execucao que a abrisse"
       fi
       for linha in "$a" "$m" "$b"; do inteiro "$linha" || falha "$E_CONTRATO" "contagem invalida na rodada $r"; done
       data_iso "$d" || falha "$E_CONTRATO" "auditado_em invalido na rodada $r"
@@ -853,10 +861,10 @@ le_planejamento() {
 $P_HIST
 EOF
   fi
-  [ "$P_REPROV" -eq "$nao" ] || falha "$E_CONTRATO" "reprovacoes=$P_REPROV, mas o historico tem $nao veredito(s) nao"
+  [ "$P_REPROV" = "$nao" ] || falha "$E_CONTRATO" "reprovacoes=$P_REPROV, mas o historico tem $nao veredito(s) nao"
 
   local esgotou=0
-  [ "$P_MAX" != null ] && [ "$P_REPROV" -ge "$P_MAX" ] && esgotou=1
+  [ "$P_MAX" != null ] && decimal_ge "$P_REPROV" "$P_MAX" && esgotou=1
   # Rodada de replanejamento da execucao ativa: so nos estados do laco que ela percorre.
   if [ -n "$P_BLQ" ]; then
     case "$P_ESTADO" in
@@ -869,7 +877,7 @@ EOF
     sim:replanejar_execucao|sim:aguardando_f4|sim:aguardando_f5)
       [ -n "$P_BLQ" ] || falha "$E_CONTRATO" "estado $P_ESTADO depois de um veredito sim sem rodada de replanejamento da execucao ativa" ;;
     sim:replanejamento_execucao_esgotado)
-      [ -z "$P_BLQ" ] && [ "$P_MAX6" != null ] && [ "$P_N6" -ge "$P_MAX6" ] \
+      [ -z "$P_BLQ" ] && [ "$P_MAX6" != null ] && decimal_ge "$P_N6" "$P_MAX6" \
         || falha "$E_CONTRATO" "replanejamento_execucao_esgotado sem o orcamento da F6 consumido" ;;
     sim:replanejamento_execucao_recusado) ;;
     sim:*) falha "$E_CONTRATO" "ultima rodada sim exige estado aprovado" ;;
@@ -1153,7 +1161,7 @@ migra_legado() { # migra_legado [max] [por] [max6] [estado recusa] — sem argum
         falha "$E_CONTRATO" "auditoria legada diz VEREDITO: NÃO sem achado ALTA"
       fi
       hist="$(printf '1\t%s\t%s\t%s\t%s\t%s' "$v" "$altas" "$medias" "$baixas" "$(hoje)")"
-      if [ "$v" = nao ] && [ "$max" != null ] && [ "$reprov" -ge "$max" ]; then estado=orcamento_esgotado; fi ;;
+      if [ "$v" = nao ] && [ "$max" != null ] && decimal_ge "$reprov" "$max"; then estado=orcamento_esgotado; fi ;;
   esac
   escreve "$max" "$por" "$estado" "$reprov" "$hist"
 }
@@ -1412,7 +1420,7 @@ cmd_avanca() {
       if [ -n "$P_BLQ" ]; then valida_rodada; fi
     else
       reprov=$((reprov + 1))
-      if [ "$P_MAX" != null ] && [ "$reprov" -ge "$P_MAX" ]; then novo=orcamento_esgotado; else novo=replanejar; fi
+      if [ "$P_MAX" != null ] && decimal_ge "$reprov" "$P_MAX"; then novo=orcamento_esgotado; else novo=replanejar; fi
     fi
     hist="$(printf '%s\t%s\t%s\t%s\t%s\t%s' "$rodada" "$A_VEREDITO" "$A_ALTAS" "$A_MEDIAS" "$A_BAIXAS" "$(hoje)")"
     [ -n "$P_HIST" ] && hist="$P_HIST
@@ -1476,8 +1484,17 @@ valida_rodada() {
 # tardia nunca reinterpreta uma rodada adulterada. Antes de esse checkpoint
 # existir, a task continua bloqueada e o B-NN ainda precisa estar aberto.
 valida_rodada_aut6() {
-  local b t c e st
+  local b t c st atuais=""
   le_bloqueios
+  while IFS="$TAB" read -r b t c; do
+    [ -n "$b" ] || continue
+    atuais="$atuais $b"
+  done <<EOF
+$(abertos_ordenados)
+EOF
+  atuais="${atuais# }"
+  [ "$atuais" = "$P_BLQ" ] \
+    || falha "$E_CONTRATO" "bloqueios abertos mudaram durante a autorizacao tardia: rodada [$P_BLQ]; agora [$atuais]"
   for b in $P_BLQ; do
     c="$(campo_bloqueio "$b" 3)"; t="$(campo_bloqueio "$b" 2)"; e="$(campo_bloqueio "$b" 4)"
     [ -n "$c" ] || falha "$E_CONTRATO" "$b da autorizacao tardia nao existe em 00-BLOQUEIOS.md"
@@ -1602,7 +1619,10 @@ cmd_autorizar_replanejamento_execucao() {
   local trava_rc=$?
   case "$trava_rc" in
     0) ;;
-    2) falha "$E_RECUSADO" "autorizacao tardia da F6 recusada: trava existente para $slug" ;;
+    2)
+      printf 'autorizacao_f6=recusada\nestado=null\nmotivo=trava_existente\nproxima=PARAR\npersistencia=disco\n'
+      falha "$E_RECUSADO" "autorizacao tardia da F6 recusada: trava existente para $slug"
+      ;;
     *)
       printf 'autorizacao_f6=recusada\nestado=null\nmotivo=trava_indisponivel\nproxima=PARAR\npersistencia=disco\n'
       falha "$E_TRANSICAO" "autorizacao tardia da F6 recusada: ambiente nao permite adquirir a trava para $slug"
@@ -1644,7 +1664,7 @@ cmd_autorizar_replanejamento_execucao() {
     printf 'autorizacao_f6=recusada\nestado=%s\nmotivo=%s\nproxima=PARAR\n' "$E_ESTADO" "${P_RECUSA:-estado}"
     falha "$E_TRANSICAO" "autorizacao tardia da F6 so parte do terminal orcamento_f6_nao_declarado"
   fi
-  [ "$P_F6" = presente ] && [ "$P_MAX6" = null ] && [ "$P_N6" -eq 0 ] && [ -z "$P_BLQ" ] \
+  [ "$P_F6" = presente ] && [ "$P_MAX6" = null ] && [ "$P_N6" = 0 ] && [ -z "$P_BLQ" ] \
     && [ "$P_AUT6" = ausente ] \
     || falha "$E_TRANSICAO" "terminal sem a fronteira inicial exata da autorizacao tardia da F6"
 
@@ -1761,7 +1781,7 @@ EOF
   fi
   if [ -n "$motivo" ]; then recusa_duravel "$motivo" "$defeitos${outros:+ }$outros"; fi
 
-  if [ "$P_N6" -ge "$P_MAX6" ]; then
+  if decimal_ge "$P_N6" "$P_MAX6"; then
     # Orcamento da F6 consumido: nenhuma rodada nova. Estado terminal proprio,
     # distinto de orcamento_esgotado (F5).
     f6_herda

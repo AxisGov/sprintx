@@ -2334,11 +2334,13 @@ l_aut_trava_ambiente() {
 }
 
 l_aut_trava() {
-  local s="$1" d="$2" p rc; l_aut_terminal "$s" "$d" || return 1
+  local s="$1" d="$2" p out rc; l_aut_terminal "$s" "$d" || return 1
   p="$(. "$SK/scripts/lib/trava-autorizacao-f6.sh" || exit 1; adquire_trava_autorizacao_f6 "$d" menu || exit 1; printf '%s' "$TRAVA_AUT6_DIR"; libera_trava_autorizacao_f6)" || return 1
   mkdir -p "$p"
-  kpl "$s" "$d" autorizar-replanejamento-execucao menu 2 usuario >/dev/null; rc=$?
-  [ "$rc" -eq 2 ] && [ -d "$p" ]; rc=$?; rmdir "$p"; return "$rc"
+  out="$(kpl "$s" "$d" autorizar-replanejamento-execucao menu 2 usuario)"; rc=$?
+  [ "$rc" -eq 2 ] && [ "$(kv "$out" autorizacao_f6)" = recusada ] \
+    && [ "$(kv "$out" motivo)" = trava_existente ] && [ "$(kv "$out" proxima)" = PARAR ] \
+    && [ -d "$p" ]; rc=$?; rmdir "$p"; return "$rc"
 }
 
 l_aut_terminal_incorreto() {
@@ -2346,6 +2348,19 @@ l_aut_terminal_incorreto() {
   a="$(kf "$d")/00-PLANEJAMENTO.md"; ck="$(cksum < "$a")"; h="$(git -C "$d" rev-parse HEAD)"
   kpl "$s" "$d" autorizar-replanejamento-execucao menu 2 usuario >/dev/null; rc=$?
   [ "$rc" -eq 5 ] && [ "$(cksum < "$a")" = "$ck" ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ]
+}
+
+l_aut_teto_decimal_grande() {
+  local s="$1" d="$2" teto out rc
+  teto=99999999999999999999999999999999999999999999999999
+  l_aut_terminal "$s" "$d" || return 1
+  out="$(l_aut_aplica "$s" "$d" "$teto" usuario)"; rc=$?
+  [ "$rc" -eq 0 ] && [ "$(kv "$out" autorizacao_f6)" = aplicada ] \
+    && [ "$(kv "$out" replanejamentos_f6)" = 1 ] \
+    && [ "$(kv "$out" max_replanejamentos_f6)" = "$teto" ] || return 1
+  out="$(l_aut_aplica "$s" "$d" "$teto" usuario)" || return 1
+  [ "$(kv "$out" autorizacao_f6)" = retomada ] \
+    && [ "$(kv "$out" max_replanejamentos_f6)" = "$teto" ]
 }
 
 # Task 5 — uma queda no pre-commit deixa a autorizacao gravada no disco, mas o
@@ -2394,13 +2409,15 @@ l5_checkpoint_e_retomada() {
 
 l5_pendente_invalido() {
   local s="$1" d caso a ev h ck evck idxck rc
-  for caso in bloqueio_resolvido classe task; do
+  for caso in bloqueio_resolvido classe task bloqueio_extra; do
     d="$(kcopia "$FXN")"; l5_deixa_checkpoint_pendente "$s" "$d" || return 1
     a="$(kf "$d")/00-PLANEJAMENTO.md"; ev="$d/docs/eventos/menu.jsonl"
     case "$caso" in
       bloqueio_resolvido) sed 's/^    resolvido_em: null$/    resolvido_em: 2026-10-12/' "$(kf "$d")/00-BLOQUEIOS.md" > "$K/l5.tmp" && mv "$K/l5.tmp" "$(kf "$d")/00-BLOQUEIOS.md" ;;
       classe) sed 's/^    classe: defeito_de_plano$/    classe: prerequisito_ausente/' "$(kf "$d")/00-BLOQUEIOS.md" > "$K/l5.tmp" && mv "$K/l5.tmp" "$(kf "$d")/00-BLOQUEIOS.md" ;;
       task) sed '/^  - id: T-04.03$/,/^    suite:/s/^    status: bloqueada$/    status: pendente/' "$(kf "$d")/sprint-04/tasks.md" > "$K/l5.tmp" && mv "$K/l5.tmp" "$(kf "$d")/sprint-04/tasks.md" ;;
+      bloqueio_extra) kbl "$s" "$d" registrar menu null prerequisito_ausente \
+        'bloqueio concorrente fora da rodada' 'resolver antes do checkpoint' >/dev/null || return 1 ;;
     esac
     h="$(git -C "$d" rev-parse HEAD)"; ck="$(cksum < "$a")"; evck="$(cksum < "$ev")"
     idxck="$(git -C "$d" diff --cached --binary | cksum)"
@@ -2413,6 +2430,46 @@ l5_pendente_invalido() {
       && [ "$(cksum < "$ev")" = "$evck" ] \
       && [ "$(git -C "$d" diff --cached --binary | cksum)" = "$idxck" ] || return 1
   done
+}
+
+l5_pendente_reordenado() {
+  local s="$1" d f a hook out rc
+  d="$(kcopia "$FXN")"; f="$(kf "$d")"; a="$f/00-PLANEJAMENTO.md"
+  l_aut_terminal "$s" "$d" || return 1
+  kbl "$s" "$d" registrar menu null defeito_de_plano \
+    'segundo defeito da mesma rodada' 'replanejar os dois defeitos' >/dev/null || return 1
+
+  hook="$(git -C "$d" rev-parse --git-path hooks/pre-commit)"; case "$hook" in /*) ;; *) hook="$d/$hook" ;; esac
+  mkdir -p "${hook%/*}"
+  printf '#!/usr/bin/env bash\nmarcador="%s/reordena-precommit-ja-falhou"\nif [ ! -e "$marcador" ]; then : > "$marcador"; exit 1; fi\nexit 0\n' \
+    "$(git -C "$d" rev-parse --git-dir)" > "$hook"
+  chmod +x "$hook"
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)"; rc=$?
+  [ "$rc" -eq 3 ] && [ "$(fmv "$a" bloqueios_replanejamento_f6)" = '[B-01, B-02]' ] || return 1
+
+  awk '
+    NR == 1 && $0 == "---" { fm=1; print; next }
+    fm && $0 == "bloqueios:" { lista=1; print; next }
+    lista && $0 == "  - id: B-01" { captura=1; b1=$0 ORS; next }
+    lista && $0 == "  - id: B-02" { captura=2; b2=$0 ORS; next }
+    lista && captura && /^    / {
+      if (captura == 1) b1=b1 $0 ORS
+      else b2=b2 $0 ORS
+      next
+    }
+    lista {
+      printf "%s%s", b2, b1
+      lista=0; captura=0
+    }
+    fm && $0 == "---" { fm=0 }
+    { print }
+  ' "$f/00-BLOQUEIOS.md" > "$K/l5-reordena.tmp" \
+    && mv "$K/l5-reordena.tmp" "$f/00-BLOQUEIOS.md" || return 1
+  [ "$(kbl "$s" "$d" listar menu | cut -f1 | paste -sd, -)" = 'B-02,B-01' ] || return 1
+
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)"; rc=$?
+  [ "$rc" -eq 3 ] && [ "$(kv "$out" autorizacao_f6)" = checkpoint_pendente ] \
+    && [ "$(kv "$out" proxima)" = CHECKPOINT ]
 }
 
 l5_parcial_e_congelada_invalidos() {
@@ -2517,8 +2574,11 @@ for par in l_aut_limpa:l1-autorizacao-tardia-limpa l_aut_parciais:l2-autorizacao
   l_aut_terminal_incorreto:l5-terminal-nao-autorizado; do
   d="$(kcopia "$FXN")"; "${par%%:*}" "$PL" "$d"; afirma "${par#*:}" $? "${par%%:*}"
 done
+d="$(kcopia "$FXN")"; l_aut_teto_decimal_grande "$PL" "$d"; afirma "l20-teto-decimal-grande-e-relegivel" $? \
+  "inteiro positivo sem limite implicito nao corrompe o planejamento"
 d="$(kcopia "$FXN")"; l5_checkpoint_e_retomada "$PL" "$d"; afirma "m1-m4-m7-m10-checkpoint-e-retomada-idempotentes" $? "queda, repeticao, checkpoint, retomada e argumentos"
 l5_pendente_invalido "$PL"; afirma "m6-pendente-valida-bloqueio-classe-e-task" $? "comando e checkpoint falham fechados"
+l5_pendente_reordenado "$PL"; afirma "m6-pendente-normaliza-ordem-dos-bloqueios" $? "reordenar os mesmos B-NN nao invalida a autorizacao"
 l5_parcial_e_congelada_invalidos "$PL"; afirma "m5-congeladas-e-parciais-invalidos-nao-gravam" $? "fronteiras inseguras retornam rc2, sem evento"
 d="$(kcopia "$FXN")"; l5_retomada_duravel_recusa_parcial_perdido "$PL" "$d"; afirma "m5-retomada-duravel-recusa-parcial-perdido" $? "rc2 antes de retomada, sem evento nem gravacao"
 d="$(kcopia "$FXN")"; l5_fechamento_pendente_e_fechado "$PL" "$d"; afirma "m8-m9-m10-fechamento-pendente-e-rodada-fechada" $? "checkpoint fecha uma vez; repeticao para"
@@ -2650,7 +2710,7 @@ mutante_k "km-mutante-1-reinicia-reprovacoes-f5" $? "$M" k_inicia
 M="$(copia_skill_k b)"; muta_lit "$PL" "$M" '    fm && t && id == alvo && $0 == "    status: bloqueada" { print "    status: pendente"; next }' \
   '    fm && t && $0 ~ /^    status: (bloqueada|concluida)$/ { print "    status: pendente"; next }'
 mutante_k "km-mutante-2-reabre-task-concluida" $? "$M" k_aprovacao
-M="$(copia_skill_k c)"; muta_lit "$PL" "$M" '  if [ "$P_N6" -ge "$P_MAX6" ]; then' '  if [ "$P_N6" -gt "$P_MAX6" ]; then'
+M="$(copia_skill_k c)"; muta_lit "$PL" "$M" '  if decimal_ge "$P_N6" "$P_MAX6"; then' '  if [ "$P_N6" -gt "$P_MAX6" ]; then'
 mutante_k "km-mutante-3-segunda-rodada-apos-1-de-1" $? "$M" k_segundo_defeito
 M="$(copia_skill_k d)"; muta_lit "$PL" "$M" '    evento replanejamento_execucao_retomado f6 - ok' \
   '    f6_herda; W6_N=$((P_N6 + 1)); escreve "$P_MAX" "$P_POR" "$P_ESTADO" "$P_REPROV" "$P_HIST"; evento replanejamento_execucao_retomado f6 - ok'
@@ -9302,7 +9362,9 @@ AL_DSF="$SK/DECISOES-DA-SKILL.md"
 al_tem() { grep -qF -- "$2" "$1"; }
 
 al_tem "$AL_SCHEMA" 'As três chaves tardias existem juntas ou nenhuma existe' \
-  && al_tem "$AL_SCHEMA" 'A autoridade canônica tardia é `autorizacao_tardia_f6_por`; nunca `orcamento_declarado_por`' \
+  && al_tem "$AL_SCHEMA" 'A autoridade canônica tardia é `autorizacao_tardia_f6_por`' \
+  && al_tem "$AL_SCHEMA" '`orcamento_declarado_por` continua' \
+  && al_tem "$AL_SCHEMA" 'pertencendo ao orçamento da F5' \
   && al_tem "$AL_SCHEMA" '`replanejamento_execucao_recusado` com motivo `orcamento_f6_nao_declarado` é o único terminal recuperável'
 afirma "ds175-contrato-schema" $? "tupla all-or-none, autoridade separada e terminal exato"
 
@@ -9333,7 +9395,8 @@ al_tem "$AL_EXEC" '**Somente uma decisão humana explícita** pode autorizar o o
   && al_tem "$AL_EXEC" 'autorizacao_f6=checkpoint_pendente' \
   && al_tem "$AL_EXEC" 'argumentos → congeladas/parciais → B-NN/task se pendente → persistência' \
   && al_tem "$AL_EXEC" 'checkpoint <slug>` repete as provas antes de preparar o índice' \
-  && al_tem "$AL_EXEC" '`0` aplicada/retomada; `2` fronteira ou parcial; `3` checkpoint; `4` contrato; `5` transição; `64` uso'
+  && al_tem "$AL_EXEC" '`2` trava existente, fronteira ou parcial (com `motivo=` estruturado)' \
+  && al_tem "$AL_EXEC" '`5` transição ou indisponibilidade da trava'
 afirma "ds175-contrato-execucao" $? "humano, saidas/codigos, precedencia e recuperacao"
 
 al_tem "$AL_RASTRO" '`orcamento_f6_autorizado`' \

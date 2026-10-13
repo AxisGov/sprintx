@@ -105,7 +105,8 @@ git commit -m "feat(sprintx): valida autoria tardia do orcamento f6"
 
 **Interfaces:**
 - Consumes: existing `calcula_congeladas`, writer variables `W6_*`, `escreve`, `evento`, and `checkpoint`.
-- Produces: `abre_rodada_f6 <ordered_B-NN-list> <max6>`; it opens and checkpoints one already-validated round and leaves caller-specific stdout to the caller.
+- Produces: `abre_rodada_f6 <ordered-B-NN-list> <max6> [<aut_por> <aut_em> <aut_origem>]`; it opens and checkpoints one already-validated round, writes the optional audit tuple atomically, increments the F6 round exactly once, and leaves caller-specific stdout to the caller.
+
 
 - [ ] **Step 1: Add a refactor characterization test**
 
@@ -208,7 +209,7 @@ Expected: nonzero; first happy path reports unknown command.
 
 - [ ] **Step 3: Implement only the initial command path**
 
-Acquire the Task 3 lock, reread after acquisition, validate exactly three arguments and the exact terminal/schema/B-NN/task/frontier preconditions, set max/count/audit tuple, clear active refusal, call Task 2's opener, and print the spec's `autorizacao_f6=aplicada` block. Do not implement pending/durable repeat handling yet.
+Acquire the Task 3 lock, reread after acquisition, validate exactly three arguments and the exact terminal/schema/B-NN/task/frontier preconditions, and pass the max plus the complete audit tuple to Task 2's opener. The opener clears the active refusal, writes the tuple, and increments the F6 count exactly once. Then print the spec's `autorizacao_f6=aplicada` block. Do not implement pending/durable repeat handling yet.
 
 - [ ] **Step 4: Add public usage/dispatch and verify**
 

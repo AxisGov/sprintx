@@ -923,8 +923,11 @@ não é o `replanejar` da F5 e não mexe no orçamento dela.
   `autorizacao_tardia_f6_origem`. A origem só pode ser `orcamento_f6_nao_declarado`; a data segue
   o formato das demais datas; as três são append-only, nunca coexistem com
   `recusa_replanejamento_f6` e só são válidas com eixo F6 presente, teto positivo e
-  `replanejamentos_f6 >= 1`. A autoridade canônica tardia é `autorizacao_tardia_f6_por`; nunca `orcamento_declarado_por`, que o comando preserva inclusive quando é `null`. Leitores sem essas
-  chaves continuam válidos sem migração. A autorização abre atomicamente a rodada 1, pelas mesmas
+  `replanejamentos_f6 >= 1`. A autoridade canônica tardia é `autorizacao_tardia_f6_por`: ela é a
+  autoridade exclusiva do eixo F6 nesta exceção explícita. `orcamento_declarado_por` continua
+  pertencendo ao orçamento da F5 e o comando o preserva inclusive quando é `null`; por isso um
+  teto F6 positivo com esse campo `null` só é válido com a tupla tardia completa. Leitores sem
+  essas chaves continuam válidos sem migração. A autorização abre atomicamente a rodada 1, pelas mesmas
   provas de bloqueios, task, fronteira, congelamento e parciais; `classes_mistas`, legados,
   orçamento consumido/esgotado e qualquer outro motivo continuam terminais.
 - No `historico`, uma rodada depois de um `sim` só existe quando um replanejamento da execução a
