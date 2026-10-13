@@ -2324,6 +2324,167 @@ l_aut_terminal_incorreto() {
   [ "$rc" -eq 5 ] && [ "$(cksum < "$a")" = "$ck" ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ]
 }
 
+# Task 5 — uma queda no pre-commit deixa a autorizacao gravada no disco, mas o
+# HEAD ainda no terminal. A retomada deve reconhecer exatamente esse estado,
+# sem repetir evento, contador ou escrita.
+l5_deixa_checkpoint_pendente() { # <script> <repo>
+  local s="$1" d="$2" hook out rc
+  l_aut_terminal "$s" "$d" || return 1
+  hook="$(git -C "$d" rev-parse --git-path hooks/pre-commit)"; case "$hook" in /*) ;; *) hook="$d/$hook" ;; esac
+  mkdir -p "${hook%/*}"
+  printf '#!/usr/bin/env bash\nmarcador="%s/task5-precommit-ja-falhou"\nif [ ! -e "$marcador" ]; then : > "$marcador"; exit 1; fi\nexit 0\n' "$(git -C "$d" rev-parse --git-dir)" > "$hook"
+  chmod +x "$hook"
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)"; rc=$?
+  [ "$rc" -eq 3 ] && [ "$(fmv "$(kf "$d")/00-PLANEJAMENTO.md" estado)" = replanejar_execucao ] \
+    && [ "$(fmv "$(kf "$d")/00-PLANEJAMENTO.md" autorizacao_tardia_f6_por)" = usuario ] \
+    && [ "$(fmv "$(kf "$d")/00-PLANEJAMENTO.md" replanejamentos_f6)" = 1 ]
+}
+
+l5_checkpoint_e_retomada() {
+  local s="$1" d="$2" a ev h ck evck out rc
+  a="$(kf "$d")/00-PLANEJAMENTO.md"; ev="$d/docs/eventos/menu.jsonl"
+  l5_deixa_checkpoint_pendente "$s" "$d" || return 1
+  h="$(git -C "$d" rev-parse HEAD)"; ck="$(cksum < "$a")"; evck="$(cksum < "$ev")"
+
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)"; rc=$?
+  [ "$rc" -eq 3 ] && [ "$(kv "$out" autorizacao_f6)" = checkpoint_pendente ] \
+    && [ "$(kv "$out" proxima)" = CHECKPOINT ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] \
+    && [ "$(cksum < "$a")" = "$ck" ] && [ "$(cksum < "$ev")" = "$evck" ] || return 1
+
+  l_aut_aplica "$s" "$d" 3 usuario >/dev/null; [ $? -eq 4 ] || return 1
+  l_aut_aplica "$s" "$d" 2 humano >/dev/null; [ $? -eq 4 ] || return 1
+  [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] && [ "$(cksum < "$ev")" = "$evck" ] || return 1
+
+  out="$(kpl "$s" "$d" checkpoint menu)" || return 1
+  [ "$(kv "$out" checkpoint)" = commitado ] && [ "$(git -C "$d" rev-list --count "$h..HEAD")" -eq 1 ] \
+    && [ "$(grep -c '"evento":"orcamento_f6_autorizado"' "$ev")" -eq 1 ] \
+    && [ "$(grep -c '"evento":"replanejamento_execucao_iniciado"' "$ev")" -eq 1 ] || return 1
+
+  h="$(git -C "$d" rev-parse HEAD)"; ck="$(cksum < "$a")"; evck="$(cksum < "$ev")"
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)" || return 1
+  [ "$(kv "$out" autorizacao_f6)" = retomada ] && [ "$(kv "$out" estado)" = replanejar_execucao ] \
+    && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] \
+    && [ "$(cksum < "$ev")" = "$evck" ] || return 1
+  l_aut_aplica "$s" "$d" 4 usuario >/dev/null; [ $? -eq 4 ]
+}
+
+l5_pendente_invalido() {
+  local s="$1" d caso a ev h ck evck idxck rc
+  for caso in bloqueio_resolvido classe task; do
+    d="$(kcopia "$FXN")"; l5_deixa_checkpoint_pendente "$s" "$d" || return 1
+    a="$(kf "$d")/00-PLANEJAMENTO.md"; ev="$d/docs/eventos/menu.jsonl"
+    case "$caso" in
+      bloqueio_resolvido) sed 's/^    resolvido_em: null$/    resolvido_em: 2026-10-12/' "$(kf "$d")/00-BLOQUEIOS.md" > "$K/l5.tmp" && mv "$K/l5.tmp" "$(kf "$d")/00-BLOQUEIOS.md" ;;
+      classe) sed 's/^    classe: defeito_de_plano$/    classe: prerequisito_ausente/' "$(kf "$d")/00-BLOQUEIOS.md" > "$K/l5.tmp" && mv "$K/l5.tmp" "$(kf "$d")/00-BLOQUEIOS.md" ;;
+      task) sed '/^  - id: T-04.03$/,/^    suite:/s/^    status: bloqueada$/    status: pendente/' "$(kf "$d")/sprint-04/tasks.md" > "$K/l5.tmp" && mv "$K/l5.tmp" "$(kf "$d")/sprint-04/tasks.md" ;;
+    esac
+    h="$(git -C "$d" rev-parse HEAD)"; ck="$(cksum < "$a")"; evck="$(cksum < "$ev")"
+    idxck="$(git -C "$d" diff --cached --binary | cksum)"
+    l_aut_aplica "$s" "$d" 2 usuario >/dev/null; rc=$?
+    [ "$rc" -eq 4 ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] \
+      && [ "$(cksum < "$ev")" = "$evck" ] \
+      && [ "$(git -C "$d" diff --cached --binary | cksum)" = "$idxck" ] || return 1
+    kpl "$s" "$d" checkpoint menu >/dev/null; rc=$?
+    [ "$rc" -eq 4 ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] \
+      && [ "$(cksum < "$ev")" = "$evck" ] \
+      && [ "$(git -C "$d" diff --cached --binary | cksum)" = "$idxck" ] || return 1
+  done
+}
+
+l5_parcial_e_congelada_invalidos() {
+  local s="$1" d a ev h ck evck rc
+  d="$(kcopia "$FXN")"; l5_deixa_checkpoint_pendente "$s" "$d" || return 1
+  a="$(kf "$d")/00-PLANEJAMENTO.md"; ev="$d/docs/eventos/menu.jsonl"
+  sed '/^  - id: T-03.01$/,/^    suite:/s/^      cria: /      cria: [src\/mudou.ts, /' "$(kf "$d")/sprint-03/tasks.md" > "$K/l5.tmp" && mv "$K/l5.tmp" "$(kf "$d")/sprint-03/tasks.md"
+  h="$(git -C "$d" rev-parse HEAD)"; ck="$(cksum < "$a")"; evck="$(cksum < "$ev")"
+  l_aut_aplica "$s" "$d" 2 usuario >/dev/null; rc=$?
+  [ "$rc" -eq 2 ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] \
+    && [ "$(cksum < "$ev")" = "$evck" ] || return 1
+
+  d="$(kcopia "$FXN")"; sed 's|      altera: \[src/ui/cabecalho-topo.tsx\]|      altera: [src/menu/perfil.ts]|' "$(kf "$d")/sprint-04/tasks.md" > "$K/l5.tmp" && mv "$K/l5.tmp" "$(kf "$d")/sprint-04/tasks.md"
+  mkdir -p "$d/src/menu"; printf 'antes\n' > "$d/src/menu/perfil.ts"
+  git -C "$d" add "$(kf "$d")/sprint-04/tasks.md" src/menu/perfil.ts && git -C "$d" commit -q -m 'fixture: parcial tardio' || return 1
+  printf 'depois\n' > "$d/src/menu/perfil.ts"; l5_deixa_checkpoint_pendente "$s" "$d" || return 1
+  a="$(kf "$d")/00-PLANEJAMENTO.md"; ev="$d/docs/eventos/menu.jsonl"; rm "$d/src/menu/perfil.ts"
+  h="$(git -C "$d" rev-parse HEAD)"; ck="$(cksum < "$a")"; evck="$(cksum < "$ev")"
+  l_aut_aplica "$s" "$d" 2 usuario >/dev/null; rc=$?
+  [ "$rc" -eq 2 ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] \
+    && [ "$(cksum < "$ev")" = "$evck" ]
+}
+
+# Mesmo depois do primeiro checkpoint duravel, a retomada ainda prova o
+# trabalho parcial preservado antes de responder `retomada`.
+l5_retomada_duravel_recusa_parcial_perdido() {
+  local s="$1" d="$2" f a ev out h ck evck idxck rc
+  f="$(kf "$d")"; a="$f/00-PLANEJAMENTO.md"; ev="$d/docs/eventos/menu.jsonl"
+  sed 's|      altera: \[src/ui/cabecalho-topo.tsx\]|      altera: [src/menu/perfil.ts]|' \
+    "$f/sprint-04/tasks.md" > "$K/l5.tmp" && mv "$K/l5.tmp" "$f/sprint-04/tasks.md"
+  mkdir -p "$d/src/menu"; printf 'antes\n' > "$d/src/menu/perfil.ts"
+  git -C "$d" add "$f/sprint-04/tasks.md" src/menu/perfil.ts \
+    && git -C "$d" commit -q -m 'fixture: parcial tardio duravel' || return 1
+  printf 'depois\n' > "$d/src/menu/perfil.ts"
+  l_aut_terminal "$s" "$d" && l_aut_aplica "$s" "$d" 2 usuario >/dev/null || return 1
+  git -C "$d" checkout -q -- src/menu/perfil.ts
+  h="$(git -C "$d" rev-parse HEAD)"; ck="$(cksum < "$a")"; evck="$(cksum < "$ev")"
+  idxck="$(git -C "$d" diff --cached --binary | cksum)"
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)"; rc=$?
+  [ "$rc" -eq 2 ] && [ "$(kv "$out" trabalho_parcial)" = perdido ] \
+    && [ "$(kv "$out" motivo)" = parcial_perdido ] \
+    && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] \
+    && [ "$(cksum < "$ev")" = "$evck" ] \
+    && [ "$(git -C "$d" diff --cached --binary | cksum)" = "$idxck" ]
+}
+
+l5_fechamento_pendente_e_fechado() {
+  local s="$1" d="$2" a ev h ck evck out rc
+  a="$(kf "$d")/00-PLANEJAMENTO.md"; ev="$d/docs/eventos/menu.jsonl"
+  l_aut_terminal "$s" "$d" && l_aut_aplica "$s" "$d" 2 usuario >/dev/null || return 1
+  sed 's/^estado: replanejar_execucao$/estado: aprovado/' "$a" > "$K/l5.tmp" && mv "$K/l5.tmp" "$a"
+  h="$(git -C "$d" rev-parse HEAD)"; ck="$(cksum < "$a")"; evck="$(cksum < "$ev")"
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)"; rc=$?
+  [ "$rc" -eq 3 ] && [ "$(kv "$out" autorizacao_f6)" = fechamento_pendente ] \
+    && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] \
+    && [ "$(cksum < "$ev")" = "$evck" ] || return 1
+  kpl "$s" "$d" checkpoint menu >/dev/null || return 1
+  [ "$(fmv "$a" bloqueios_replanejamento_f6)" = '[]' ] \
+    && [ "$(kbloq "$d" B-01)" = 'defeito_de_plano|resolvido' ] \
+    && [ "$(kst "$d" T-04.03)" = pendente ] || return 1
+  h="$(git -C "$d" rev-parse HEAD)"; ck="$(cksum < "$a")"; evck="$(cksum < "$ev")"
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)"; rc=$?
+  [ "$rc" -eq 5 ] && [ "$(kv "$out" autorizacao_f6)" = fechada ] \
+    && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] \
+    && [ "$(cksum < "$ev")" = "$evck" ] || return 1
+  out="$(l_aut_aplica "$s" "$d" 9 outro)"; rc=$?
+  [ "$rc" -eq 5 ] && [ "$(kv "$out" autorizacao_f6)" = fechada ] \
+    && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] \
+    && [ "$(cksum < "$ev")" = "$evck" ]
+}
+
+# A guarda reforcada pertence somente ao primeiro checkpoint da autorizacao.
+# Depois que a rodada e duravel, a F3 pode legitimamente remover a task
+# bloqueada; os portoes ordinarios e reabre_task ja cobrem esse caso.
+l5_portao_posterior_tolera_task_removida() {
+  local s="$1" d="$2" f out h
+  f="$(kf "$d")"
+  l_aut_terminal "$s" "$d" && l_aut_aplica "$s" "$d" 2 usuario >/dev/null || return 1
+  k_sprint "$f/sprint-04/tasks.md" 04 plano \
+    "T-04.01|concluida|src/menu/organizacao.ts, tests/menu/organizacao.test.ts||" \
+    "T-04.02|concluida|src/menu/visibilidade.ts, tests/menu/visibilidade.test.ts||T-04.01" \
+    "T-04.04|pendente|src/menu/rotas.ts||T-04.02" \
+    "T-04.05|pendente|src/menu/icones.ts||" \
+    "T-04.06|pendente|src/menu/ajuda.ts||"
+  h="$(git -C "$d" rev-parse HEAD)"
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)" || return 1
+  [ "$(kv "$out" autorizacao_f6)" = retomada ] \
+    && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] || return 1
+  out="$(kpl "$s" "$d" avanca menu f3)" || return 1
+  [ "$(kv "$out" estado)" = aguardando_f4 ] \
+    && [ "$(git -C "$d" rev-list --count "$h..HEAD")" -eq 1 ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" bloqueios_replanejamento_f6)" = '[B-01]' ] \
+    && [ "$(kbloq "$d" B-01)" = 'defeito_de_plano|aberto' ] \
+    && [ -z "$(kst "$d" T-04.03)" ]
+}
+
 for par in l_aut_limpa:l1-autorizacao-tardia-limpa l_aut_parciais:l2-autorizacao-tardia-preserva-tres-parciais \
   l_aut_dono_e_clone:l3-l4-dono-separado-e-clone-le-estado l_aut_argumentos:l6-argumentos-invalidos-nao-gravam \
   l_aut_bloqueios:l7-l8-bloqueios-e-task-invalidos l_aut_fronteira:l9-fronteiras-inseguras-nao-gravam \
@@ -2332,6 +2493,12 @@ for par in l_aut_limpa:l1-autorizacao-tardia-limpa l_aut_parciais:l2-autorizacao
   l_aut_terminal_incorreto:l5-terminal-nao-autorizado; do
   d="$(kcopia "$FXN")"; "${par%%:*}" "$PL" "$d"; afirma "${par#*:}" $? "${par%%:*}"
 done
+d="$(kcopia "$FXN")"; l5_checkpoint_e_retomada "$PL" "$d"; afirma "m1-m4-m7-m10-checkpoint-e-retomada-idempotentes" $? "queda, repeticao, checkpoint, retomada e argumentos"
+l5_pendente_invalido "$PL"; afirma "m6-pendente-valida-bloqueio-classe-e-task" $? "comando e checkpoint falham fechados"
+l5_parcial_e_congelada_invalidos "$PL"; afirma "m5-congeladas-e-parciais-invalidos-nao-gravam" $? "fronteiras inseguras retornam rc2, sem evento"
+d="$(kcopia "$FXN")"; l5_retomada_duravel_recusa_parcial_perdido "$PL" "$d"; afirma "m5-retomada-duravel-recusa-parcial-perdido" $? "rc2 antes de retomada, sem evento nem gravacao"
+d="$(kcopia "$FXN")"; l5_fechamento_pendente_e_fechado "$PL" "$d"; afirma "m8-m9-m10-fechamento-pendente-e-rodada-fechada" $? "checkpoint fecha uma vez; repeticao para"
+d="$(kcopia "$FXN")"; l5_portao_posterior_tolera_task_removida "$PL" "$d"; afirma "m11-portao-posterior-nao-revalida-aplicacao-inicial" $? "retomada e F3 aceitam task removida pelo replanejamento"
 
 TRAVA_AUT6="$SK/scripts/lib/trava-autorizacao-f6.sh"
 l_lock_obtem() {
