@@ -9585,6 +9585,15 @@ al_muta "$AL_M" '  if [ "$P_ESTADO" = aprovado ]; then AUT6_ACAO=fechamento_pend
 al_mutante "ds175-mutante-21" $? "$AL_M" l5_fechamento_pendente_e_fechado
 rm -rf "$K"
 
+echo "== AM. predecessores verificaveis =="
+PRE_SUITE="$H/../../scripts/ci/test-predecessores.sh"
+if [ -f "$PRE_SUITE" ]; then
+  bash "$PRE_SUITE" todos
+  afirma "predecessores-suite-dedicada" $? "scripts/ci/test-predecessores.sh todos"
+else
+  afirma "predecessores-suite-dedicada" 1 "suite ausente: $PRE_SUITE"
+fi
+
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"
 [ "$pulado" -eq 0 ] || echo "  ATENCAO: skip interno e buraco de cobertura da sprintx nesta plataforma, nao dependencia externa."
