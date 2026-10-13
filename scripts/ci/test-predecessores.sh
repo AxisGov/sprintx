@@ -59,6 +59,9 @@ nova_fixture() {
   mkdir -p "$FX/docs/superpowers/specs" "$FX/docs/superpowers/plans"
   mkdir -p "$FX/docs/sprintx/features/ft-pre" "$FX/docs/entregas/ft-pre"
   printf 'spec v1\n' > "$FX/$SPEC"
+  printf 'glob literal\n' > "$FX/docs/superpowers/specs/glob*.md"
+  printf 'glob literal\n' > "$FX/docs/superpowers/specs/glob?.md"
+  printf 'glob literal\n' > "$FX/docs/superpowers/specs/glob[1].md"
   ln -s ft-pre-design.md "$FX/docs/superpowers/specs/ft-pre-link.md"
   printf 'evidencia interna\n' > "$FX/docs/sprintx/features/ft-pre/evidencia.md"
   printf 'entrega\n' > "$FX/docs/entregas/ft-pre/PR.md"
@@ -128,6 +131,10 @@ grupo_registro() {
   [ "$before" = "$after" ]; afirma 'idempotencia preserva bytes' $? "$before != $after"
   grep -qF "$SPEC" "$MANIFESTO" && grep -qF 'especificacao' "$MANIFESTO" && grep -qF 'superpowers' "$MANIFESTO"
   afirma 'prosa repete caminho origem e papel' $? 'prosa incompleta'
+
+  nova_fixture
+  caso_rc 'recusa SHA informado pelo chamador' 64 pred --registrar ft-pre --origem superpowers \
+    --papel especificacao --caminho "$SPEC" --commit-sha "$FX_SPEC_COMMIT"
 }
 
 invalido_preserva() { # invalido_preserva <nome> <papel> <caminho>
@@ -149,9 +156,9 @@ grupo_caminhos() {
   invalido_preserva 'recusa segmento ponto-ponto' especificacao 'docs/superpowers/specs/../specs/ft-pre-design.md'
   invalido_preserva 'recusa segmento vazio' especificacao 'docs//superpowers/specs/ft-pre-design.md'
   invalido_preserva 'recusa barra invertida' especificacao 'docs\superpowers\specs\ft-pre-design.md'
-  invalido_preserva 'recusa glob asterisco' especificacao 'docs/superpowers/specs/*.md'
-  invalido_preserva 'recusa glob interrogacao' especificacao 'docs/superpowers/specs/ft-pre?.md'
-  invalido_preserva 'recusa glob colchete' especificacao 'docs/superpowers/specs/[f]t-pre.md'
+  invalido_preserva 'recusa glob asterisco' especificacao 'docs/superpowers/specs/glob*.md'
+  invalido_preserva 'recusa glob interrogacao' especificacao 'docs/superpowers/specs/glob?.md'
+  invalido_preserva 'recusa glob colchete' especificacao 'docs/superpowers/specs/glob[1].md'
   invalido_preserva 'recusa propria feature' especificacao 'docs/sprintx/features/ft-pre/evidencia.md'
   invalido_preserva 'recusa propria entrega' especificacao 'docs/entregas/ft-pre/PR.md'
 }
@@ -231,6 +238,10 @@ grupo_schema() {
   sed -i "/blob_oid:/a\\    caminho: $SPEC\n    origem: superpowers\n    papel: especificacao\n    commit_sha: $FX_SPEC_COMMIT\n    blob_oid: $FX_SPEC_BLOB" "$MANIFESTO"
   caso_falha 'recusa caminho duplicado' pred --validar ft-pre
 
+  nova_fixture; manifesto_valido "$SPEC" especificacao "$FX_SPEC_COMMIT" "$FX_SPEC_BLOB"
+  sed -i "/criado_em:/i\\  - caminho: $PLAN\n    origem: invalida\n    papel: plano\n    commit_sha: $FX_PLAN_COMMIT\n    blob_oid: $FX_PLAN_BLOB" "$MANIFESTO"
+  caso_falha 'um item invalido reprova o conjunto inteiro' pred --validar ft-pre
+
   schema_invalido 'recusa scalar malformado' scalar
 }
 
@@ -242,6 +253,7 @@ grupo_contrato() {
   local sk="$RAIZ_SUITE/.claude/skills/sprintx" schema="$RAIZ_SUITE/.claude/skills/sprintx/references/00-schema.md"
   local ingestao="$RAIZ_SUITE/.claude/skills/sprintx/references/01-ingestao.md" rastro="$RAIZ_SUITE/.claude/skills/sprintx/references/08-rastro.md"
   local skill="$RAIZ_SUITE/.claude/skills/sprintx/SKILL.md" cmd="$RAIZ_SUITE/.claude/commands/sprintx-base.md" oc="$RAIZ_SUITE/.opencode/command/sprintx-base.md"
+  local decisoes="$RAIZ_SUITE/.claude/skills/sprintx/DECISOES-DA-SKILL.md" readme="$RAIZ_SUITE/README.md"
   local l_leu l_reg l_val l_fim ruim
 
   tem "$schema" '### `00-PREDECESSORES.md` → `kind: predecessores`'
@@ -266,12 +278,22 @@ grupo_contrato() {
   afirma 'entrypoints apontam para a mesma ingestao' $? 'entrypoint divergente'
   tem "$rastro" 'não cria evento novo' && tem "$rastro" '`commit_criado`'
   afirma 'rastro preserva vocabulario e commit_criado' $? 'contrato do rastro ausente'
+  tem "$sk/scripts/predecessores.sh" 'b="$(modo_blob HEAD "$caminho")"'
+  afirma 'prova le o blob atual de HEAD' $? 'prova passou a confiar no disco ou no commit declarado'
 
   ruim=0
   for nome in predecessor_registrado predecessor_validado predecessores_validados retomada_iniciada retomada_concluida; do
     grep -RqsF "$nome" "$sk" "$RAIZ_SUITE/.claude/commands" "$RAIZ_SUITE/.opencode/command" && ruim=1
   done
   [ "$ruim" -eq 0 ]; afirma 'nenhum evento inventado no contrato' $? 'evento fora do enum encontrado'
+
+  ruim=0
+  for ds in DS-176 DS-177 DS-178 DS-179 DS-180; do
+    tem "$decisoes" "| $ds |" || ruim=1
+  done
+  [ "$ruim" -eq 0 ]; afirma 'decisoes DS-176 a DS-180 publicadas' $? 'decisao append-only ausente'
+  tem "$readme" '00-PREDECESSORES.md' && tem "$readme" 'mutacao-predecessores.sh'
+  afirma 'README publica manifesto e gate de mutacao' $? 'README sem contrato ou comando de certificacao'
 }
 
 feature_para_checkpoint() {
