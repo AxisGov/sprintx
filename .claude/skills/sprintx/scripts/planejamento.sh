@@ -18,6 +18,7 @@
 #   planejamento.sh criar <slug> [max_reprovacoes_f5|null] [declarado_por|null] [max_replanejamentos_f6|null]
 #   planejamento.sh avanca <slug> f2|f3|f4|f5
 #   planejamento.sh replanejar-execucao <slug>
+#   planejamento.sh autorizar-replanejamento-execucao <slug> <max_replanejamentos_f6> <autorizado_por>
 #   planejamento.sh checkpoint <slug>
 #   planejamento.sh fase <slug>
 #   planejamento.sh pode-resolver <slug> <B-NN>
@@ -1422,6 +1423,10 @@ saida_f6() {
   [ "${P_ESTADO-}" = replanejamento_execucao_recusado ] && printf 'recusa_replanejamento_f6=%s\n' "$P_RECUSA"
   if [ "$P_F6" = legado ]; then printf 'orcamento_f6=legado\n'; return 0; fi
   printf 'replanejamentos_f6=%s\nmax_replanejamentos_f6=%s\n' "$P_N6" "$P_MAX6"
+  if [ "${P_AUT6:-ausente}" = presente ]; then
+    printf 'autorizacao_tardia_f6_por=%s\nautorizacao_tardia_f6_em=%s\nautorizacao_tardia_f6_origem=%s\n' \
+      "$P_AUT6_POR" "$P_AUT6_EM" "$P_AUT6_ORIGEM"
+  fi
   if [ -n "$P_BLQ" ]; then
     printf 'replanejamento_execucao=ativo\nbloqueios_replanejamento_f6=%s\ntasks_congeladas=%s\nparciais_replanejamento_f6=%s\n' \
       "$(printf '%s' "$P_BLQ" | tr ' ' ',')" "$(printf '%s' "$P_CONG" | tr ' ' ',')" \
@@ -1494,13 +1499,85 @@ abre_rodada_f6() {
   if [ -n "$aut_por$aut_em$aut_origem" ]; then
     [ -n "$aut_por" ] && [ -n "$aut_em" ] && [ -n "$aut_origem" ] \
       || falha "$E_CONTRATO" "auditoria tardia da F6 deve ser fornecida por inteiro ao abrir a rodada"
-    W_AUT6=presente; W_AUT6_POR="$aut_por"; W_AUT6_EM="$aut_em"; W_AUT6_ORIGEM="$aut_origem"
+    W_AUT6=presente; W_AUT6_POR="$aut_por"; W_AUT6_EM="$aut_em"; W_AUT6_ORIGEM="$aut_origem"; W_RECUSA=""
   fi
   calcula_congeladas
   W6_N=$((P_N6 + 1)); W6_BLQ="$defeitos"; W6_CONG="$C_IDS"; W6_ASS="$C_ASS"; W6_PARC="$F_PARC"
   escreve "$P_MAX" "$P_POR" replanejar_execucao "$P_REPROV" "$P_HIST"
+  if [ -n "$aut_por" ]; then
+    evento orcamento_f6_autorizado f6 - ok "teto $max6 autorizado por $aut_por a partir de $aut_origem; bloqueios [$defeitos]"
+  fi
   evento replanejamento_execucao_iniciado f6 - ok "replanejamento da execucao $W6_N de $max6 aberto por [$defeitos]; reprovacoes da F5 continuam em $P_REPROV; congeladas [$W6_CONG]; trabalho parcial preservado [$(printf '%s\n' "$F_PARC" | awk -F'\t' 'NF { printf "%s%s", (n++ ? "," : ""), $1 }')]"
   checkpoint
+}
+
+# autorizar-replanejamento-execucao — abre a primeira rodada F6 a partir do terminal
+# duravel `orcamento_f6_nao_declarado`. Esta task implementa somente a aplicacao inicial;
+# repeticao, checkpoint pendente e retomada sao tratados pelo caminho de recuperacao da Task 5.
+cmd_autorizar_replanejamento_execucao() {
+  [ $# -eq 3 ] || falha "$E_USO" "uso: autorizar-replanejamento-execucao <slug> <max_replanejamentos_f6> <autorizado_por>"
+  local slug="$1" max6="$2" por="$3" abertos b t c defeitos="" outros="" st
+  valida_slug "$slug"
+  positivo "$max6" || falha "$E_CONTRATO" "max_replanejamentos_f6 invalido: '$max6' (inteiro >= 1)"
+  case "$por" in
+    null) falha "$E_CONTRATO" "autorizado_por invalido: 'null' (identificador minusculo, nao null)" ;;
+    [a-z]*) case "$por" in *[!a-z0-9_-]*) falha "$E_CONTRATO" "autorizado_por invalido: '$por' (identificador minusculo)" ;; esac ;;
+    *) falha "$E_CONTRATO" "autorizado_por invalido: '$por' (identificador minusculo)" ;;
+  esac
+
+  # A trava antecede toda leitura decisoria. `contexto` relê a mesma raiz depois da aquisicao.
+  RAIZ="$(resolve_raiz)"
+  adquire_trava_autorizacao_f6 "$RAIZ" "$slug" \
+    || falha "$E_RECUSADO" "autorizacao tardia da F6 recusada: trava existente para $slug"
+  contexto "$slug"
+  estado_efetivo
+  persistencia
+  if [ "$PERSIST" = pendente ]; then
+    printf 'estado=%s\nproxima=CHECKPOINT\npersistencia=pendente\n' "$E_ESTADO"
+    falha "$E_PERSISTENCIA" "autorizacao tardia recusada — $(pendente_msg)"
+  fi
+  if [ "$PERSIST" != duravel ]; then
+    printf 'autorizacao_f6=recusada\nestado=%s\nmotivo=persistencia_%s\nproxima=PARAR\npersistencia=%s\n' \
+      "$E_ESTADO" "$PERSIST" "$PERSIST"
+    falha "$E_TRANSICAO" "autorizacao tardia da F6 exige o terminal duravel no HEAD de feature/$SLUG; a persistencia e '$PERSIST' (modo $G_MODO) e nenhum checkpoint a torna duravel. PARE."
+  fi
+
+  if [ "$E_FONTE" != planejamento ] || [ "$P_ESTADO" != replanejamento_execucao_recusado ] \
+      || [ "$P_RECUSA" != orcamento_f6_nao_declarado ]; then
+    printf 'autorizacao_f6=recusada\nestado=%s\nmotivo=%s\nproxima=PARAR\n' "$E_ESTADO" "${P_RECUSA:-estado}"
+    falha "$E_TRANSICAO" "autorizacao tardia da F6 so parte do terminal orcamento_f6_nao_declarado"
+  fi
+  [ "$P_F6" = presente ] && [ "$P_MAX6" = null ] && [ "$P_N6" -eq 0 ] && [ -z "$P_BLQ" ] \
+    && [ "$P_AUT6" = ausente ] \
+    || falha "$E_TRANSICAO" "terminal sem a fronteira inicial exata da autorizacao tardia da F6"
+
+  le_bloqueios || falha "$E_CONTRATO" "00-BLOQUEIOS.md invalido"
+  abertos="$(abertos_ordenados)"
+  while IFS="$(printf '\t')" read -r b t c; do
+    [ -n "$b" ] || continue
+    if [ "$c" = defeito_de_plano ]; then defeitos="$defeitos $b"; else outros="$outros $b:$c"; fi
+  done <<EOF
+$abertos
+EOF
+  defeitos="${defeitos# }"; outros="${outros# }"
+  [ -n "$defeitos" ] || falha "$E_CONTRATO" "autorizacao tardia exige ao menos um defeito_de_plano aberto"
+  [ -z "$outros" ] || falha "$E_CONTRATO" "autorizacao tardia exige somente defeito_de_plano aberto: $outros"
+
+  BLOQ_TASKS=""
+  for b in $defeitos; do
+    t="$(task_do_bloqueio "$b")"
+    case "$t" in null|-|"") continue ;; esac
+    st="$(status_da_task "$t" | cut -f2)"
+    [ "$st" = bloqueada ] || falha "$E_CONTRATO" "$b aponta $t, que esta '${st:-fora do plano}': a task precisa estar bloqueada"
+    BLOQ_TASKS="$BLOQ_TASKS $t"
+  done
+  fronteira_segura
+
+  abre_rodada_f6 "$defeitos" "$max6" "$por" "$(hoje)" orcamento_f6_nao_declarado
+  le_planejamento
+  persistencia
+  printf 'autorizacao_f6=aplicada\nestado=%s\nreplanejamentos_f6=%s\nmax_replanejamentos_f6=%s\nautorizado_por=%s\nproxima=%s\npersistencia=%s\n' \
+    "$P_ESTADO" "$P_N6" "$P_MAX6" "$P_AUT6_POR" "$(fase_do_estado "$P_ESTADO")" "$PERSIST"
 }
 
 # replanejar-execucao — a F6 registrou defeito_de_plano: volta ao planejamento
@@ -1780,6 +1857,7 @@ case "$CMD" in
   criar)            cmd_criar "$@" ;;
   avanca)           cmd_avanca "$@" ;;
   replanejar-execucao) cmd_replanejar_execucao "$@" ;;
+  autorizar-replanejamento-execucao) cmd_autorizar_replanejamento_execucao "$@" ;;
   pode-resolver)    cmd_pode_resolver "$@" ;;
   checkpoint)       cmd_checkpoint "$@" ;;
   fase)             cmd_fase "$@" ;;
