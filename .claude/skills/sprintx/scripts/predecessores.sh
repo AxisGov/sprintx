@@ -2,6 +2,7 @@
 # predecessores.sh — registra e prova documentos consumidos antes da SprintX.
 # Bash 3.2; sem jq, python ou eval.
 set -uo pipefail
+export GIT_LITERAL_PATHSPECS=1
 
 E_PROVA=3
 E_CONTRATO=4
@@ -86,7 +87,7 @@ prova_nascimento() { # prova_nascimento <commit>
 }
 
 prova_item() { # prova_item <path> <origem> <papel> <commit> <blob>
-  local caminho="$1" origem="$2" papel="$3" commit="$4" blob="$5" a b oid_commit oid_head
+  local caminho="$1" origem="$2" papel="$3" commit="$4" blob="$5" a b oid_commit oid_head oid_disco
   valida_caminho "$caminho"
   [ "$origem" = superpowers ] || falha "$E_CONTRATO" "origem fora do enum: $origem"
   case "$papel" in especificacao|plano) ;; *) falha "$E_CONTRATO" "papel fora do enum: $papel" ;; esac
@@ -115,14 +116,18 @@ prova_item() { # prova_item <path> <origem> <papel> <commit> <blob>
   a="$(modo_blob "$commit" "$caminho")" || falha "$E_PROVA" "predecessor nao e blob regular: $caminho"
   b="$(modo_blob HEAD "$caminho")" || falha "$E_PROVA" "HEAD nao contem blob regular: $caminho"
   oid_commit="${a#*	}"; oid_head="${b#*	}"
+  oid_disco="$(git -C "$RAIZ" hash-object --path="$caminho" -- "$RAIZ/$caminho" 2>/dev/null)" \
+    || falha "$E_CONTRATO" "nao foi possivel provar o arquivo no disco: $caminho"
+  [ "$oid_disco" = "$oid_head" ] || falha "$E_CONTRATO" "predecessor modificado: $caminho"
   [ "$oid_commit" = "$blob" ] || falha "$E_PROVA" "blob declarado diverge do predecessor: $caminho"
   [ "$oid_head" = "$blob" ] || falha "$E_PROVA" "blob atual diverge do predecessor: $caminho"
 }
 
-zera_item() { I_CAM=""; I_ORI=""; I_PAP=""; I_COM=""; I_BLO=""; I_SEEN=""; }
+zera_item() { I_CAM=""; I_ORI=""; I_PAP=""; I_COM=""; I_BLO=""; I_SEEN=""; I_OPEN=0; }
 
 campo_item() { # campo_item <key> <value>
   local k="$1" v="$2"
+  [ "$I_OPEN" -eq 1 ] || falha "$E_CONTRATO" "campo de predecessor fora de item: $k"
   tem_palavra "$I_SEEN" "$k" && falha "$E_CONTRATO" "chave repetida no predecessor: $k"
   I_SEEN="$I_SEEN $k"
   case "$k" in
@@ -136,7 +141,7 @@ campo_item() { # campo_item <key> <value>
 }
 
 fecha_item() {
-  [ -n "$I_CAM" ] || return 0
+  [ "$I_OPEN" -eq 1 ] || return 0
   for k in caminho origem papel commit_sha blob_oid; do
     tem_palavra "$I_SEEN" "$k" || falha "$E_CONTRATO" "predecessor sem chave: $k"
   done
@@ -164,25 +169,40 @@ campo_topo() { # campo_topo <key> <value>
   esac
 }
 
+abre_lista() { # abre_lista <marcador>
+  [ "$P_LIST_STATE" = antes ] || falha "$E_CONTRATO" 'secao predecessores repetida ou reaberta'
+  campo_topo predecessores "$1"
+  P_LIST_STATE=lista
+}
+
+fecha_lista_para_topo() {
+  if [ "$P_LIST_STATE" = lista ]; then
+    fecha_item
+    P_LIST_STATE=depois
+  fi
+}
+
 parse_manifesto() { # parse_manifesto <file> <tsv>
   local arq="$1" out="$2" linha n=0 fechado=0 k v
   [ -f "$arq" ] || falha "$E_CONTRATO" '00-PREDECESSORES.md ausente'
   P_TSV="$out"; P_PATHS="$out.paths"; : > "$P_TSV"; : > "$P_PATHS"
-  P_TOP_SEEN=""; P_SCHEMA=""; P_TOOL=""; P_KIND=""; P_TRAB=""; P_CRIADO=""; P_ATUAL=""; P_N=0; zera_item
+  P_TOP_SEEN=""; P_SCHEMA=""; P_TOOL=""; P_KIND=""; P_TRAB=""; P_CRIADO=""; P_ATUAL=""; P_N=0; P_LIST_STATE=antes; zera_item
   while IFS= read -r linha || [ -n "$linha" ]; do
     n=$((n + 1)); linha="${linha%$'\r'}"
     if [ "$n" -eq 1 ]; then [ "$linha" = '---' ] || falha "$E_CONTRATO" 'frontmatter precisa iniciar na primeira linha'; continue; fi
     if [ "$linha" = '---' ]; then fecha_item; fechado=1; break; fi
     case "$linha" in
-      '  - caminho: '*) fecha_item; zera_item; campo_item caminho "${linha#  - caminho: }" ;;
+      '  - caminho: '*)
+        [ "$P_LIST_STATE" = lista ] || falha "$E_CONTRATO" 'item fora da secao predecessores'
+        fecha_item; zera_item; I_OPEN=1; campo_item caminho "${linha#  - caminho: }" ;;
       '    origem: '*) campo_item origem "${linha#    origem: }" ;;
       '    papel: '*) campo_item papel "${linha#    papel: }" ;;
       '    commit_sha: '*) campo_item commit_sha "${linha#    commit_sha: }" ;;
       '    blob_oid: '*) campo_item blob_oid "${linha#    blob_oid: }" ;;
-      predecessores:) fecha_item; campo_topo predecessores __LISTA__ ;;
-      predecessores:\ \[\]) fecha_item; campo_topo predecessores __VAZIA__ ;;
+      predecessores:) abre_lista __LISTA__ ;;
+      predecessores:\ \[\]) abre_lista __VAZIA__ ;;
       [a-z_]*': '*)
-        fecha_item; k="${linha%%:*}"; v="${linha#*: }"; campo_topo "$k" "$v" ;;
+        fecha_lista_para_topo; k="${linha%%:*}"; v="${linha#*: }"; campo_topo "$k" "$v" ;;
       '') falha "$E_CONTRATO" 'linha vazia dentro do frontmatter' ;;
       *) falha "$E_CONTRATO" "linha malformada no frontmatter: $linha" ;;
     esac

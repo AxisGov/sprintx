@@ -33,6 +33,14 @@ caso_falha() { # caso_falha <nome> <comando>...
   else reprova "$nome" "aceitou entrada invalida: $(printf '%s' "$saida" | head -2 | tr '\n' ' ')"; fi
 }
 
+caso_falha_com() { # caso_falha_com <nome> <trecho> <comando>...
+  local nome="$1" trecho="$2" saida real
+  shift 2
+  saida="$({ "$@"; } 2>&1)"; real=$?
+  if [ "$real" -ne 0 ] && printf '%s' "$saida" | grep -qF "$trecho"; then passa "$nome"
+  else reprova "$nome" "esperava falha contendo '$trecho'; rc=$real: $(printf '%s' "$saida" | head -2 | tr '\n' ' ')"; fi
+}
+
 afirma() { # afirma <nome> <0=verdadeiro> <detalhe>
   if [ "$2" -eq 0 ]; then passa "$1"; else reprova "$1" "$3"; fi
 }
@@ -118,6 +126,10 @@ grupo_registro() {
   echo '== registro =='
   nova_fixture
   caso_rc 'registra especificacao' 0 registra especificacao "$SPEC"
+  local so_spec
+  so_spec="$(pred --listar ft-pre 2>/dev/null)"
+  [ "$so_spec" = "$(printf 'predecessor\t%s\t%s\t%s' "$SPEC" "$FX_SPEC_COMMIT" "$FX_SPEC_BLOB")" ]
+  afirma 'registro nao descobre predecessores por prefixo' $? "saida apos registrar somente spec: $so_spec"
   caso_rc 'registra plano' 0 registra plano "$PLAN"
   caso_rc 'valida manifesto' 0 pred --validar ft-pre
 
@@ -159,6 +171,9 @@ grupo_caminhos() {
   invalido_preserva 'recusa glob asterisco' especificacao 'docs/superpowers/specs/glob*.md'
   invalido_preserva 'recusa glob interrogacao' especificacao 'docs/superpowers/specs/glob?.md'
   invalido_preserva 'recusa glob colchete' especificacao 'docs/superpowers/specs/glob[1].md'
+  nova_fixture
+  printf 'nao rastreado com pathspec magic\n' > "$FX/:(top)README.md"
+  caso_falha_com 'pathspec magic continua caminho literal e nao rastreado' 'arquivo nao rastreado' registra especificacao ':(top)README.md'
   invalido_preserva 'recusa propria feature' especificacao 'docs/sprintx/features/ft-pre/evidencia.md'
   invalido_preserva 'recusa propria entrega' especificacao 'docs/entregas/ft-pre/PR.md'
 }
@@ -172,6 +187,12 @@ grupo_estado_git() {
   nova_fixture; caso_rc 'precondicao valida-modificado' 0 registra especificacao "$SPEC"; printf 'mudou\n' >> "$FX/$SPEC"; caso_falha 'validar recusa predecessor modificado' pred --validar ft-pre
   nova_fixture; caso_rc 'precondicao valida-staged' 0 registra especificacao "$SPEC"; printf 'mudou\n' >> "$FX/$SPEC"; git -C "$FX" add "$SPEC"; caso_falha 'validar recusa predecessor staged' pred --validar ft-pre
   nova_fixture; caso_rc 'precondicao valida-removido' 0 registra especificacao "$SPEC"; rm "$FX/$SPEC"; caso_falha 'validar recusa predecessor removido' pred --validar ft-pre
+  nova_fixture
+  caso_rc 'precondicao assume-unchanged' 0 registra especificacao "$SPEC"
+  git -C "$FX" update-index --assume-unchanged "$SPEC"
+  printf 'mudou escondido pelo indice\n' > "$FX/$SPEC"
+  caso_falha 'recusa modificado escondido por assume-unchanged' pred --validar ft-pre
+  git -C "$FX" update-index --no-assume-unchanged "$SPEC"
   nova_fixture; caso_falha 'recusa symlink' registra especificacao 'docs/superpowers/specs/ft-pre-link.md'
   nova_fixture; caso_falha 'recusa gitlink' registra especificacao 'docs/superpowers/gitlink'
   nova_fixture; caso_falha 'recusa diretorio' registra especificacao 'docs/superpowers/specs'
@@ -206,6 +227,14 @@ grupo_historia() {
   caso_rc 'precondicao para blob divergente' 0 registra especificacao "$SPEC"
   printf 'spec v2\n' > "$FX/$SPEC"; git_commit 'muda spec depois do planejamento'
   caso_falha 'recusa blob atual divergente' pred --validar ft-pre
+
+  nova_fixture
+  caso_rc 'precondicao para prova por HEAD e nao disco' 0 registra especificacao "$SPEC"
+  printf 'spec v2\n' > "$FX/$SPEC"; git_commit 'muda spec depois do planejamento'
+  git -C "$FX" update-index --assume-unchanged "$SPEC"
+  printf 'spec v1\n' > "$FX/$SPEC"
+  caso_falha 'recusa HEAD divergente mesmo quando disco repete predecessor' pred --validar ft-pre
+  git -C "$FX" update-index --no-assume-unchanged "$SPEC"
 }
 
 schema_invalido() { # schema_invalido <nome> <tipo>
@@ -215,6 +244,7 @@ schema_invalido() { # schema_invalido <nome> <tipo>
     lista-vazia) corpo='predecessores: []' ;;
     origem) corpo="predecessores:\n  - caminho: $SPEC\n    origem: outra\n    papel: especificacao\n    commit_sha: $FX_SPEC_COMMIT\n    blob_oid: $FX_SPEC_BLOB" ;;
     papel) corpo="predecessores:\n  - caminho: $SPEC\n    origem: superpowers\n    papel: desenho\n    commit_sha: $FX_SPEC_COMMIT\n    blob_oid: $FX_SPEC_BLOB" ;;
+    item-antes-lista) corpo="  - caminho: $SPEC\n    origem: superpowers\n    papel: especificacao\n    commit_sha: $FX_SPEC_COMMIT\n    blob_oid: $FX_SPEC_BLOB\npredecessores:" ;;
     scalar) corpo="predecessores:\n  - caminho: [$SPEC\n    origem: superpowers\n    papel: especificacao\n    commit_sha: $FX_SPEC_COMMIT\n    blob_oid: $FX_SPEC_BLOB" ;;
   esac
   mkdir -p "$(dirname "$MANIFESTO")"
@@ -229,6 +259,15 @@ grupo_schema() {
   schema_invalido 'recusa lista vazia' lista-vazia
   schema_invalido 'recusa origem fora do enum' origem
   schema_invalido 'recusa papel fora do enum' papel
+  schema_invalido 'recusa item antes da lista predecessores' item-antes-lista
+
+  nova_fixture; manifesto_valido "$SPEC" especificacao "$FX_SPEC_COMMIT" "$FX_SPEC_BLOB"
+  sed -i '/predecessores:/a\    origem: superpowers' "$MANIFESTO"
+  caso_falha 'recusa campo de item fora de item aberto' pred --validar ft-pre
+
+  nova_fixture; manifesto_valido "$SPEC" especificacao "$FX_SPEC_COMMIT" "$FX_SPEC_BLOB"
+  sed -i "/criado_em:/a\\  - caminho: $PLAN\n    origem: superpowers\n    papel: plano\n    commit_sha: $FX_PLAN_COMMIT\n    blob_oid: $FX_PLAN_BLOB" "$MANIFESTO"
+  caso_falha 'recusa reabrir itens depois de campo top-level' pred --validar ft-pre
 
   nova_fixture; manifesto_valido "$SPEC" especificacao "$FX_SPEC_COMMIT" "$FX_SPEC_BLOB"
   sed -i "/trabalho_id:/a trabalho_id: ft-pre" "$MANIFESTO"

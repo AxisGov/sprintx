@@ -54,9 +54,10 @@ fi
 echo '== mutantes =='
 
 prepara PREFIXO
-substitui "$CASO/.claude/skills/sprintx/references/01-ingestao.md" \
-  'não faça varredura automática' 'faça varredura automática'
-mata PREFIXO contrato
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '  printf '\''%s\t%s\t%s\t%s\t%s\n'\'' "$caminho" "$origem" "$papel" "$commit" "$blob" >> "$t"' \
+  $'  printf '\''%s\\t%s\\t%s\\t%s\\t%s\\n'\'' "$caminho" "$origem" "$papel" "$commit" "$blob" >> "$t"\n  while IFS= read -r auto; do\n    [ "$auto" = "$caminho" ] && continue\n    case "$auto" in\n      docs/superpowers/specs/*) auto_papel=especificacao ;;\n      docs/superpowers/plans/*) auto_papel=plano ;;\n      *) continue ;;\n    esac\n    auto_commit="$(git -C "$RAIZ" log -1 --format=%H -- "$auto")"\n    auto_meta="$(modo_blob "$auto_commit" "$auto")" || continue\n    auto_blob="${auto_meta#*\t}"\n    printf '\''%s\\t%s\\t%s\\t%s\\t%s\\n'\'' "$auto" superpowers "$auto_papel" "$auto_commit" "$auto_blob" >> "$t"\n  done < <(GIT_LITERAL_PATHSPECS=0 git -C "$RAIZ" ls-files -- '\''docs/superpowers/**'\'')'
+mata PREFIXO registro
 
 prepara GLOB
 substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
@@ -65,8 +66,40 @@ mata GLOB caminhos
 
 prepara DISCO
 substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
-  'b="$(modo_blob HEAD "$caminho")"' 'b="$a"'
-mata DISCO contrato
+  'b="$(modo_blob HEAD "$caminho")"' \
+  'b="$(printf '\''100644\t%s\n'\'' "$(git -C "$RAIZ" hash-object --path="$caminho" -- "$RAIZ/$caminho")")"'
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '[ "$oid_disco" = "$oid_head" ] || falha "$E_CONTRATO" "predecessor modificado: $caminho"' \
+  '[ "$oid_disco" = "$blob" ] || falha "$E_CONTRATO" "predecessor modificado: $caminho"'
+mata DISCO historia
+
+prepara PATHSPEC
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  'export GIT_LITERAL_PATHSPECS=1' ': # mutante PATHSPEC reativa a magia de pathspec'
+mata PATHSPEC caminhos
+
+prepara ASSUME
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '[ "$oid_disco" = "$oid_head" ] || falha "$E_CONTRATO" "predecessor modificado: $caminho"' \
+  ': # mutante ASSUME confia em git diff e ignora os bytes do disco'
+mata ASSUME estado-git
+
+prepara ORFAO
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '[ "$I_OPEN" -eq 1 ] || falha "$E_CONTRATO" "campo de predecessor fora de item: $k"' \
+  ': # mutante ORFAO aceita campo de item fora de item aberto'
+mata ORFAO schema
+
+prepara LISTA
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '[ "$P_LIST_STATE" = lista ] || falha "$E_CONTRATO" '\''item fora da secao predecessores'\''' \
+  ': # mutante LISTA aceita item antes de predecessores'
+mata LISTA schema
+
+prepara REABRE
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '    P_LIST_STATE=depois' '    P_LIST_STATE=lista # mutante REABRE mantem a lista aberta'
+mata REABRE schema
 
 prepara HEADBLOB
 substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
@@ -103,6 +136,9 @@ substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
   'git -C "$RAIZ" diff --quiet -- "$caminho"' 'true'
 substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
   'git -C "$RAIZ" diff --cached --quiet -- "$caminho"' 'true'
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '[ "$oid_disco" = "$oid_head" ] || falha "$E_CONTRATO" "predecessor modificado: $caminho"' \
+  ': # mutante SUJO aceita bytes do disco divergentes de HEAD'
 mata SUJO estado-git
 
 prepara SHAINPUT
