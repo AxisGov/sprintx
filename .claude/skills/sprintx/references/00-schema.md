@@ -786,9 +786,12 @@ trabalho_id: exportacao-csv-relatorios
 max_reprovacoes_f5: 3
 max_replanejamentos_f6: 1
 orcamento_declarado_por: buildx
+autorizacao_tardia_f6_por: usuario
+autorizacao_tardia_f6_em: 2026-10-12
+autorizacao_tardia_f6_origem: orcamento_f6_nao_declarado
 estado: replanejar
 reprovacoes: 2
-replanejamentos_f6: 0
+replanejamentos_f6: 1
 bloqueios_replanejamento_f6: []
 tasks_congeladas: []
 assinatura_congeladas: null
@@ -913,6 +916,17 @@ não é o `replanejar` da F5 e não mexe no orçamento dela.
   `sem_bloqueio_aberto`, `sem_defeito_de_plano`, `fronteira_insegura`, `parcial_divergente`,
   `parcial_perdido`, registro ou schema inválido e task concluída alterada continuam sem gravar
   nada, com o código de sempre.
+- **Autorização tardia da F6 (DS-175).** `replanejamento_execucao_recusado` com motivo `orcamento_f6_nao_declarado` é o único terminal recuperável por
+  `planejamento.sh autorizar-replanejamento-execucao <slug> <max_replanejamentos_f6>
+  <autorizado_por>`. As três chaves tardias existem juntas ou nenhuma existe:
+  `autorizacao_tardia_f6_por`, `autorizacao_tardia_f6_em` e
+  `autorizacao_tardia_f6_origem`. A origem só pode ser `orcamento_f6_nao_declarado`; a data segue
+  o formato das demais datas; as três são append-only, nunca coexistem com
+  `recusa_replanejamento_f6` e só são válidas com eixo F6 presente, teto positivo e
+  `replanejamentos_f6 >= 1`. A autoridade canônica tardia é `autorizacao_tardia_f6_por`; nunca `orcamento_declarado_por`, que o comando preserva inclusive quando é `null`. Leitores sem essas
+  chaves continuam válidos sem migração. A autorização abre atomicamente a rodada 1, pelas mesmas
+  provas de bloqueios, task, fronteira, congelamento e parciais; `classes_mistas`, legados,
+  orçamento consumido/esgotado e qualquer outro motivo continuam terminais.
 - No `historico`, uma rodada depois de um `sim` só existe quando um replanejamento da execução a
   abriu: no máximo uma sequência assim por unidade de `replanejamentos_f6`.
 - **Legado.** `00-PLANEJAMENTO.md` gravado antes deste eixo não tem as cinco chaves: continua

@@ -1964,6 +1964,141 @@ recusa_replanejamento_f6: classes_mistas"
   git -C "$d" commit -q -m recusado -- docs/sprintx/features/menu/00-PLANEJAMENTO.md || return 1
   [ "$(kv "$(kpl "$s" "$d" fase menu)" fase)" = PARAR ]
 }
+# Contrato da autorizacao tardia do orcamento F6: o trio de auditoria e atomico,
+# preservado pelos escritores e suficiente para autorizar o eixo F6 sem forjar o dono compartilhado.
+k_aut_ativa() {
+  local s="$1" d="$2"
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  kpl "$s" "$d" replanejar-execucao menu >/dev/null || return 1
+  [ "$(fmv "$(kf "$d")/00-PLANEJAMENTO.md" estado)" = replanejar_execucao ]
+}
+k_aut_campos() {
+  local a="$1" por="${2:-}" em="${3:-}" origem="${4:-}"
+  K_AUT_POR="$por" K_AUT_EM="$em" K_AUT_ORIGEM="$origem" awk '
+    /^orcamento_declarado_por:/ {
+      print
+      if (length(ENVIRON["K_AUT_POR"])) print "autorizacao_tardia_f6_por: " ENVIRON["K_AUT_POR"]
+      if (length(ENVIRON["K_AUT_EM"])) print "autorizacao_tardia_f6_em: " ENVIRON["K_AUT_EM"]
+      if (length(ENVIRON["K_AUT_ORIGEM"])) print "autorizacao_tardia_f6_origem: " ENVIRON["K_AUT_ORIGEM"]
+      next
+    }
+    { print }
+  ' "$a" > "$K/aut.tmp" && mv "$K/aut.tmp" "$a"
+}
+k_aut_trio() {
+  k_aut_campos "$1" "${2:-usuario}" "${3:-2026-10-12}" "${4:-orcamento_f6_nao_declarado}"
+}
+k_aut_all_or_none() {
+  local s="$1" d a rc
+  d="$(kcopia "$FXP")"; k_aut_ativa "$s" "$d" || return 1; a="$(kf "$d")/00-PLANEJAMENTO.md"
+  k_aut_campos "$a" usuario '' '' || return 1
+  kpl "$s" "$d" fase menu >/dev/null; rc=$?; [ "$rc" -eq 4 ] || return 1
+  d="$(kcopia "$FXP")"; k_aut_ativa "$s" "$d" || return 1; a="$(kf "$d")/00-PLANEJAMENTO.md"
+  k_aut_campos "$a" usuario 2026-10-12 '' || return 1
+  kpl "$s" "$d" fase menu >/dev/null; rc=$?; [ "$rc" -eq 4 ]
+}
+k_aut_preserva_dono() {
+  local s="$1" d="$2" a; a="$(kf "$d")/00-PLANEJAMENTO.md"
+  k_aut_ativa "$s" "$d" || return 1; k_aut_trio "$a" usuario || return 1
+  git -C "$d" add -- "$a" && git -C "$d" commit -q -m 'audit late f6' -- "$a" || return 1
+  kpl "$s" "$d" avanca menu f3 >/dev/null || return 1
+  [ "$(fmv "$a" orcamento_declarado_por)" = buildx ] \
+    && [ "$(fmv "$a" autorizacao_tardia_f6_por)" = usuario ] \
+    && [ "$(fmv "$a" autorizacao_tardia_f6_em)" = 2026-10-12 ] \
+    && [ "$(fmv "$a" autorizacao_tardia_f6_origem)" = orcamento_f6_nao_declarado ]
+}
+k_aut_dono_tardio() {
+  local s="$1" d="$2" a rc; a="$(kf "$d")/00-PLANEJAMENTO.md"
+  k_aut_ativa "$s" "$d" || return 1
+  sed -e 's/^max_reprovacoes_f5: [0-9][0-9]*$/max_reprovacoes_f5: null/' -e 's/^orcamento_declarado_por: buildx$/orcamento_declarado_por: null/' "$a" > "$K/aut.tmp" && mv "$K/aut.tmp" "$a"
+  k_aut_trio "$a" usuario || return 1
+  git -C "$d" add -- "$a" && git -C "$d" commit -q -m 'late f6 owner' -- "$a" || return 1
+  kpl "$s" "$d" fase menu >/dev/null || return 1
+  kpl "$s" "$d" avanca menu f3 >/dev/null || return 1
+  [ "$(fmv "$a" orcamento_declarado_por)" = null ] \
+    && [ "$(fmv "$a" autorizacao_tardia_f6_por)" = usuario ] \
+    && [ "$(fmv "$a" autorizacao_tardia_f6_origem)" = orcamento_f6_nao_declarado ] || return 1
+  d="$(kcopia "$FXP")"; k_aut_ativa "$s" "$d" || return 1; a="$(kf "$d")/00-PLANEJAMENTO.md"
+  sed -e 's/^max_reprovacoes_f5: [0-9][0-9]*$/max_reprovacoes_f5: null/' -e 's/^orcamento_declarado_por: buildx$/orcamento_declarado_por: null/' "$a" > "$K/aut.tmp" && mv "$K/aut.tmp" "$a"
+  kpl "$s" "$d" fase menu >/dev/null; rc=$?
+  [ "$rc" -eq 4 ]
+}
+k_aut_valida_origem_data_recusa() {
+  local s="$1" d a rc caso
+  for caso in origem data recusa; do
+    d="$(kcopia "$FXP")"; k_aut_ativa "$s" "$d" || return 1; a="$(kf "$d")/00-PLANEJAMENTO.md"
+    case "$caso" in
+      origem) k_aut_trio "$a" usuario 2026-10-12 outra_origem ;;
+      data) k_aut_trio "$a" usuario ontem orcamento_f6_nao_declarado ;;
+      recusa)
+        k_aut_trio "$a" usuario || return 1
+        sed '/^estado: replanejar_execucao$/a recusa_replanejamento_f6: classes_mistas' "$a" > "$K/aut.tmp" && mv "$K/aut.tmp" "$a"
+        ;;
+    esac
+    kpl "$s" "$d" fase menu >/dev/null; rc=$?; [ "$rc" -eq 4 ] || return 1
+  done
+}
+k_aut_legado_valido() {
+  local s="$1" d="$2" a out; a="$(kf "$d")/00-PLANEJAMENTO.md"
+  out="$(kpl "$s" "$d" fase menu)" || return 1
+  [ "$(kv "$out" fase)" = F6 ] && ! fm_tem_k "$a" autorizacao_tardia_f6_por \
+    && ! fm_tem_k "$a" autorizacao_tardia_f6_em && ! fm_tem_k "$a" autorizacao_tardia_f6_origem
+}
+# L0. Caracterizacao do abridor compartilhado: congela o comportamento publico e
+# a persistencia antes de extrair a mutacao comum de `replanejar-execucao`.
+l_abridor_compartilhado() {
+  local s="$1" d="$2" f a ev out antes_i antes_c depois_i depois_c soma head_soma paths congeladas
+  f="$(kf "$d")"; a="$f/00-PLANEJAMENTO.md"; ev="$d/docs/eventos/menu.jsonl"
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  antes_i="$(grep -c '"evento":"replanejamento_execucao_iniciado"' "$ev" 2>/dev/null || true)"
+  antes_c="$(grep -c '"evento":"checkpoint_planejamento"' "$ev" 2>/dev/null || true)"
+  out="$(kpl "$s" "$d" replanejar-execucao menu)" || return 1
+  depois_i="$(grep -c '"evento":"replanejamento_execucao_iniciado"' "$ev" 2>/dev/null || true)"
+  depois_c="$(grep -c '"evento":"checkpoint_planejamento"' "$ev" 2>/dev/null || true)"
+  soma="$(cksum < "$a")"
+  head_soma="$(git -C "$d" show HEAD:docs/sprintx/features/menu/00-PLANEJAMENTO.md | cksum)"
+  paths="$(git -C "$d" show --pretty= --name-only HEAD | sed '/^$/d')"
+  congeladas='[T-01.01, T-01.02, T-01.03, T-01.04, T-02.01, T-02.02, T-02.03, T-02.04, T-03.01, T-03.02, T-03.03, T-03.04, T-04.01, T-04.02]'
+  [ "$soma" = "$head_soma" ] && [ $((depois_i - antes_i)) -eq 1 ] && [ $((depois_c - antes_c)) -eq 1 ] \
+    && [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" -eq 17 ] \
+    && [ "$(kv "$out" replanejamento)" = iniciado ] && [ "$(kv "$out" estado)" = replanejar_execucao ] \
+    && [ "$(kv "$out" reprovacoes)" = 2 ] && [ "$(kv "$out" max_reprovacoes_f5)" = 3 ] \
+    && [ "$(kv "$out" proxima)" = F3 ] && [ "$(kv "$out" replanejamentos_f6)" = 1 ] \
+    && [ "$(kv "$out" max_replanejamentos_f6)" = 1 ] && [ "$(kv "$out" replanejamento_execucao)" = ativo ] \
+    && [ "$(kv "$out" bloqueios_replanejamento_f6)" = B-01 ] \
+    && [ "$(fmv "$a" tasks_congeladas)" = "$congeladas" ] \
+    && [ "$(kv "$out" parciais_replanejamento_f6)" = '' ] \
+    && [ "$(fmv "$a" replanejamentos_f6)" = 1 ] && [ "$(fmv "$a" bloqueios_replanejamento_f6)" = '[B-01]' ] \
+    && [ "$(fmv "$a" parciais_replanejamento_f6)" = '[]' ] && [ "$(fmv "$a" assinatura_congeladas)" != null ] \
+    && [ "$(trailer "$d" Fase)" = f6 ] && [ "$(trailer "$d" Rodada)" = 1 ] \
+    && [ "$(trailer "$d" Estado)" = replanejar_execucao ] \
+    && grep -q '"evento":"replanejamento_execucao_iniciado".*"detalhe":"replanejamento da execucao 1 de 1 aberto por \[B-01\]' "$ev" \
+    && [ "$paths" = "docs/sprintx/features/menu/00-BLOQUEIOS.md
+docs/sprintx/features/menu/00-PLANEJAMENTO.md
+docs/sprintx/features/menu/sprint-04/tasks.md" ]
+}
+
+l_abridor_parametros() {
+  local s="$1" d="$2" r m f a ev out
+  r="$K/l0-parametros"; m="$r/scripts/planejamento.sh"
+  mkdir -p "$r/scripts/lib" "$r/assets"
+  cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$r/assets/"
+  cp "$BL" "$SK/scripts/caminho-git.sh" "$r/scripts/"
+  cp "$SK/scripts/lib/trava-autorizacao-f6.sh" "$r/scripts/lib/"
+  muta_lit "$s" "$m" '  abre_rodada_f6 "$defeitos" "$P_MAX6"' \
+    '  abre_rodada_f6 "$defeitos" 9 usuario 2026-10-12 orcamento_f6_nao_declarado' || return 1
+  chmod +x "$m"
+  f="$(kf "$d")"; a="$f/00-PLANEJAMENTO.md"; ev="$d/docs/eventos/menu.jsonl"
+  kbl "$m" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  out="$(kpl "$m" "$d" replanejar-execucao menu)" || return 1
+  [ "$(fmv "$a" max_replanejamentos_f6)" = 9 ] \
+    && [ "$(fmv "$a" autorizacao_tardia_f6_por)" = usuario ] \
+    && [ "$(fmv "$a" autorizacao_tardia_f6_em)" = 2026-10-12 ] \
+    && [ "$(fmv "$a" autorizacao_tardia_f6_origem)" = orcamento_f6_nao_declarado ] \
+    && [ "$(fmv "$a" orcamento_declarado_por)" = buildx ] \
+    && [ "$(kv "$out" max_replanejamentos_f6)" = 9 ] \
+    && grep -q '"evento":"replanejamento_execucao_iniciado".*"detalhe":"replanejamento da execucao 1 de 9 aberto por \[B-01\]' "$ev"
+}
 CASOS_K="k_inicia:FXP k_retomada:FX2 k_resolver_antes:FXP k_aprovacao:FXP k_segundo_defeito:FXP k_lacuna:FXP k_prerequisito:FXP
   k_legado_bloqueio:FXP k_mistura:FXP k_varios:FXP k_legado_orcamento:FXL k_sem_orcamento:FXN k_fronteira:FXP
   k_f5_nao_continua:FX5 k_f5_nao_esgota:FXP k_concluidas_protegidas:FXP k_task_nao_bloqueada:FXP
@@ -1984,6 +2119,469 @@ for par in k_inicia:k1-piloto-entra-em-replanejar-execucao k_retomada:k2-retomad
   k_task_nao_bloqueada:k17-task-do-bloqueio-precisa-estar-bloqueada; do
   roda_k "${par%%:*}" "$PL"; afirma "${par#*:}" $? "${par%%:*}"
 done
+for par in k_aut_all_or_none:k23-autorizacao-tardia-trio-all-or-none \
+  k_aut_preserva_dono:k24-autorizacao-tardia-preserva-dono-compartilhado \
+  k_aut_dono_tardio:k25-autorizacao-tardia-null-compartilhado-valido \
+  k_aut_valida_origem_data_recusa:k26-autorizacao-tardia-origem-data-e-recusa \
+  k_aut_legado_valido:k27-planejamento-antigo-continua-valido; do
+  d="$(kcopia "$FXP")"
+  "${par%%:*}" "$PL" "$d"; afirma "${par#*:}" $? "${par%%:*}"
+done
+d="$(kcopia "$FXP")"; l_abridor_compartilhado "$PL" "$d"
+afirma "l0-abridor-compartilhado-preserva-replanejar-execucao" $? "stdout, eventos, checkpoint, eixo F6, checksum e paths"
+d="$(kcopia "$FXP")"; l_abridor_parametros "$PL" "$d"
+afirma "l0-abridor-parametros-persistem-teto-e-auditoria" $? "teto, trio tardio, dono compartilhado e evento"
+
+# Autorizacao tardia do orcamento F6: a fixture chega ao terminal pelo caminho publico real,
+# nunca por edicao direta do estado. A Task 4 cobre somente a primeira aplicacao; retomada e
+# checkpoint pendente pertencem a Task 5.
+l_aut_terminal() { # l_aut_terminal <script> <repo>
+  local s="$1" d="$2" out rc
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  out="$(kpl "$s" "$d" replanejar-execucao menu)"; rc=$?
+  [ "$rc" -eq 5 ] && [ "$(kv "$out" estado)" = replanejamento_execucao_recusado ] \
+    && [ "$(kv "$out" motivo)" = orcamento_f6_nao_declarado ] \
+    && [ "$(fmv "$(kf "$d")/00-PLANEJAMENTO.md" max_replanejamentos_f6)" = null ]
+}
+l_aut_aplica() { kpl "$1" "$2" autorizar-replanejamento-execucao menu "${3:-2}" "${4:-usuario}"; }
+
+l_aut_limpa() {
+  local s="$1" d="$2" f a ev out h n; f="$(kf "$d")"; a="$f/00-PLANEJAMENTO.md"; ev="$d/docs/eventos/menu.jsonl"
+  l_aut_terminal "$s" "$d" || return 1
+  h="$(git -C "$d" rev-parse HEAD)"; n="$(git -C "$d" rev-list --count "$h..HEAD")"
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)" || return 1
+  [ "$(kv "$out" autorizacao_f6)" = aplicada ] && [ "$(kv "$out" estado)" = replanejar_execucao ] \
+    && [ "$(kv "$out" replanejamentos_f6)" = 1 ] && [ "$(kv "$out" max_replanejamentos_f6)" = 2 ] \
+    && [ "$(kv "$out" autorizado_por)" = usuario ] && [ "$(kv "$out" proxima)" = F3 ] \
+    && [ "$(kv "$out" persistencia)" = duravel ] \
+    && [ "$(fmv "$a" autorizacao_tardia_f6_por)" = usuario ] \
+    && [ "$(fmv "$a" autorizacao_tardia_f6_em)" = "$(date +%Y-%m-%d)" ] \
+    && [ "$(fmv "$a" autorizacao_tardia_f6_origem)" = orcamento_f6_nao_declarado ] \
+    && [ "$(fmv "$a" orcamento_declarado_por)" = buildx ] && ! fm_tem_k "$a" recusa_replanejamento_f6 \
+    && [ "$(git -C "$d" rev-list --count "$h..HEAD")" -eq $((n + 1)) ] \
+    && [ "$(grep -c '"evento":"orcamento_f6_autorizado"' "$ev")" -eq 1 ] \
+    && [ "$(grep -c '"evento":"replanejamento_execucao_iniciado"' "$ev")" -eq 1 ] \
+    && [ "$(trailer "$d" Fase)" = f6 ] && [ "$(trailer "$d" Rodada)" = 1 ] \
+    && [ "$(trailer "$d" Estado)" = replanejar_execucao ]
+}
+
+l_aut_parciais() {
+  local s="$1" d="$2" f a out p; f="$(kf "$d")"; a="$f/00-PLANEJAMENTO.md"
+  sed 's|      altera: \[src/ui/cabecalho-topo.tsx\]|      altera: [src/partial/mod.ts, src/partial/del.ts]|' "$f/sprint-04/tasks.md" > "$K/ap.tmp" && mv "$K/ap.tmp" "$f/sprint-04/tasks.md"
+  mkdir -p "$d/src/partial"; printf 'antes\n' > "$d/src/partial/mod.ts"; printf 'remover\n' > "$d/src/partial/del.ts"
+  git -C "$d" add "$f/sprint-04/tasks.md" src/partial/mod.ts src/partial/del.ts \
+    && git -C "$d" commit -q -m 'fixture: parciais rastreados' || return 1
+  mkdir -p "$d/src/menu"; printf 'novo\n' > "$d/src/menu/perfil.ts"; printf 'depois\n' > "$d/src/partial/mod.ts"; rm "$d/src/partial/del.ts"
+  l_aut_terminal "$s" "$d" || return 1
+  out="$(l_aut_aplica "$s" "$d")" || return 1
+  p="$(tr -d '\r' < "$a" | awk '
+    /^parciais_replanejamento_f6:/ { em=1; next }
+    em && /^[^ ]/ { exit }
+    em && /^  - path:/ { path=$3; gsub(/^"|"$/, "", path) }
+    em && /^    task:/ { task=$2 }
+    em && /^    estado:/ { estado=$2 }
+    em && /^    hash:/ { print path "\t" task "\t" estado "\t" $2 }
+  ')"
+  [ "$(kv "$out" autorizacao_f6)" = aplicada ] \
+    && printf '%s\n' "$p" | grep -q '^src/menu/perfil.ts[[:space:]]T-04.03[[:space:]]novo[[:space:]]' \
+    && printf '%s\n' "$p" | grep -q '^src/partial/mod.ts[[:space:]]T-04.03[[:space:]]modificado[[:space:]]' \
+    && printf '%s\n' "$p" | grep -q '^src/partial/del.ts[[:space:]]T-04.03[[:space:]]removido[[:space:]]' \
+    && [ "$(cat "$d/src/menu/perfil.ts")" = novo ] && [ "$(cat "$d/src/partial/mod.ts")" = depois ] && [ ! -e "$d/src/partial/del.ts" ]
+}
+
+l_aut_dono_e_clone() {
+  local s="$1" d="$2" f a c out; f="$(kf "$d")"; a="$f/00-PLANEJAMENTO.md"
+  sed -e 's/^max_reprovacoes_f5: [0-9][0-9]*$/max_reprovacoes_f5: null/' -e 's/^orcamento_declarado_por: buildx$/orcamento_declarado_por: null/' "$a" > "$K/ad.tmp" && mv "$K/ad.tmp" "$a"
+  git -C "$d" add "$a" && git -C "$d" commit -q -m 'fixture: dono compartilhado nulo' || return 1
+  l_aut_terminal "$s" "$d" && l_aut_aplica "$s" "$d" 3 humano >/dev/null || return 1
+  [ "$(fmv "$a" orcamento_declarado_por)" = null ] && [ "$(fmv "$a" autorizacao_tardia_f6_por)" = humano ] || return 1
+  c="$(mktemp -d "$K/aut-clone.XXXXXX")"; rm -rf "$c"; git clone -q -b feature/menu "$d" "$c" || return 1
+  out="$(kpl "$s" "$c" fase menu)" || return 1
+  [ "$(kv "$out" estado)" = replanejar_execucao ] && [ "$(kv "$out" autorizacao_tardia_f6_por)" = humano ] \
+    && [ "$(kv "$out" max_replanejamentos_f6)" = 3 ] && [ "$(kv "$out" persistencia)" = duravel ]
+}
+
+l_aut_argumentos() {
+  local s="$1" d="$2" a ck h rc x por
+  l_aut_terminal "$s" "$d" || return 1; a="$(kf "$d")/00-PLANEJAMENTO.md"; ck="$(cksum < "$a")"; h="$(git -C "$d" rev-parse HEAD)"
+  for x in 0 01 -1 x null; do kpl "$s" "$d" autorizar-replanejamento-execucao menu "$x" usuario >/dev/null; rc=$?; [ "$rc" -eq 4 ] || { printf 'arg max=%s rc=%s\n' "$x" "$rc" >&2; return 1; }; done
+  for por in null Usuario 'humano!' '-x'; do kpl "$s" "$d" autorizar-replanejamento-execucao menu 2 "$por" >/dev/null; rc=$?; [ "$rc" -eq 4 ] || { printf 'arg por=%s rc=%s\n' "$por" "$rc" >&2; return 1; }; done
+  kpl "$s" "$d" autorizar-replanejamento-execucao menu 2 >/dev/null; rc=$?; [ "$rc" -eq 64 ] || { printf 'arg aridade rc=%s\n' "$rc" >&2; return 1; }
+  [ "$(cksum < "$a")" = "$ck" ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ]
+}
+
+l_aut_bloqueios() {
+  local s="$1" d="$2" f a ck h rc caso
+  for caso in sem classe mista invalido task; do
+    d="$(kcopia "$FXN")"; f="$(kf "$d")"; a="$f/00-PLANEJAMENTO.md"; l_aut_terminal "$s" "$d" || return 1
+    case "$caso" in
+      sem) sed 's/^    resolvido_em: null$/    resolvido_em: 2026-10-12/' "$f/00-BLOQUEIOS.md" > "$K/ab.tmp" && mv "$K/ab.tmp" "$f/00-BLOQUEIOS.md" ;;
+      classe) sed 's/^    classe: defeito_de_plano$/    classe: prerequisito_ausente/' "$f/00-BLOQUEIOS.md" > "$K/ab.tmp" && mv "$K/ab.tmp" "$f/00-BLOQUEIOS.md" ;;
+      mista) kbl "$s" "$d" registrar menu null prerequisito_ausente 'servico' 'religar' >/dev/null || return 1 ;;
+      invalido) sed 's/^    classe: defeito_de_plano$/    classe: defeito/' "$f/00-BLOQUEIOS.md" > "$K/ab.tmp" && mv "$K/ab.tmp" "$f/00-BLOQUEIOS.md" ;;
+      task) sed '/^  - id: T-04.03$/,/^    suite:/s/^    status: bloqueada$/    status: pendente/' "$f/sprint-04/tasks.md" > "$K/at.tmp" && mv "$K/at.tmp" "$f/sprint-04/tasks.md" ;;
+    esac
+    ck="$(cksum < "$a")"; h="$(git -C "$d" rev-parse HEAD)"; kpl "$s" "$d" autorizar-replanejamento-execucao menu 2 usuario >/dev/null; rc=$?
+    [ "$rc" -eq 4 ] && [ "$(cksum < "$a")" = "$ck" ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] \
+      || { printf 'bloqueio caso=%s rc=%s estado=%s\n' "$caso" "$rc" "$(fmv "$a" estado 2>/dev/null)" >&2; return 1; }
+  done
+}
+
+l_aut_fronteira() {
+  local s="$1" d="$2" f a ck h rc caso
+  for caso in nao_declarado staged segredo env task_irma compartilhado concluida symlink; do
+    d="$(kcopia "$FXN")"; f="$(kf "$d")"; a="$f/00-PLANEJAMENTO.md"; l_aut_terminal "$s" "$d" || return 1
+    case "$caso" in
+      nao_declarado) printf 'x\n' > "$d/fora.txt" ;;
+      staged) mkdir -p "$d/src/menu"; printf 'x\n' > "$d/src/menu/perfil.ts"; git -C "$d" add src/menu/perfil.ts ;;
+      segredo) mkdir -p "$d/src/menu"; printf 'sk-1234567890123456789012345\n' > "$d/src/menu/perfil.ts" ;;
+      env)
+        printf 'NAO_E_SEGREDO=1\n' > "$d/.env"
+        sed '/^  - id: T-04.03$/,/^    suite:/s|^      altera: \[src/ui/cabecalho-topo.tsx\]$|      altera: [src/ui/cabecalho-topo.tsx, .env]|' \
+          "$f/sprint-04/tasks.md" > "$K/af.tmp" && mv "$K/af.tmp" "$f/sprint-04/tasks.md"
+        ;;
+      task_irma) mkdir -p "$d/src/menu"; printf 'x\n' > "$d/src/menu/rotas.ts" ;;
+      compartilhado)
+        mkdir -p "$d/src/menu"; printf 'x\n' > "$d/src/menu/perfil.ts"
+        sed '/^  - id: T-04.04$/,/^    suite:/s/^      altera: \[\]$/      altera: [src\/menu\/perfil.ts]/' "$f/sprint-04/tasks.md" > "$K/af.tmp" && mv "$K/af.tmp" "$f/sprint-04/tasks.md" ;;
+      concluida)
+        mkdir -p "$d/src/ui"; printf 'x\n' > "$d/src/ui/cabecalho-topo.tsx" ;;
+      symlink)
+        mkdir -p "$d/src/menu"; ln -s ../alvo-inexistente "$d/src/menu/perfil.ts" ;;
+    esac
+    ck="$(cksum < "$a")"; h="$(git -C "$d" rev-parse HEAD)"; kpl "$s" "$d" autorizar-replanejamento-execucao menu 2 usuario >/dev/null; rc=$?
+    [ "$rc" -eq 2 ] && [ "$(cksum < "$a")" = "$ck" ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] || return 1
+  done
+}
+
+l_aut_concorrente() {
+  local s="$1" d="$2" ev hook lock pid rc2=0; ev="$d/docs/eventos/menu.jsonl"
+  l_aut_terminal "$s" "$d" || return 1
+  hook="$(git -C "$d" rev-parse --git-path hooks/pre-commit)"; case "$hook" in /*) ;; *) hook="$d/$hook" ;; esac
+  mkdir -p "${hook%/*}"; printf '#!/usr/bin/env bash\nsleep 2\n' > "$hook"; chmod +x "$hook"
+  lock="$(git -C "$d" rev-parse --git-path sprintx/travas/autorizacao-f6-menu.lock)"; case "$lock" in /*) ;; *) lock="$d/$lock" ;; esac
+  (l_aut_aplica "$s" "$d" 2 usuario > "$K/aut-c1.out" 2>&1) & pid=$!
+  while [ ! -d "$lock" ]; do kill -0 "$pid" 2>/dev/null || { wait "$pid"; return 1; }; sleep 0.05; done
+  l_aut_aplica "$s" "$d" 2 usuario > "$K/aut-c2.out" 2>&1; rc2=$?
+  wait "$pid" || return 1
+  [ "$rc2" -eq 2 ] && [ "$(kv "$(cat "$K/aut-c1.out")" autorizacao_f6)" = aplicada ] \
+    && [ "$(grep -c '"evento":"orcamento_f6_autorizado"' "$ev")" -eq 1 ] \
+    && [ "$(fmv "$(kf "$d")/00-PLANEJAMENTO.md" replanejamentos_f6)" = 1 ] && [ ! -e "$lock" ]
+}
+
+l_aut_terminais() {
+  local s="$1" d rc caso a ck h
+  for caso in classes legado planejamento esgotado f5_esgotado schema teto_null rodada_zero; do
+    case "$caso" in
+      classes) d="$(kcopia "$FXP")"; k_mistura "$s" "$d" || return 1 ;;
+      legado) d="$(kcopia "$FXL")"; k_legado_orcamento "$s" "$d" || return 1 ;;
+      planejamento) d="$(kcopia "$FXS")"; k_planejamento_legado "$s" "$d" || return 1 ;;
+      esgotado) d="$(kcopia "$FXP")"; k_segundo_defeito "$s" "$d" || return 1 ;;
+      f5_esgotado) d="$(kcopia "$FXP")"; k_f5_nao_esgota "$s" "$d" || return 1 ;;
+      schema)
+        d="$(kcopia "$FXN")"; l_aut_terminal "$s" "$d" || return 1; a="$(kf "$d")/00-PLANEJAMENTO.md"
+        sed 's/^recusa_replanejamento_f6: orcamento_f6_nao_declarado$/recusa_replanejamento_f6: desconhecida/' "$a" > "$K/as.tmp" && mv "$K/as.tmp" "$a" ;;
+      teto_null)
+        d="$(kcopia "$FXN")"; a="$(kf "$d")/00-PLANEJAMENTO.md"; k_aut_trio "$a" usuario || return 1 ;;
+      rodada_zero)
+        d="$(kcopia "$FX2")"; a="$(kf "$d")/00-PLANEJAMENTO.md"; k_aut_trio "$a" usuario || return 1 ;;
+    esac
+    a="$(kf "$d")/00-PLANEJAMENTO.md"; ck="$(cksum < "$a")"; h="$(git -C "$d" rev-parse HEAD)"
+    kpl "$s" "$d" autorizar-replanejamento-execucao menu 2 usuario >/dev/null; rc=$?
+    case "$caso" in schema|teto_null|rodada_zero) [ "$rc" -eq 4 ] || return 1 ;; *) [ "$rc" -eq 5 ] || return 1 ;; esac
+    [ "$(cksum < "$a")" = "$ck" ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] || return 1
+  done
+}
+
+l_aut_persistencia_disco() {
+  local s="$1" d="$2" a ck h out out2 rc
+  l_aut_terminal "$s" "$d" || return 1
+  a="$(kf "$d")/00-PLANEJAMENTO.md"; ck="$(cksum < "$a")"; h="$(git -C "$d" rev-parse HEAD)"
+  git -C "$d" checkout -q -b outra || return 1
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)"; rc=$?
+  [ "$rc" -eq 5 ] && [ "$(kv "$out" autorizacao_f6)" = recusada ] \
+    && [ "$(kv "$out" motivo)" = persistencia_disco ] && [ "$(kv "$out" proxima)" = PARAR ] \
+    && [ "$(kv "$out" persistencia)" = disco ] || return 1
+  kpl "$s" "$d" checkpoint menu >/dev/null || return 1
+  out2="$(l_aut_aplica "$s" "$d" 2 usuario)"; rc=$?
+  [ "$rc" -eq 5 ] && [ "$(kv "$out2" motivo)" = persistencia_disco ] \
+    && [ "$(kv "$out2" proxima)" = PARAR ] && [ "$(kv "$out2" persistencia)" = disco ] \
+    && [ "$(cksum < "$a")" = "$ck" ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ]
+}
+
+l_aut_sem_planejamento_e_sem_marco() {
+  local s="$1" d out rc
+  d="$(mktemp -d "$K/aut-sem-plano.XXXXXX")"
+  nova_feature "$d" menu
+  out="$(kpl "$s" "$d" autorizar-replanejamento-execucao menu 2 usuario)"; rc=$?
+  [ "$rc" -eq 5 ] && [ "$(kv "$out" motivo)" = persistencia_disco ] \
+    && ! printf '%s\n' "$out" | grep -q 'unbound variable' || return 1
+
+  d="$(mktemp -d "$K/aut-sem-marco.XXXXXX")"
+  nova_feature "$d" menu
+  kpl "$s" "$d" criar menu 3 buildx null >/dev/null || return 1
+  out="$(kpl "$s" "$d" autorizar-replanejamento-execucao menu 2 usuario)"; rc=$?
+  [ "$rc" -eq 5 ] && [ "$(kv "$out" motivo)" = persistencia_sem_marco ] \
+    && ! printf '%s\n' "$out" | grep -q 'unbound variable'
+}
+
+l_aut_trava_ambiente() {
+  local s="$1" d out rc
+  d="$(mktemp -d "$K/aut-sem-git.XXXXXX")"
+  out="$(kpl "$s" "$d" autorizar-replanejamento-execucao menu 2 usuario)"; rc=$?
+  [ "$rc" -eq 5 ] && [ "$(kv "$out" motivo)" = trava_indisponivel ] \
+    && ! printf '%s\n' "$out" | grep -q 'trava existente'
+}
+
+l_aut_trava() {
+  local s="$1" d="$2" p rc; l_aut_terminal "$s" "$d" || return 1
+  p="$(. "$SK/scripts/lib/trava-autorizacao-f6.sh" || exit 1; adquire_trava_autorizacao_f6 "$d" menu || exit 1; printf '%s' "$TRAVA_AUT6_DIR"; libera_trava_autorizacao_f6)" || return 1
+  mkdir -p "$p"
+  kpl "$s" "$d" autorizar-replanejamento-execucao menu 2 usuario >/dev/null; rc=$?
+  [ "$rc" -eq 2 ] && [ -d "$p" ]; rc=$?; rmdir "$p"; return "$rc"
+}
+
+l_aut_terminal_incorreto() {
+  local s="$1" d="$2" a ck h rc
+  a="$(kf "$d")/00-PLANEJAMENTO.md"; ck="$(cksum < "$a")"; h="$(git -C "$d" rev-parse HEAD)"
+  kpl "$s" "$d" autorizar-replanejamento-execucao menu 2 usuario >/dev/null; rc=$?
+  [ "$rc" -eq 5 ] && [ "$(cksum < "$a")" = "$ck" ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ]
+}
+
+# Task 5 — uma queda no pre-commit deixa a autorizacao gravada no disco, mas o
+# HEAD ainda no terminal. A retomada deve reconhecer exatamente esse estado,
+# sem repetir evento, contador ou escrita.
+l5_deixa_checkpoint_pendente() { # <script> <repo>
+  local s="$1" d="$2" hook out rc
+  l_aut_terminal "$s" "$d" || return 1
+  hook="$(git -C "$d" rev-parse --git-path hooks/pre-commit)"; case "$hook" in /*) ;; *) hook="$d/$hook" ;; esac
+  mkdir -p "${hook%/*}"
+  printf '#!/usr/bin/env bash\nmarcador="%s/task5-precommit-ja-falhou"\nif [ ! -e "$marcador" ]; then : > "$marcador"; exit 1; fi\nexit 0\n' "$(git -C "$d" rev-parse --git-dir)" > "$hook"
+  chmod +x "$hook"
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)"; rc=$?
+  [ "$rc" -eq 3 ] && [ "$(fmv "$(kf "$d")/00-PLANEJAMENTO.md" estado)" = replanejar_execucao ] \
+    && [ "$(fmv "$(kf "$d")/00-PLANEJAMENTO.md" autorizacao_tardia_f6_por)" = usuario ] \
+    && [ "$(fmv "$(kf "$d")/00-PLANEJAMENTO.md" replanejamentos_f6)" = 1 ]
+}
+
+l5_checkpoint_e_retomada() {
+  local s="$1" d="$2" a ev h ck evck out rc
+  a="$(kf "$d")/00-PLANEJAMENTO.md"; ev="$d/docs/eventos/menu.jsonl"
+  l5_deixa_checkpoint_pendente "$s" "$d" || return 1
+  h="$(git -C "$d" rev-parse HEAD)"; ck="$(cksum < "$a")"; evck="$(cksum < "$ev")"
+
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)"; rc=$?
+  [ "$rc" -eq 3 ] && [ "$(kv "$out" autorizacao_f6)" = checkpoint_pendente ] \
+    && [ "$(kv "$out" proxima)" = CHECKPOINT ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] \
+    && [ "$(cksum < "$a")" = "$ck" ] && [ "$(cksum < "$ev")" = "$evck" ] || return 1
+
+  l_aut_aplica "$s" "$d" 3 usuario >/dev/null; [ $? -eq 4 ] || return 1
+  l_aut_aplica "$s" "$d" 2 humano >/dev/null; [ $? -eq 4 ] || return 1
+  [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] && [ "$(cksum < "$ev")" = "$evck" ] || return 1
+
+  out="$(kpl "$s" "$d" checkpoint menu)" || return 1
+  [ "$(kv "$out" checkpoint)" = commitado ] && [ "$(git -C "$d" rev-list --count "$h..HEAD")" -eq 1 ] \
+    && [ "$(grep -c '"evento":"orcamento_f6_autorizado"' "$ev")" -eq 1 ] \
+    && [ "$(grep -c '"evento":"replanejamento_execucao_iniciado"' "$ev")" -eq 1 ] || return 1
+
+  h="$(git -C "$d" rev-parse HEAD)"; ck="$(cksum < "$a")"; evck="$(cksum < "$ev")"
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)" || return 1
+  [ "$(kv "$out" autorizacao_f6)" = retomada ] && [ "$(kv "$out" estado)" = replanejar_execucao ] \
+    && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] \
+    && [ "$(cksum < "$ev")" = "$evck" ] || return 1
+  l_aut_aplica "$s" "$d" 4 usuario >/dev/null; [ $? -eq 4 ]
+}
+
+l5_pendente_invalido() {
+  local s="$1" d caso a ev h ck evck idxck rc
+  for caso in bloqueio_resolvido classe task; do
+    d="$(kcopia "$FXN")"; l5_deixa_checkpoint_pendente "$s" "$d" || return 1
+    a="$(kf "$d")/00-PLANEJAMENTO.md"; ev="$d/docs/eventos/menu.jsonl"
+    case "$caso" in
+      bloqueio_resolvido) sed 's/^    resolvido_em: null$/    resolvido_em: 2026-10-12/' "$(kf "$d")/00-BLOQUEIOS.md" > "$K/l5.tmp" && mv "$K/l5.tmp" "$(kf "$d")/00-BLOQUEIOS.md" ;;
+      classe) sed 's/^    classe: defeito_de_plano$/    classe: prerequisito_ausente/' "$(kf "$d")/00-BLOQUEIOS.md" > "$K/l5.tmp" && mv "$K/l5.tmp" "$(kf "$d")/00-BLOQUEIOS.md" ;;
+      task) sed '/^  - id: T-04.03$/,/^    suite:/s/^    status: bloqueada$/    status: pendente/' "$(kf "$d")/sprint-04/tasks.md" > "$K/l5.tmp" && mv "$K/l5.tmp" "$(kf "$d")/sprint-04/tasks.md" ;;
+    esac
+    h="$(git -C "$d" rev-parse HEAD)"; ck="$(cksum < "$a")"; evck="$(cksum < "$ev")"
+    idxck="$(git -C "$d" diff --cached --binary | cksum)"
+    l_aut_aplica "$s" "$d" 2 usuario >/dev/null; rc=$?
+    [ "$rc" -eq 4 ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] \
+      && [ "$(cksum < "$ev")" = "$evck" ] \
+      && [ "$(git -C "$d" diff --cached --binary | cksum)" = "$idxck" ] || return 1
+    kpl "$s" "$d" checkpoint menu >/dev/null; rc=$?
+    [ "$rc" -eq 4 ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] \
+      && [ "$(cksum < "$ev")" = "$evck" ] \
+      && [ "$(git -C "$d" diff --cached --binary | cksum)" = "$idxck" ] || return 1
+  done
+}
+
+l5_parcial_e_congelada_invalidos() {
+  local s="$1" d a ev h ck evck rc
+  d="$(kcopia "$FXN")"; l5_deixa_checkpoint_pendente "$s" "$d" || return 1
+  a="$(kf "$d")/00-PLANEJAMENTO.md"; ev="$d/docs/eventos/menu.jsonl"
+  sed '/^  - id: T-03.01$/,/^    suite:/s/^      cria: /      cria: [src\/mudou.ts, /' "$(kf "$d")/sprint-03/tasks.md" > "$K/l5.tmp" && mv "$K/l5.tmp" "$(kf "$d")/sprint-03/tasks.md"
+  h="$(git -C "$d" rev-parse HEAD)"; ck="$(cksum < "$a")"; evck="$(cksum < "$ev")"
+  l_aut_aplica "$s" "$d" 2 usuario >/dev/null; rc=$?
+  [ "$rc" -eq 2 ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] \
+    && [ "$(cksum < "$ev")" = "$evck" ] || return 1
+
+  d="$(kcopia "$FXN")"; sed 's|      altera: \[src/ui/cabecalho-topo.tsx\]|      altera: [src/menu/perfil.ts]|' "$(kf "$d")/sprint-04/tasks.md" > "$K/l5.tmp" && mv "$K/l5.tmp" "$(kf "$d")/sprint-04/tasks.md"
+  mkdir -p "$d/src/menu"; printf 'antes\n' > "$d/src/menu/perfil.ts"
+  git -C "$d" add "$(kf "$d")/sprint-04/tasks.md" src/menu/perfil.ts && git -C "$d" commit -q -m 'fixture: parcial tardio' || return 1
+  printf 'depois\n' > "$d/src/menu/perfil.ts"; l5_deixa_checkpoint_pendente "$s" "$d" || return 1
+  a="$(kf "$d")/00-PLANEJAMENTO.md"; ev="$d/docs/eventos/menu.jsonl"; rm "$d/src/menu/perfil.ts"
+  h="$(git -C "$d" rev-parse HEAD)"; ck="$(cksum < "$a")"; evck="$(cksum < "$ev")"
+  l_aut_aplica "$s" "$d" 2 usuario >/dev/null; rc=$?
+  [ "$rc" -eq 2 ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] \
+    && [ "$(cksum < "$ev")" = "$evck" ]
+}
+
+# Mesmo depois do primeiro checkpoint duravel, a retomada ainda prova o
+# trabalho parcial preservado antes de responder `retomada`.
+l5_retomada_duravel_recusa_parcial_perdido() {
+  local s="$1" d="$2" f a ev out h ck evck idxck rc
+  f="$(kf "$d")"; a="$f/00-PLANEJAMENTO.md"; ev="$d/docs/eventos/menu.jsonl"
+  sed 's|      altera: \[src/ui/cabecalho-topo.tsx\]|      altera: [src/menu/perfil.ts]|' \
+    "$f/sprint-04/tasks.md" > "$K/l5.tmp" && mv "$K/l5.tmp" "$f/sprint-04/tasks.md"
+  mkdir -p "$d/src/menu"; printf 'antes\n' > "$d/src/menu/perfil.ts"
+  git -C "$d" add "$f/sprint-04/tasks.md" src/menu/perfil.ts \
+    && git -C "$d" commit -q -m 'fixture: parcial tardio duravel' || return 1
+  printf 'depois\n' > "$d/src/menu/perfil.ts"
+  l_aut_terminal "$s" "$d" && l_aut_aplica "$s" "$d" 2 usuario >/dev/null || return 1
+  git -C "$d" checkout -q -- src/menu/perfil.ts
+  h="$(git -C "$d" rev-parse HEAD)"; ck="$(cksum < "$a")"; evck="$(cksum < "$ev")"
+  idxck="$(git -C "$d" diff --cached --binary | cksum)"
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)"; rc=$?
+  [ "$rc" -eq 2 ] && [ "$(kv "$out" trabalho_parcial)" = perdido ] \
+    && [ "$(kv "$out" motivo)" = parcial_perdido ] \
+    && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] \
+    && [ "$(cksum < "$ev")" = "$evck" ] \
+    && [ "$(git -C "$d" diff --cached --binary | cksum)" = "$idxck" ]
+}
+
+l5_fechamento_pendente_e_fechado() {
+  local s="$1" d="$2" a ev h ck evck out rc
+  a="$(kf "$d")/00-PLANEJAMENTO.md"; ev="$d/docs/eventos/menu.jsonl"
+  l_aut_terminal "$s" "$d" && l_aut_aplica "$s" "$d" 2 usuario >/dev/null || return 1
+  sed 's/^estado: replanejar_execucao$/estado: aprovado/' "$a" > "$K/l5.tmp" && mv "$K/l5.tmp" "$a"
+  h="$(git -C "$d" rev-parse HEAD)"; ck="$(cksum < "$a")"; evck="$(cksum < "$ev")"
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)"; rc=$?
+  [ "$rc" -eq 3 ] && [ "$(kv "$out" autorizacao_f6)" = fechamento_pendente ] \
+    && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] \
+    && [ "$(cksum < "$ev")" = "$evck" ] || return 1
+  kpl "$s" "$d" checkpoint menu >/dev/null || return 1
+  [ "$(fmv "$a" bloqueios_replanejamento_f6)" = '[]' ] \
+    && [ "$(kbloq "$d" B-01)" = 'defeito_de_plano|resolvido' ] \
+    && [ "$(kst "$d" T-04.03)" = pendente ] || return 1
+  h="$(git -C "$d" rev-parse HEAD)"; ck="$(cksum < "$a")"; evck="$(cksum < "$ev")"
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)"; rc=$?
+  [ "$rc" -eq 5 ] && [ "$(kv "$out" autorizacao_f6)" = fechada ] \
+    && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] \
+    && [ "$(cksum < "$ev")" = "$evck" ] || return 1
+  out="$(l_aut_aplica "$s" "$d" 9 outro)"; rc=$?
+  [ "$rc" -eq 5 ] && [ "$(kv "$out" autorizacao_f6)" = fechada ] \
+    && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] \
+    && [ "$(cksum < "$ev")" = "$evck" ]
+}
+
+# A guarda reforcada pertence somente ao primeiro checkpoint da autorizacao.
+# Depois que a rodada e duravel, a F3 pode legitimamente remover a task
+# bloqueada; os portoes ordinarios e reabre_task ja cobrem esse caso.
+l5_portao_posterior_tolera_task_removida() {
+  local s="$1" d="$2" f out h
+  f="$(kf "$d")"
+  l_aut_terminal "$s" "$d" && l_aut_aplica "$s" "$d" 2 usuario >/dev/null || return 1
+  k_sprint "$f/sprint-04/tasks.md" 04 plano \
+    "T-04.01|concluida|src/menu/organizacao.ts, tests/menu/organizacao.test.ts||" \
+    "T-04.02|concluida|src/menu/visibilidade.ts, tests/menu/visibilidade.test.ts||T-04.01" \
+    "T-04.04|pendente|src/menu/rotas.ts||T-04.02" \
+    "T-04.05|pendente|src/menu/icones.ts||" \
+    "T-04.06|pendente|src/menu/ajuda.ts||"
+  h="$(git -C "$d" rev-parse HEAD)"
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)" || return 1
+  [ "$(kv "$out" autorizacao_f6)" = retomada ] \
+    && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] || return 1
+  out="$(kpl "$s" "$d" avanca menu f3)" || return 1
+  [ "$(kv "$out" estado)" = aguardando_f4 ] \
+    && [ "$(git -C "$d" rev-list --count "$h..HEAD")" -eq 1 ] \
+    && [ "$(fmv "$f/00-PLANEJAMENTO.md" bloqueios_replanejamento_f6)" = '[B-01]' ] \
+    && [ "$(kbloq "$d" B-01)" = 'defeito_de_plano|aberto' ] \
+    && [ -z "$(kst "$d" T-04.03)" ]
+}
+
+for par in l_aut_limpa:l1-autorizacao-tardia-limpa l_aut_parciais:l2-autorizacao-tardia-preserva-tres-parciais \
+  l_aut_dono_e_clone:l3-l4-dono-separado-e-clone-le-estado l_aut_argumentos:l6-argumentos-invalidos-nao-gravam \
+  l_aut_bloqueios:l7-l8-bloqueios-e-task-invalidos l_aut_fronteira:l9-fronteiras-inseguras-nao-gravam \
+  l_aut_concorrente:l14-duas-chamadas-uma-aplica-uma-recusa l_aut_trava:l15-trava-preexistente-falha-fechado \
+  l_aut_terminais:l5-l16-l18-l19-terminais-schema-e-legado l_aut_persistencia_disco:l5-persistencia-disco-para-sem-checkpoint \
+  l_aut_terminal_incorreto:l5-terminal-nao-autorizado; do
+  d="$(kcopia "$FXN")"; "${par%%:*}" "$PL" "$d"; afirma "${par#*:}" $? "${par%%:*}"
+done
+d="$(kcopia "$FXN")"; l5_checkpoint_e_retomada "$PL" "$d"; afirma "m1-m4-m7-m10-checkpoint-e-retomada-idempotentes" $? "queda, repeticao, checkpoint, retomada e argumentos"
+l5_pendente_invalido "$PL"; afirma "m6-pendente-valida-bloqueio-classe-e-task" $? "comando e checkpoint falham fechados"
+l5_parcial_e_congelada_invalidos "$PL"; afirma "m5-congeladas-e-parciais-invalidos-nao-gravam" $? "fronteiras inseguras retornam rc2, sem evento"
+d="$(kcopia "$FXN")"; l5_retomada_duravel_recusa_parcial_perdido "$PL" "$d"; afirma "m5-retomada-duravel-recusa-parcial-perdido" $? "rc2 antes de retomada, sem evento nem gravacao"
+d="$(kcopia "$FXN")"; l5_fechamento_pendente_e_fechado "$PL" "$d"; afirma "m8-m9-m10-fechamento-pendente-e-rodada-fechada" $? "checkpoint fecha uma vez; repeticao para"
+d="$(kcopia "$FXN")"; l5_portao_posterior_tolera_task_removida "$PL" "$d"; afirma "m11-portao-posterior-nao-revalida-aplicacao-inicial" $? "retomada e F3 aceitam task removida pelo replanejamento"
+
+TRAVA_AUT6="$SK/scripts/lib/trava-autorizacao-f6.sh"
+l_lock_obtem() {
+  local lib="$1" repo="$2" slug="$3"
+  ( . "$lib" || exit 1
+    adquire_trava_autorizacao_f6 "$repo" "$slug" || exit 1
+    printf '%s' "$TRAVA_AUT6_DIR"
+    libera_trava_autorizacao_f6
+    trap - EXIT HUP INT TERM
+  )
+}
+l_lock_caminho() {
+  [ -f "$TRAVA_AUT6" ] || return 1
+  local a b c
+  a="$(l_lock_obtem "$TRAVA_AUT6" "$W" menu)" || return 1
+  b="$(l_lock_obtem "$TRAVA_AUT6" "$WT" menu)" || return 1
+  c="$(l_lock_obtem "$TRAVA_AUT6" "$W" relatorios)" || return 1
+  [ "$a" != "$b" ] && [ "$a" != "$c" ] && [ "$b" != "$c" ]
+}
+l_lock_concorrente() {
+  [ -f "$TRAVA_AUT6" ] || return 1
+  local q="$K/lock-race" pid rc=0
+  mkdir -p "$q"
+  ( . "$TRAVA_AUT6" || exit 1
+    adquire_trava_autorizacao_f6 "$W" menu || exit 1
+    printf pronto > "$q/pronto"
+    while [ ! -f "$q/libera" ]; do sleep 1; done
+  ) & pid=$!
+  while [ ! -f "$q/pronto" ]; do kill -0 "$pid" 2>/dev/null || return 1; sleep 1; done
+  ( . "$TRAVA_AUT6" && adquire_trava_autorizacao_f6 "$W" menu ) >/dev/null 2>&1 && rc=1
+  : > "$q/libera"; wait "$pid" || rc=1
+  [ "$rc" -eq 0 ]
+}
+l_lock_trap() {
+  [ -f "$TRAVA_AUT6" ] || return 1
+  local q="$K/lock-trap" p rc=0
+  mkdir -p "$q"
+  ( . "$TRAVA_AUT6" || exit 1
+    adquire_trava_autorizacao_f6 "$W" menu || exit 1
+    printf '%s' "$TRAVA_AUT6_DIR" > "$q/path"
+    exit 7
+  ) >/dev/null 2>&1 || rc=$?
+  p="$(cat "$q/path" 2>/dev/null)"
+  [ "$rc" -eq 7 ] && [ -n "$p" ] && [ ! -e "$p" ]
+}
+l_lock_existente() {
+  [ -f "$TRAVA_AUT6" ] || return 1
+  local p rc=0
+  p="$(l_lock_obtem "$TRAVA_AUT6" "$W" menu)" || return 1
+  mkdir -p "$p"
+  ( . "$TRAVA_AUT6" && adquire_trava_autorizacao_f6 "$W" menu ) >/dev/null 2>&1 && rc=1
+  [ "$rc" -eq 0 ] && [ -d "$p" ]; rc=$?
+  rmdir "$p"
+  return "$rc"
+}
+l_lock_caminho; afirma "l-lock-1-caminho-por-worktree-e-slug" $? "git-path distingue worktree e slug"
+l_lock_concorrente; afirma "l-lock-2-concorrente-recusada" $? "uma aquisicao vence e a outra falha fechada"
+l_lock_trap; afirma "l-lock-3-trap-remove-so-a-propria" $? "exit 7 preservado e lock adquirido removido"
+l_lock_existente; afirma "l-lock-4-existente-nao-e-removida" $? "lock preexistente falha e permanece"
 
 # Contrato nos documentos: estados, comando da F6, resolucao, congelamento e decisoes.
 SCHK="$SK/references/00-schema.md"
@@ -2035,7 +2633,7 @@ afirma "k23-ds140-a-ds148-registradas" $? "$n de 7, mais DS-147 e DS-148"
 # casos designados; o controle, copia SEM mutacao na mesma estrutura, tem de sobreviver a
 # todos eles — se morrer, e a bancada que esta quebrada.
 MK="$K/mut"
-copia_skill_k() { mkdir -p "$MK/$1/scripts" "$MK/$1/assets"; cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$MK/$1/assets/"; cp "$BL" "$SK/scripts/caminho-git.sh" "$MK/$1/scripts/"; printf '%s/%s/scripts/planejamento.sh' "$MK" "$1"; }
+copia_skill_k() { mkdir -p "$MK/$1/scripts/lib" "$MK/$1/assets"; cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$MK/$1/assets/"; cp "$BL" "$SK/scripts/caminho-git.sh" "$MK/$1/scripts/"; cp "$SK/scripts/lib/trava-autorizacao-f6.sh" "$MK/$1/scripts/lib/"; printf '%s/%s/scripts/planejamento.sh' "$MK" "$1"; }
 mutante_k() { # mutante_k <nome> <rc da geracao> <script> <caso que TEM de matar>...
   local nome="$1" rc="$2" s="$3" c vivos=""; shift 3
   if [ "$rc" -eq 0 ]; then for c in "$@"; do roda_k "$c" "$s" && vivos="$vivos$c "; done; fi
@@ -2351,7 +2949,7 @@ afirma "l24-ds149-ds150-registradas" $? "DECISOES-DA-SKILL.md"
 tem "$SKILLMD" 'arquivo_de_task_irma' && tem "$SKILLMD" 'bloqueia sempre, mesmo em modo'
 afirma "l25-skillmd-documenta-excecao" $? "tabela de hooks"
 
-rm -rf "$K"
+: # $K e as fixtures F6 permanecem ate a matriz DS-175 ao fim da bancada
 
 echo "== M. portabilidade Git Bash: scripts e contratos markdown LF, caminho devolvido pelo Git (P0.2-C7-B S1) =="
 # Dois modos. Simulado: `git` e `cygpath` falsos no PATH fazem o Git devolver `Z:/...` e o
@@ -2373,10 +2971,16 @@ esac
 EOF
 cat > "$MBIN/git" <<'EOF'
 #!/usr/bin/env bash
-if [ "$#" -eq 2 ] && [ "$1" = rev-parse ] && [ "$2" = --show-toplevel ]; then
-  t="$("$M_REALGIT" rev-parse --show-toplevel)" || exit $?
-  printf 'Z:/%s\n' "${t##*/}"; exit 0
-fi
+case " $* " in
+  *' rev-parse --show-toplevel '*|*' rev-parse --git-path '*)
+    t="$("$M_REALGIT" "$@")" || exit $?
+    case "$t" in
+      "$M_SIMT"/z/*) printf 'Z:/%s\n' "${t#"$M_SIMT"/z/}" ;;
+      *) printf '%s\n' "$t" ;;
+    esac
+    exit 0
+    ;;
+esac
 exec "$M_REALGIT" "$@"
 EOF
 chmod +x "$MBIN/cygpath" "$MBIN/git"
@@ -2435,6 +3039,16 @@ m_h() { # worktree vinculada: .git e arquivo, o Git devolve a raiz do worktree
 m_f_sim() { m_f m_sim "$1" "$MSIM/z"; }
 m_g_sim() { m_g m_sim "$1" "$MSIM/z"; }
 m_h_sim() { m_h m_sim "$1" "$MSIM/z"; }
+m_i() { # trava isolada: checkout principal e worktree vinculada sob caminhos Git for Windows
+  local r="$3/repo lock" wt="$3/repo lock--wt" lib="$2/scripts/lib/trava-autorizacao-f6.sh" a b
+  m_repo "$r" >/dev/null 2>&1 && git -C "$r" worktree add -q -b lock-wt "$wt" main >/dev/null 2>&1 || return 1
+  a="$(cd "$r" && "$1" bash -c '. "$1" || exit 1; adquire_trava_autorizacao_f6 "$2" menu || exit 1; printf "%s" "$TRAVA_AUT6_DIR"; libera_trava_autorizacao_f6' _ "$lib" "$r")" || return 1
+  b="$(cd "$wt" && "$1" bash -c '. "$1" || exit 1; adquire_trava_autorizacao_f6 "$2" menu || exit 1; printf "%s" "$TRAVA_AUT6_DIR"; libera_trava_autorizacao_f6' _ "$lib" "$wt")" || return 1
+  [ "$a" = "$r/.git/sprintx/travas/autorizacao-f6-menu.lock" ] \
+    && case "$b" in "$r/.git/worktrees/"*/sprintx/travas/autorizacao-f6-menu.lock) true ;; *) false ;; esac \
+    && [ ! -e "$a" ] && [ ! -e "$b" ] && m_sem_drive "$3"
+}
+m_i_sim() { m_i m_sim "$1" "$MSIM/z"; }
 
 m_a "$SK"; afirma "ma-sim-c-vira-posix" $? "C:/repo -> cygpath -u"
 m_b "$SK"; afirma "mb-sim-d-com-espaco" $? "D:/repo com espaço, argumento unico"
@@ -2444,6 +3058,7 @@ m_e "$SK"; afirma "me-sem-cygpath-no-op" $? "Linux/macOS: nada muda"
 m_f_sim "$SK"; afirma "mf-sim-planejamento-criar-na-raiz" $? "Z:/... normalizado, nada criado como Z:"
 m_g_sim "$SK"; afirma "mg-sim-bloqueios-registrar-listar-validar-resolver" $? "na raiz, do subdiretorio"
 m_h_sim "$SK"; afirma "mh-sim-worktree-vinculada" $? "raiz do worktree, nao a do principal"
+m_i_sim "$SK"; afirma "mi-sim-trava-normaliza-main-e-worktree" $? "Z:/... normalizado no gitdir correto"
 if command -v cygpath >/dev/null 2>&1; then
   [ "$(m_cg "$SK/scripts/caminho-git.sh" 'C:/repo')" = /c/repo ]; afirma "ma-real-gitbash-c" $? "cygpath real"
   [ "$(m_cg "$SK/scripts/caminho-git.sh" 'D:/repo com espaço')" = '/d/repo com espaço' ]; afirma "mb-real-gitbash-d-com-espaco" $? "cygpath real"
@@ -2458,7 +3073,8 @@ m_g m_real "$SK" "$MS/real"; afirma "mg-real-bloqueios" $? "git real do ambiente
 m_h m_real "$SK" "$MS/real"; afirma "mh-real-worktree" $? "git real do ambiente"
 for f in planejamento.sh bloqueios.sh; do
   [ "$(grep -c 'caminho_git "$t"' "$SK/scripts/$f")" -eq 1 ] || false
-done; afirma "m-uma-regra-dois-consumidores" $? "planejamento.sh e bloqueios.sh usam o helper"
+done && grep -q 'caminho_git' "$SK/scripts/lib/trava-autorizacao-f6.sh"
+afirma "m-uma-regra-tres-consumidores" $? "planejamento.sh, bloqueios.sh e trava usam o helper"
 [ "$(find "$SK/scripts" "$H" -name '*.sh' -not -path '*/testes/*' -exec grep -l 'cygpath' {} + | sed 's|.*/||' | sort -u)" = caminho-git.sh ]
 afirma "m-cygpath-so-no-helper" $? "nenhuma copia da regra fora de caminho-git.sh"
 
@@ -2575,9 +3191,10 @@ afirma "mm-mutante-11b-oraculo-so-sed-fica-cego" $? "leitor tolerante a CR conta
 # Mutantes dos scripts e do helper, em copia da skill (scripts/ + assets/). O controle, copia
 # sem mutacao, sobrevive a todos os casos; cada mutante morre pelos casos designados.
 copia_skill_m() {
-  local d="$MS/mut/$1"; rm -rf "$d"; mkdir -p "$d/scripts" "$d/assets"
+  local d="$MS/mut/$1"; rm -rf "$d"; mkdir -p "$d/scripts/lib" "$d/assets"
   cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$d/assets/"
   cp "$SK/scripts/planejamento.sh" "$SK/scripts/bloqueios.sh" "$SK/scripts/caminho-git.sh" "$d/scripts/"
+  cp "$SK/scripts/lib/trava-autorizacao-f6.sh" "$d/scripts/lib/"
   printf '%s' "$d"
 }
 m_troca() { muta_lit "$1" "$1.m" "$2" "$3" && mv "$1.m" "$1"; }
@@ -3512,7 +4129,7 @@ afirma "p11-segredo-mesma-lista-do-hook" $? "planejamento.sh e comum/segredo.sh"
 # Mutantes do S3-A, em copia da skill (como na K). Cada um morre pelo caso designado; o
 # controle, copia sem mutacao, sobrevive a todos.
 MP="$P/mut"
-copia_skill_p() { mkdir -p "$MP/$1/scripts" "$MP/$1/assets"; cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$MP/$1/assets/"; cp "$BL" "$SK/scripts/caminho-git.sh" "$MP/$1/scripts/"; printf '%s/%s/scripts/planejamento.sh' "$MP" "$1"; }
+copia_skill_p() { mkdir -p "$MP/$1/scripts/lib" "$MP/$1/assets"; cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$MP/$1/assets/"; cp "$BL" "$SK/scripts/caminho-git.sh" "$MP/$1/scripts/"; cp "$SK/scripts/lib/trava-autorizacao-f6.sh" "$MP/$1/scripts/lib/"; printf '%s/%s/scripts/planejamento.sh' "$MP" "$1"; }
 mutante_p() { # mutante_p <nome> <rc da geracao> <script> <caso que TEM de matar>...
   local nome="$1" rc="$2" s="$3" c vivos=""; shift 3
   if [ "$rc" -eq 0 ]; then for c in "$@"; do roda_p "$c" "$s" && vivos="$vivos$c "; done; fi
@@ -8673,6 +9290,237 @@ ak_muta "$AK_M" DECISOES-DA-SKILL.md 'substitui a parte incompatível da DS-46' 
 ak_mutante "akm-mutante-8-ds172-sem-a-substituicao-explicita" $? "$AK_M" ak_ds_registradas
 
 rm -rf "$AKW"
+
+echo "== AL. DS-175: autorizacao tardia explicita do orcamento F6 =="
+AL_SCHEMA="$SK/references/00-schema.md"
+AL_PLANO="$SK/references/03-plano.md"
+AL_EXEC="$SK/references/06-execucao.md"
+AL_RASTRO="$SK/references/08-rastro.md"
+AL_SKILL="$SK/SKILL.md"
+AL_TPL="$SK/assets/TEMPLATE-PLANEJAMENTO.md"
+AL_DSF="$SK/DECISOES-DA-SKILL.md"
+al_tem() { grep -qF -- "$2" "$1"; }
+
+al_tem "$AL_SCHEMA" 'As três chaves tardias existem juntas ou nenhuma existe' \
+  && al_tem "$AL_SCHEMA" 'A autoridade canônica tardia é `autorizacao_tardia_f6_por`; nunca `orcamento_declarado_por`' \
+  && al_tem "$AL_SCHEMA" '`replanejamento_execucao_recusado` com motivo `orcamento_f6_nao_declarado` é o único terminal recuperável'
+afirma "ds175-contrato-schema" $? "tupla all-or-none, autoridade separada e terminal exato"
+
+al_schema_exemplo_valido() {
+  local d f out rc
+  d="$(mktemp -d "$K/schema-publico.XXXXXX")"
+  nova_feature "$d" exportacao-csv-relatorios
+  f="$d/docs/sprintx/features/exportacao-csv-relatorios/00-PLANEJAMENTO.md"
+  awk '
+    /^### `00-PLANEJAMENTO.md`/ { secao=1 }
+    secao && /^```yaml$/ { bloco=1; next }
+    bloco && /^```$/ { exit }
+    bloco { print }
+  ' "$AL_SCHEMA" > "$f"
+  git -C "$d" add "$f" && git -C "$d" commit -q -m 'fixture: exemplo publico do planejamento' -- "$f" || return 1
+  out="$(kpl "$PL" "$d" fase exportacao-csv-relatorios)"; rc=$?
+  [ "$rc" -eq 0 ] && [ "$(kv "$out" fonte)" = planejamento ]
+}
+al_schema_exemplo_valido
+afirma "ds175-schema-exemplo-executavel" $? "o YAML canonico publicado e aceito pelo leitor oficial"
+
+al_tem "$AL_PLANO" '`replanejamento_execucao_recusado` continua terminal até uma chamada humana explícita' \
+  && al_tem "$AL_PLANO" 'planejamento.sh autorizar-replanejamento-execucao <slug> <max_replanejamentos_f6> <autorizado_por>' \
+  && al_tem "$AL_PLANO" 'A autorização tardia abre a rodada 1 e devolve o planejamento para F3'
+afirma "ds175-contrato-plano" $? "terminal continua terminal; comando explicito retorna a F3"
+
+al_tem "$AL_EXEC" '**Somente uma decisão humana explícita** pode autorizar o orçamento tardio da F6' \
+  && al_tem "$AL_EXEC" 'autorizacao_f6=checkpoint_pendente' \
+  && al_tem "$AL_EXEC" 'argumentos → congeladas/parciais → B-NN/task se pendente → persistência' \
+  && al_tem "$AL_EXEC" 'checkpoint <slug>` repete as provas antes de preparar o índice' \
+  && al_tem "$AL_EXEC" '`0` aplicada/retomada; `2` fronteira ou parcial; `3` checkpoint; `4` contrato; `5` transição; `64` uso'
+afirma "ds175-contrato-execucao" $? "humano, saidas/codigos, precedencia e recuperacao"
+
+al_tem "$AL_RASTRO" '`orcamento_f6_autorizado`' \
+  && al_tem "$AL_RASTRO" 'exatamente uma vez junto de `replanejamento_execucao_iniciado`' \
+  && al_tem "$AL_RASTRO" 'Retomada e checkpoint pendente não duplicam nenhum dos dois eventos'
+afirma "ds175-contrato-rastro" $? "dois eventos uma vez, repeticao silenciosa"
+
+al_tem "$AL_SKILL" 'autorizar-replanejamento-execucao <slug> <max_replanejamentos_f6> <autorizado_por>' \
+  && al_tem "$AL_SKILL" 'Somente `orcamento_f6_nao_declarado` é recuperável por autorização tardia' \
+  && al_tem "$AL_SKILL" '`classes_mistas`, legados e orçamentos esgotados continuam terminais'
+afirma "ds175-contrato-skill" $? "comando e fronteira exata entre terminais"
+
+al_tem "$AL_TPL" '# opcionais e inseparáveis: autorização humana tardia da F6 (DS-175)' \
+  && al_tem "$AL_TPL" 'autorizacao_tardia_f6_por:' \
+  && al_tem "$AL_TPL" '# autoridade canônica da F6 tardia; não reutilizar orcamento_declarado_por'
+afirma "ds175-contrato-template" $? "tupla opcional e autoridade canonica comentadas"
+
+[ "$(grep -c '^| DS-175 |' "$AL_DSF")" -eq 1 ] \
+  && al_tem "$AL_DSF" 'autorizar-replanejamento-execucao' \
+  && al_tem "$AL_DSF" 'orcamento_f6_nao_declarado' \
+  && al_tem "$AL_DSF" 'autorizacao_tardia_f6_por'
+afirma "ds175-decisao-append-only" $? "uma linha DS-175 fiel a spec e decisoes anteriores intactas"
+
+# --------------------------------------------------------- mutantes DS-175
+# Cada copia leva planejamento + bloqueios + helper de caminho + trava. O controle
+# intacto percorre todos os oraculos usados pelos 21 mutantes; cada mutante muda
+# uma unica regra semantica e precisa morrer no caso que a nomeia.
+al_copia() { # al_copia <nome> -> planejamento.sh isolado
+  local s; s="$(copia_skill_k "al-$1")" || return 1
+  cp "$PL" "$s" || return 1
+  printf '%s' "$s"
+}
+al_muta() { # al_muta <arquivo> <trecho> <troca>
+  muta_lit "$1" "$1.m" "$2" "$3" && mv "$1.m" "$1"
+}
+al_roda() { # al_roda <caso> <planejamento-mutante>
+  local c="$1" s="$2" d
+  d="$(kcopia "$FXN")" || return 1
+  "$c" "$s" "$d"
+}
+al_hash_divergente() { # a mudanca preserva path/estado, mas troca o hash
+  local s="$1" d="$2" f a ev h ck evck rc out
+  f="$(kf "$d")"; a="$f/00-PLANEJAMENTO.md"; ev="$d/docs/eventos/menu.jsonl"
+  sed 's|      altera: \[src/ui/cabecalho-topo.tsx\]|      altera: [src/menu/perfil.ts]|' \
+    "$f/sprint-04/tasks.md" > "$K/al-hash.tmp" && mv "$K/al-hash.tmp" "$f/sprint-04/tasks.md"
+  mkdir -p "$d/src/menu"; printf 'antes\n' > "$d/src/menu/perfil.ts"
+  git -C "$d" add "$f/sprint-04/tasks.md" src/menu/perfil.ts \
+    && git -C "$d" commit -q -m 'fixture: hash parcial tardio' || return 1
+  printf 'depois\n' > "$d/src/menu/perfil.ts"
+  l_aut_terminal "$s" "$d" && l_aut_aplica "$s" "$d" 2 usuario >/dev/null || return 1
+  printf 'terceiro\n' > "$d/src/menu/perfil.ts"
+  h="$(git -C "$d" rev-parse HEAD)"; ck="$(cksum < "$a")"; evck="$(cksum < "$ev")"
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)"; rc=$?
+  [ "$rc" -eq 2 ] && [ "$(kv "$out" motivo)" = parcial_divergente ] \
+    && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] && [ "$(cksum < "$a")" = "$ck" ] \
+    && [ "$(cksum < "$ev")" = "$evck" ]
+}
+al_mutante() { # al_mutante <nome> <rc-geracao> <script> <caso>...
+  local nome="$1" rcg="$2" s="$3" c vivos=""; shift 3
+  if [ "$rcg" -eq 0 ]; then
+    for c in "$@"; do al_roda "$c" "$s" && vivos="$vivos$c "; done
+  fi
+  [ "$rcg" -eq 0 ] && [ -z "$vivos" ]; local rc=$?
+  afirma "$nome" "$rc" "morto por: $* ${vivos:+— SOBREVIVEU a: $vivos}(rc geracao=$rcg)"
+}
+
+AL_CASOS="l_aut_limpa l_aut_parciais l_aut_dono_e_clone l_aut_bloqueios l_aut_fronteira
+l_aut_concorrente l_aut_terminais l_aut_trava l_aut_sem_planejamento_e_sem_marco l_aut_trava_ambiente k_aut_valida_origem_data_recusa
+l5_checkpoint_e_retomada l5_pendente_invalido al_hash_divergente
+l5_retomada_duravel_recusa_parcial_perdido l5_fechamento_pendente_e_fechado"
+AL_CTL="$(al_copia controle)"; AL_VIVOS=""
+for al_c in $AL_CASOS; do al_roda "$al_c" "$AL_CTL" || AL_VIVOS="$AL_VIVOS$al_c "; done
+[ -z "$AL_VIVOS" ]; afirma "ds175-mutante-controle-intacto" $? "${AL_VIVOS:-todos os oraculos sobrevivem na copia intacta}"
+
+# 01 — qualquer motivo do terminal recusado passaria pela guarda inicial.
+AL_M="$(al_copia m01)"
+al_muta "$AL_M" '      || [ "$P_RECUSA" != orcamento_f6_nao_declarado ]; then' '      || false; then'
+al_mutante "ds175-mutante-01" $? "$AL_M" l_aut_terminais
+
+# 02 — classes misturadas deixam de barrar a abertura.
+AL_M="$(al_copia m02)"
+al_muta "$AL_M" '  [ -z "$outros" ] || falha "$E_CONTRATO" "autorizacao tardia exige somente defeito_de_plano aberto: $outros"' '  : # mutante aceita classes_mistas'
+al_mutante "ds175-mutante-02" $? "$AL_M" l_aut_bloqueios
+
+# 03 — o teto e gravado, mas a rodada continua zero.
+AL_M="$(al_copia m03)"
+al_muta "$AL_M" '  W6_N=$((P_N6 + 1)); W6_BLQ="$defeitos"; W6_CONG="$C_IDS"; W6_ASS="$C_ASS"; W6_PARC="$F_PARC"' '  W6_N="$P_N6"; W6_BLQ="$defeitos"; W6_CONG="$C_IDS"; W6_ASS="$C_ASS"; W6_PARC="$F_PARC"'
+al_mutante "ds175-mutante-03" $? "$AL_M" l_aut_limpa
+
+# 04 — a rodada incrementa sem materializar a tupla tardia.
+AL_M="$(al_copia m04)"
+al_muta "$AL_M" '    W_AUT6=presente; W_AUT6_POR="$aut_por"; W_AUT6_EM="$aut_em"; W_AUT6_ORIGEM="$aut_origem"; W_RECUSA=""' '    W_AUT6=ausente; W_AUT6_POR=""; W_AUT6_EM=""; W_AUT6_ORIGEM=""; W_RECUSA=""'
+al_mutante "ds175-mutante-04" $? "$AL_M" l_aut_limpa
+
+# 05 — a origem terminal deixa de ser preservada na auditoria.
+AL_M="$(al_copia m05)"
+al_muta "$AL_M" 'W_AUT6_ORIGEM="$aut_origem"' 'W_AUT6_ORIGEM=""'
+al_mutante "ds175-mutante-05" $? "$AL_M" l_aut_limpa
+
+# 06 — a task do B-NN nao precisa mais estar bloqueada.
+AL_M="$(al_copia m06)"
+al_muta "$AL_M" '    [ "$st" = bloqueada ] || falha "$E_CONTRATO" "$b aponta $t, que esta '\''${st:-fora do plano}'\'': a task precisa estar bloqueada"' '    : # mutante ignora task nao bloqueada'
+al_mutante "ds175-mutante-06" $? "$AL_M" l_aut_bloqueios
+
+# 07 — a aplicacao ignora toda a fronteira segura.
+AL_M="$(al_copia m07)"
+al_muta "$AL_M" '  fronteira_segura' '  : # mutante sem fronteira_segura'
+al_mutante "ds175-mutante-07" $? "$AL_M" l_aut_fronteira
+
+# 08 — o retrato parcial compara so path/estado e ignora o hash.
+AL_M="$(al_copia m08)"
+al_muta "$AL_M" '  [ "$R_TSV" = "$esperado" ] && return 0' '  [ "$(printf '\''%s\n'\'' "$R_TSV" | cut -f1,2)" = "$(printf '\''%s\n'\'' "$esperado" | cut -f1,2)" ] && return 0'
+al_mutante "ds175-mutante-08" $? "$AL_M" al_hash_divergente
+
+# 09 — uma retomada idempotente incrementa a rodada de novo.
+AL_M="$(al_copia m09)"
+al_muta "$AL_M" '      retomada)' '      retomada)
+        f6_herda; W6_N=$((P_N6 + 1)); escreve "$P_MAX" "$P_POR" "$P_ESTADO" "$P_REPROV" "$P_HIST"'
+al_mutante "ds175-mutante-09" $? "$AL_M" l5_checkpoint_e_retomada
+
+# 10 — repeticao com argumentos diferentes e aceita.
+AL_M="$(al_copia m10)"
+al_muta "$AL_M" '  [ "$max6" = "$P_MAX6" ] \' '  true \' \
+  && al_muta "$AL_M" '  [ "$por" = "$P_AUT6_POR" ] \' '  true \'
+AL_SIG10="$(cksum < "$AL_M")"
+al_mutante "ds175-mutante-10" $? "$AL_M" l5_checkpoint_e_retomada
+
+# 11 — a autorizacao tardia reatribui o dono ja existente da F5.
+AL_M="$(al_copia m11)"
+al_muta "$AL_M" '  escreve "$P_MAX" "$P_POR" replanejar_execucao "$P_REPROV" "$P_HIST"' '  escreve "$P_MAX" "$aut_por" replanejar_execucao "$P_REPROV" "$P_HIST"'
+al_mutante "ds175-mutante-11" $? "$AL_M" l_aut_limpa
+
+# 12 — recusa ativa e tupla tardia passam a coexistir.
+AL_M="$(al_copia m12)"
+al_muta "$AL_M" '  ! fm_presente recusa_replanejamento_f6 \' '  true \' \
+  && al_muta "$AL_M" 'valida_recusa() {' 'valida_recusa() { return 0'
+al_mutante "ds175-mutante-12" $? "$AL_M" k_aut_valida_origem_data_recusa
+
+# 13 — a chamada deixa de adquirir a trava de concorrencia.
+AL_M="$(al_copia m13)"
+al_muta "$AL_M" '  adquire_trava_autorizacao_f6 "$RAIZ" "$slug"' '  true "$RAIZ" "$slug"'
+al_mutante "ds175-mutante-13" $? "$AL_M" l_aut_concorrente
+
+# 14 — lock preexistente e tratado como aquisicao bem sucedida e pode ser removido.
+AL_M="$(al_copia m14)"; AL_LIB="${AL_M%/scripts/planejamento.sh}/scripts/lib/trava-autorizacao-f6.sh"
+al_muta "$AL_LIB" '  if ! mkdir "$caminho" 2>/dev/null; then' '  if false; then # mutante aceita trava existente'
+al_mutante "ds175-mutante-14" $? "$AL_M" l_aut_trava
+
+# 15 — um eixo legado e promovido automaticamente ao eixo presente.
+AL_M="$(al_copia m15)"
+al_muta "$AL_M" '  if [ "$E_FONTE" != planejamento ] || [ "$P_ESTADO" != replanejamento_execucao_recusado ] \' '  if [ "$P_RECUSA" = orcamento_f6_legado ]; then P_F6=presente; P_MAX6=null; P_N6=0
+  elif [ "$E_FONTE" != planejamento ] || [ "$P_ESTADO" != replanejamento_execucao_recusado ] \'
+al_mutante "ds175-mutante-15" $? "$AL_M" l_aut_terminais
+
+# 16 — a guarda terminal roda antes da recuperacao pendente.
+AL_M="$(al_copia m16)"
+al_muta "$AL_M" '  if [ "$P_AUT6" = presente ]; then' '  if false; then # mutante pula recuperacao antes do terminal'
+al_mutante "ds175-mutante-16" $? "$AL_M" l5_checkpoint_e_retomada
+
+# 17 — leitores publicam a autoridade tardia a partir do dono compartilhado.
+AL_M="$(al_copia m17)"
+al_muta "$AL_M" '      "$P_AUT6_POR" "$P_AUT6_EM" "$P_AUT6_ORIGEM"' '      "$P_POR" "$P_AUT6_EM" "$P_AUT6_ORIGEM"'
+al_mutante "ds175-mutante-17" $? "$AL_M" l_aut_dono_e_clone
+
+# 18 — uma versao pendente e classificada antes de rejeitar argumentos diferentes.
+AL_M="$(al_copia m18)"
+al_muta "$AL_M" '  [ "$max6" = "$P_MAX6" ] \' '  [ "$PERSIST" = pendente ] || [ "$max6" = "$P_MAX6" ] \' \
+  && al_muta "$AL_M" '  [ "$por" = "$P_AUT6_POR" ] \' '  [ "$PERSIST" = pendente ] || [ "$por" = "$P_AUT6_POR" ] \'
+[ "$(cksum < "$AL_M")" != "$AL_SIG10" ]
+afirma "ds175-matriz-10-18-distinta" $? "argumentos ignorados sempre e so durante pendencia sao mutacoes diferentes"
+al_mutante "ds175-mutante-18" $? "$AL_M" l5_checkpoint_e_retomada
+
+# 19 — pending/retomada saem antes de provar congeladas e parciais.
+AL_M="$(al_copia m19)"
+al_muta "$AL_M" '  confere_pendente_autorizacao_f6' '  : # mutante responde antes das provas da rodada'
+al_mutante "ds175-mutante-19" $? "$AL_M" l5_retomada_duravel_recusa_parcial_perdido
+
+# 20 — o checkpoint pendente ignora fechamento/reclasse/unblock do B-NN.
+AL_M="$(al_copia m20)"
+al_muta "$AL_M" '  if [ "$PERSIST" = pendente ] && [ "$P_ESTADO" = replanejar_execucao ]; then' '  if false; then # mutante persiste sem validar B-NN/task'
+al_mutante "ds175-mutante-20" $? "$AL_M" l5_pendente_invalido
+
+# 21 — fechamento pendente e tratado como retomada normal.
+AL_M="$(al_copia m21)"
+al_muta "$AL_M" '  if [ "$P_ESTADO" = aprovado ]; then AUT6_ACAO=fechamento_pendente' '  if [ "$P_ESTADO" = aprovado ]; then AUT6_ACAO=retomada'
+al_mutante "ds175-mutante-21" $? "$AL_M" l5_fechamento_pendente_e_fechado
+rm -rf "$K"
 
 echo
 echo "  $ok ok, $falhou falhas, $pulado skip(s) interno(s), $pulado_externo por dependencia externa ausente"

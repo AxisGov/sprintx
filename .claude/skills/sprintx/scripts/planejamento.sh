@@ -18,6 +18,7 @@
 #   planejamento.sh criar <slug> [max_reprovacoes_f5|null] [declarado_por|null] [max_replanejamentos_f6|null]
 #   planejamento.sh avanca <slug> f2|f3|f4|f5
 #   planejamento.sh replanejar-execucao <slug>
+#   planejamento.sh autorizar-replanejamento-execucao <slug> <max_replanejamentos_f6> <autorizado_por>
 #   planejamento.sh checkpoint <slug>
 #   planejamento.sh fase <slug>
 #   planejamento.sh pode-resolver <slug> <B-NN>
@@ -61,6 +62,7 @@ E_RECUSADO=2; E_PERSISTENCIA=3; E_CONTRATO=4; E_TRANSICAO=5; E_USO=64
 falha() { local c="$1"; shift; printf 'planejamento: %s\n' "$*" >&2; exit "$c"; }
 
 . "$SK/scripts/caminho-git.sh" || falha "$E_USO" "scripts/caminho-git.sh ausente"
+. "$SK/scripts/lib/trava-autorizacao-f6.sh" || falha "$E_USO" "scripts/lib/trava-autorizacao-f6.sh ausente"
 
 # ------------------------------------------------------------------ contexto
 
@@ -96,6 +98,7 @@ contexto() { # contexto <slug>
   AUD="$PASTA/00-AUDITORIA.md"
   # Sem 00-PLANEJAMENTO.md nao ha eixo F6: le_planejamento sobrescreve.
   P_F6=legado; P_MAX6=null; P_N6=0; P_BLQ=""; P_CONG=""; P_ASS=null; P_RECUSA=""; P_PARC=""; W6_PARC=""
+  P_AUT6=ausente; P_AUT6_POR=""; P_AUT6_EM=""; P_AUT6_ORIGEM=""
 }
 
 hoje() { date +%Y-%m-%d; }
@@ -154,6 +157,19 @@ valida_orcamento_f6() {
     null) ;;
     *) positivo "$1" || falha "$E_CONTRATO" "max_replanejamentos_f6 invalido: '$1' (inteiro >= 1 ou null)"
        [ "$2" != null ] || falha "$E_CONTRATO" "max_replanejamentos_f6 sem orcamento_declarado_por: o teto precisa de dono" ;;
+  esac
+}
+
+# valida_dono_f6 <max6> <dono_compartilhado> <dono_tardio>
+# O teto positivo da F6 tem uma unica autoridade citavel: o dono compartilhado
+# vindo de `criar`, ou o dono do trio append-only da autorizacao tardia.
+valida_dono_f6() {
+  local max6="$1" compartilhado="$2" tardio="$3"
+  case "$max6" in
+    null) [ "$tardio" = null ] || falha "$E_CONTRATO" "autorizacao tardia da F6 sem max_replanejamentos_f6 positivo" ;;
+    *) positivo "$max6" || falha "$E_CONTRATO" "max_replanejamentos_f6 invalido: '$max6' (inteiro >= 1 ou null)"
+       [ "$compartilhado" != null ] || [ "$tardio" != null ] \
+         || falha "$E_CONTRATO" "max_replanejamentos_f6 sem autoridade: falta orcamento_declarado_por ou autorizacao_tardia_f6_por" ;;
   esac
 }
 
@@ -218,6 +234,34 @@ em_lista() { case " $2 " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 # As chaves do eixo F6, na ordem em que sao gravadas. Presentes todas, ou nenhuma
 # (planejamento anterior a este contrato: legado — nunca ganha orcamento retroativo).
 CHAVES_F6="max_replanejamentos_f6 replanejamentos_f6 bloqueios_replanejamento_f6 tasks_congeladas assinatura_congeladas"
+CHAVES_AUT6="autorizacao_tardia_f6_por autorizacao_tardia_f6_em autorizacao_tardia_f6_origem"
+
+# le_autorizacao_tardia_f6 — o trio e atomico e append-only. Ausente preserva
+# planejamentos antigos; presente so e valido depois de uma rodada F6 aberta.
+le_autorizacao_tardia_f6() {
+  local k tem=0 falta=0
+  for k in $CHAVES_AUT6; do if fm_presente "$k"; then tem=$((tem + 1)); else falta=$((falta + 1)); fi; done
+  if [ "$tem" -eq 0 ]; then
+    P_AUT6=ausente; P_AUT6_POR=""; P_AUT6_EM=""; P_AUT6_ORIGEM=""
+    return 0
+  fi
+  [ "$falta" -eq 0 ] || falha "$E_CONTRATO" "autorizacao tardia F6 incompleta: as chaves $CHAVES_AUT6 existem todas ou nenhuma"
+  P_AUT6=presente
+  fm_em P_AUT6_POR autorizacao_tardia_f6_por
+  fm_em P_AUT6_EM autorizacao_tardia_f6_em
+  fm_em P_AUT6_ORIGEM autorizacao_tardia_f6_origem
+  case "$P_AUT6_POR" in
+    [a-z]*) case "$P_AUT6_POR" in *[!a-z0-9_-]*) falha "$E_CONTRATO" "autorizacao_tardia_f6_por invalido: '$P_AUT6_POR'" ;; esac ;;
+    *) falha "$E_CONTRATO" "autorizacao_tardia_f6_por invalido: '$P_AUT6_POR'" ;;
+  esac
+  data_iso "$P_AUT6_EM" || falha "$E_CONTRATO" "autorizacao_tardia_f6_em invalido: '$P_AUT6_EM'"
+  [ "$P_AUT6_ORIGEM" = orcamento_f6_nao_declarado ] \
+    || falha "$E_CONTRATO" "autorizacao_tardia_f6_origem invalida: '$P_AUT6_ORIGEM'"
+  [ "$P_F6" = presente ] && positivo "$P_MAX6" && [ "$P_N6" -ge 1 ] \
+    || falha "$E_CONTRATO" "autorizacao tardia F6 exige eixo presente, teto positivo e ao menos uma rodada"
+  ! fm_presente recusa_replanejamento_f6 \
+    || falha "$E_CONTRATO" "autorizacao tardia F6 nao coexiste com recusa_replanejamento_f6"
+}
 
 # le_f6 — P_F6 (presente|legado), P_MAX6, P_N6, P_BLQ, P_CONG, P_ASS, P_PARC.
 le_f6() {
@@ -732,11 +776,11 @@ confere_parciais() {
   case "$D_PARC" in
     perdido)
       printf 'trabalho_parcial=perdido\nmotivo=parcial_perdido\nestado=%s\nproxima=PARAR\n' "$P_ESTADO"
-      evento replanejamento_execucao_recusado "$1" - bloqueado "trabalho parcial perdido: a arvore nao tem o que a rodada preservou:$D_DET"
+      [ "${2:-}" = silencioso ] || evento replanejamento_execucao_recusado "$1" - bloqueado "trabalho parcial perdido: a arvore nao tem o que a rodada preservou:$D_DET"
       falha "$E_RECUSADO" "trabalho parcial perdido — a rodada preservou$D_DET e esta arvore nao tem nenhum deles (worktree perdida ou outro clone). O conteudo parcial nao e reconstruivel pelo estado versionado: nada foi reconstruido, limpo nem gravado. E perda de estado de execucao, nao decisao de produto. PARE e relate." ;;
     divergente)
       printf 'trabalho_parcial=divergente\nmotivo=parcial_divergente\nestado=%s\nproxima=PARAR\n' "$P_ESTADO"
-      evento replanejamento_execucao_recusado "$1" - bloqueado "trabalho parcial divergente:$D_DET"
+      [ "${2:-}" = silencioso ] || evento replanejamento_execucao_recusado "$1" - bloqueado "trabalho parcial divergente:$D_DET"
       falha "$E_RECUSADO" "trabalho parcial divergente — a arvore mudou desde que a rodada a preservou:$D_DET. Nada foi limpo, stashado, descartado nem gravado. PARE e relate." ;;
   esac
   [ -n "$P_PARC" ] || return 0
@@ -755,7 +799,7 @@ EOF
 $(SX_PATHS="$paths" donos_de)
 EOF3
   [ -z "$ruins" ] && return 0
-  evento replanejamento_execucao_recusado "$1" - bloqueado "plano replanejado tira da task o trabalho parcial preservado:$ruins"
+  [ "${2:-}" = silencioso ] || evento replanejamento_execucao_recusado "$1" - bloqueado "plano replanejado tira da task o trabalho parcial preservado:$ruins"
   falha "$E_CONTRATO" "o plano replanejado nao da mais o trabalho parcial preservado a sua task, e so a ela:$ruins. O parcial fica com a task bloqueada que o escreveu: nao mova para irma, nao atribua a concluida, nao torne ambiguo. Nada foi registrado. PARE."
 }
 
@@ -772,7 +816,10 @@ le_planejamento() {
   fm_em P_MAX max_reprovacoes_f5; fm_em P_POR orcamento_declarado_por
   fm_em P_ESTADO estado; fm_em P_REPROV reprovacoes; fm_em P_RECUSA recusa_replanejamento_f6
   le_f6
+  le_autorizacao_tardia_f6
   valida_orcamento "$P_MAX" "$P_POR" "$P_MAX6"
+  if [ "$P_AUT6" = presente ]; then valida_dono_f6 "$P_MAX6" "$P_POR" "$P_AUT6_POR"
+  else valida_dono_f6 "$P_MAX6" "$P_POR" null; fi
   case "$P_ESTADO" in
     null|aguardando_f3|aguardando_f4|aguardando_f5|replanejar|aprovado|orcamento_esgotado) ;;
     replanejar_execucao|replanejamento_execucao_esgotado) ;;
@@ -861,8 +908,14 @@ valida_recusa() {
 # ------------------------------------------------------------------ escrita
 
 # f6_herda — o eixo F6 a gravar (W6_*) comeca igual ao lido (P_*).
-f6_herda() { W6="$P_F6"; W6_MAX="$P_MAX6"; W6_N="$P_N6"; W6_BLQ="$P_BLQ"; W6_CONG="$P_CONG"; W6_ASS="$P_ASS"; W6_PARC="$P_PARC"; W_RECUSA="$P_RECUSA"; }
-f6_novo() { W6=presente; W6_MAX="$1"; W6_N=0; W6_BLQ=""; W6_CONG=""; W6_ASS=null; W6_PARC=""; W_RECUSA=""; }
+f6_herda() {
+  W6="$P_F6"; W6_MAX="$P_MAX6"; W6_N="$P_N6"; W6_BLQ="$P_BLQ"; W6_CONG="$P_CONG"; W6_ASS="$P_ASS"; W6_PARC="$P_PARC"; W_RECUSA="$P_RECUSA"
+  W_AUT6="$P_AUT6"; W_AUT6_POR="$P_AUT6_POR"; W_AUT6_EM="$P_AUT6_EM"; W_AUT6_ORIGEM="$P_AUT6_ORIGEM"
+}
+f6_novo() {
+  W6=presente; W6_MAX="$1"; W6_N=0; W6_BLQ=""; W6_CONG=""; W6_ASS=null; W6_PARC=""; W_RECUSA=""
+  W_AUT6=ausente; W_AUT6_POR=""; W_AUT6_EM=""; W_AUT6_ORIGEM=""
+}
 
 # parciais_yaml — o bloco parciais_replanejamento_f6 de W6_PARC, na forma que parciais_tsv le.
 parciais_yaml() {
@@ -883,7 +936,7 @@ lista_yaml() { if [ -z "$1" ]; then printf '[]'; else printf '[%s]' "$(printf '%
 # vem de W6_* (f6_herda/f6_novo); legado continua sem as chaves — nunca ganha
 # orcamento numa regravacao. W_RECUSA e o motivo do terminal recusado, e so dele.
 escreve() {
-  local max="$1" por="$2" estado="$3" reprov="$4" hist="$5" data tmp yaml prosa teto t6="" rodada6="" rec="" trec=""
+  local max="$1" por="$2" estado="$3" reprov="$4" hist="$5" data tmp yaml prosa teto t6="" rodada6="" rec="" trec="" aut6="" dono6="$2"
   [ -f "$TEMPLATE" ] || falha "$E_CONTRATO" "template ausente: assets/TEMPLATE-PLANEJAMENTO.md"
   data="$(hoje)"
   if [ "$estado" = replanejamento_execucao_recusado ]; then
@@ -918,8 +971,15 @@ EOF
   fi
   if [ "$max" = null ]; then teto="$reprov, sem teto"; else teto="$reprov de $max (teto declarado por \`$por\`)"; fi
   if [ "$W6" = presente ]; then
+    if [ "${W_AUT6:-ausente}" = presente ]; then
+      aut6="autorizacao_tardia_f6_por: $W_AUT6_POR
+autorizacao_tardia_f6_em: $W_AUT6_EM
+autorizacao_tardia_f6_origem: $W_AUT6_ORIGEM
+"
+      dono6="$W_AUT6_POR"
+    fi
     if [ "$W6_MAX" = null ]; then t6=" · replanejamentos da execução (F6): $W6_N, sem orçamento declarado"
-    else t6=" · replanejamentos da execução (F6): $W6_N de $W6_MAX (teto declarado por \`$por\`)"; fi
+    else t6=" · replanejamentos da execução (F6): $W6_N de $W6_MAX (teto declarado por \`$dono6\`)"; fi
     [ -n "$W6_BLQ" ] && rodada6="
 
 Rodada de replanejamento da execução ativa, aberta por: $(printf '%s' "$W6_BLQ" | sed 's/ /, /g'). Tasks concluídas congeladas: $(printf '%s' "$W6_CONG" | sed 's/ /, /g')."
@@ -931,8 +991,8 @@ Rodada de replanejamento da execução ativa, aberta por: $(printf '%s' "$W6_BLQ
   {
     printf -- '---\nexpx_schema: 1\nexpx_tool: sprintx\nkind: planejamento\ntrabalho_id: %s\n' "$SLUG"
     if [ "$W6" = presente ]; then
-      printf 'max_reprovacoes_f5: %s\nmax_replanejamentos_f6: %s\norcamento_declarado_por: %s\nestado: %s\n%sreprovacoes: %s\n' \
-        "$max" "$W6_MAX" "$por" "$estado" "$rec" "$reprov"
+      printf 'max_reprovacoes_f5: %s\nmax_replanejamentos_f6: %s\norcamento_declarado_por: %s\n%sestado: %s\n%sreprovacoes: %s\n' \
+        "$max" "$W6_MAX" "$por" "$aut6" "$estado" "$rec" "$reprov"
       printf 'replanejamentos_f6: %s\nbloqueios_replanejamento_f6: %s\ntasks_congeladas: %s\nassinatura_congeladas: %s\n' \
         "$W6_N" "$(lista_yaml "$W6_BLQ")" "$(lista_yaml "$W6_CONG")" "$W6_ASS"
       parciais_yaml
@@ -1154,10 +1214,12 @@ modo_git() {
 # pasta ignorada: `disco`, o estado do disco governa como sempre governou.
 persistencia() {
   PERSIST=disco
+  # O modo pertence ao diagnostico publico de qualquer persistencia, inclusive
+  # quando o planejamento ainda nao existe ou ainda nao tem marco.
+  modo_git
   [ -f "$ARQ" ] || return 0
   marco
   [ -n "$M_FASE" ] || { PERSIST=sem_marco; return 0; }
-  modo_git
   [ "$G_MODO" = canonico ] || return 0
   local rel="${PREFIXO}00-PLANEJAMENTO.md"
   if git -C "$RAIZ" cat-file -e "HEAD:$rel" 2>/dev/null \
@@ -1180,6 +1242,15 @@ pendente_msg() {
 # Nunca push, nunca --no-verify, nunca limpa, descarta ou stasha nada.
 checkpoint() {
   le_planejamento
+  # Um checkpoint que recupera a autorizacao tardia interrompida valida o mesmo
+  # tuple, as congeladas, os parciais e os B-NN antes de preparar o indice. O
+  # comando direto nao tem argumentos: usa exatamente a auditoria ja gravada.
+  persistencia
+  if [ "$P_AUT6" = presente ] && [ -n "$P_BLQ" ] \
+    && [ "$P_ESTADO" = replanejar_execucao ] && [ "$PERSIST" = pendente ]; then
+    classifica_autorizacao_tardia_f6 "$P_MAX6" "$P_AUT6_POR"
+    case "$AUT6_ACAO" in checkpoint_pendente) ;; *) falha "$E_CONTRATO" "checkpoint tardio em classificacao inesperada: $AUT6_ACAO" ;; esac
+  fi
   # Rodada de replanejamento da execucao aprovada e ainda nao fechada: fechar e
   # parte de persistir a aprovacao (idempotente — retomavel depois de uma queda).
   if [ "$P_ESTADO" = aprovado ] && [ -n "$P_BLQ" ]; then fecha_rodada; le_planejamento; fi
@@ -1363,6 +1434,10 @@ saida_f6() {
   [ "${P_ESTADO-}" = replanejamento_execucao_recusado ] && printf 'recusa_replanejamento_f6=%s\n' "$P_RECUSA"
   if [ "$P_F6" = legado ]; then printf 'orcamento_f6=legado\n'; return 0; fi
   printf 'replanejamentos_f6=%s\nmax_replanejamentos_f6=%s\n' "$P_N6" "$P_MAX6"
+  if [ "${P_AUT6:-ausente}" = presente ]; then
+    printf 'autorizacao_tardia_f6_por=%s\nautorizacao_tardia_f6_em=%s\nautorizacao_tardia_f6_origem=%s\n' \
+      "$P_AUT6_POR" "$P_AUT6_EM" "$P_AUT6_ORIGEM"
+  fi
   if [ -n "$P_BLQ" ]; then
     printf 'replanejamento_execucao=ativo\nbloqueios_replanejamento_f6=%s\ntasks_congeladas=%s\nparciais_replanejamento_f6=%s\n' \
       "$(printf '%s' "$P_BLQ" | tr ' ' ',')" "$(printf '%s' "$P_CONG" | tr ' ' ',')" \
@@ -1397,6 +1472,66 @@ valida_rodada() {
   done
 }
 
+# valida_rodada_aut6 — a recuperacao do primeiro checkpoint da autorizacao
+# tardia nunca reinterpreta uma rodada adulterada. Antes de esse checkpoint
+# existir, a task continua bloqueada e o B-NN ainda precisa estar aberto.
+valida_rodada_aut6() {
+  local b t c e st
+  le_bloqueios
+  for b in $P_BLQ; do
+    c="$(campo_bloqueio "$b" 3)"; t="$(campo_bloqueio "$b" 2)"; e="$(campo_bloqueio "$b" 4)"
+    [ -n "$c" ] || falha "$E_CONTRATO" "$b da autorizacao tardia nao existe em 00-BLOQUEIOS.md"
+    [ "$c" = defeito_de_plano ] || falha "$E_CONTRATO" "$b da autorizacao tardia tem classe $c: esperada defeito_de_plano"
+    [ "$e" = aberto ] || falha "$E_CONTRATO" "$b da autorizacao tardia nao esta aberto"
+    case "$t" in null|-|"") continue ;; esac
+    st="$(status_da_task "$t" | cut -f2)"
+    [ "$st" = bloqueada ] || falha "$E_CONTRATO" "$b aponta $t, que esta '${st:-fora do plano}': antes do primeiro checkpoint a task precisa continuar bloqueada"
+  done
+}
+
+# confere_pendente_autorizacao_f6 — provas compartilhadas pela repeticao do
+# comando e pelo checkpoint direto da aplicacao inicial. Divergir da fotografia
+# congelada e perda de estado de execucao (codigo 2), nao uma oportunidade de
+# reescrever o plano concluido.
+confere_pendente_autorizacao_f6() {
+  local ids ass
+  calcula_congeladas; ids="$C_IDS"; ass="$C_ASS"
+  if [ "$ids" != "$P_CONG" ] || [ "$ass" != "$P_ASS" ]; then
+    falha "$E_RECUSADO" "fotografia das tasks concluidas divergiu durante a recuperacao da autorizacao tardia (congeladas: [$P_CONG]; agora: [$ids]; assinatura $P_ASS -> $ass). Nada foi gravado. PARE."
+  fi
+  confere_parciais f6 silencioso
+  # As provas de B-NN/task pertencem somente a aplicacao inicial interrompida.
+  # Congeladas e parciais, acima, continuam obrigatorias em toda retomada.
+  if [ "$PERSIST" = pendente ] && [ "$P_ESTADO" = replanejar_execucao ]; then
+    valida_rodada_aut6
+  fi
+}
+
+# classifica_autorizacao_tardia_f6 <max> <por> — reconhece uma chamada repetida
+# sem regravar nada. AUT6_ACAO: checkpoint_pendente | retomada |
+# fechamento_pendente | fechada. As validacoes sao silenciosas: uma repeticao
+# invalida falha fechada sem acrescentar evento ao historico da primeira chamada.
+classifica_autorizacao_tardia_f6() {
+  local max6="$1" por="$2"
+  AUT6_ACAO=""
+  [ "$P_AUT6" = presente ] || return 1
+  # Sem lista ativa a autorizacao e apenas historica: nao existe tuple pedido
+  # capaz de abrir outra rodada, portanto a resposta e sempre transicao recusada.
+  [ -n "$P_BLQ" ] || { AUT6_ACAO=fechada; return 0; }
+  [ "$max6" = "$P_MAX6" ] \
+    || falha "$E_CONTRATO" "autorizacao tardia ja registra max_replanejamentos_f6=$P_MAX6; o pedido traz $max6"
+  [ "$por" = "$P_AUT6_POR" ] \
+    || falha "$E_CONTRATO" "autorizacao tardia ja registra autorizado_por=$P_AUT6_POR; o pedido traz $por"
+
+  # Congeladas e parciais sao provadas antes da durabilidade; so a prova de
+  # B-NN/task e restrita, dentro do helper, a aplicacao inicial interrompida.
+  confere_pendente_autorizacao_f6
+  if [ "$P_ESTADO" = aprovado ]; then AUT6_ACAO=fechamento_pendente
+  elif [ "$PERSIST" = pendente ]; then AUT6_ACAO=checkpoint_pendente
+  else AUT6_ACAO=retomada
+  fi
+}
+
 # fecha_rodada — com o estado ja em `aprovado`: resolve os B-NN que abriram a
 # rodada (e so eles), reabre a task bloqueada de cada um, esvazia a rodada.
 # Task concluida nunca e tocada. Idempotente: B-NN ja resolvido e task ja pendente
@@ -1422,6 +1557,124 @@ fecha_rodada() {
   f6_herda; W6_BLQ=""; W6_CONG=""; W6_ASS=null; W6_PARC=""
   escreve "$P_MAX" "$P_POR" "$P_ESTADO" "$P_REPROV" "$P_HIST"
   evento replanejamento_execucao_aprovado f5 - ok "replanejamento da execucao $P_N6 aprovado na F5 rodada $P_RODADAS: $(printf '%s' "$blq" | tr ' ' ',') resolvido(s); tasks concluidas intactas${parc:+; trabalho parcial preservado na arvore: $parc}"
+}
+
+# abre_rodada_f6 <B-NN ordenados> <maximo> [aut_por aut_em aut_origem] — aplica
+# e persiste uma rodada ja
+# validada. Os chamadores continuam responsaveis pelo orcamento, pelos bloqueios
+# e pela fronteira; este e o unico escritor da mutacao comum da rodada.
+abre_rodada_f6() {
+  local defeitos="$1" max6="$2" aut_por="${3-}" aut_em="${4-}" aut_origem="${5-}"
+  f6_herda
+  W6_MAX="$max6"
+  if [ -n "$aut_por$aut_em$aut_origem" ]; then
+    [ -n "$aut_por" ] && [ -n "$aut_em" ] && [ -n "$aut_origem" ] \
+      || falha "$E_CONTRATO" "auditoria tardia da F6 deve ser fornecida por inteiro ao abrir a rodada"
+    W_AUT6=presente; W_AUT6_POR="$aut_por"; W_AUT6_EM="$aut_em"; W_AUT6_ORIGEM="$aut_origem"; W_RECUSA=""
+  fi
+  calcula_congeladas
+  W6_N=$((P_N6 + 1)); W6_BLQ="$defeitos"; W6_CONG="$C_IDS"; W6_ASS="$C_ASS"; W6_PARC="$F_PARC"
+  escreve "$P_MAX" "$P_POR" replanejar_execucao "$P_REPROV" "$P_HIST"
+  if [ -n "$aut_por" ]; then
+    evento orcamento_f6_autorizado f6 - ok "teto $max6 autorizado por $aut_por a partir de $aut_origem; bloqueios [$defeitos]"
+  fi
+  evento replanejamento_execucao_iniciado f6 - ok "replanejamento da execucao $W6_N de $max6 aberto por [$defeitos]; reprovacoes da F5 continuam em $P_REPROV; congeladas [$W6_CONG]; trabalho parcial preservado [$(printf '%s\n' "$F_PARC" | awk -F'\t' 'NF { printf "%s%s", (n++ ? "," : ""), $1 }')]"
+  checkpoint
+}
+
+# autorizar-replanejamento-execucao — abre a primeira rodada F6 a partir do terminal
+# duravel `orcamento_f6_nao_declarado`. Esta task implementa somente a aplicacao inicial;
+# repeticao, checkpoint pendente e retomada sao tratados pelo caminho de recuperacao da Task 5.
+cmd_autorizar_replanejamento_execucao() {
+  [ $# -eq 3 ] || falha "$E_USO" "uso: autorizar-replanejamento-execucao <slug> <max_replanejamentos_f6> <autorizado_por>"
+  local slug="$1" max6="$2" por="$3" abertos b t c defeitos="" outros="" st
+  valida_slug "$slug"
+  positivo "$max6" || falha "$E_CONTRATO" "max_replanejamentos_f6 invalido: '$max6' (inteiro >= 1)"
+  case "$por" in
+    null) falha "$E_CONTRATO" "autorizado_por invalido: 'null' (identificador minusculo, nao null)" ;;
+    [a-z]*) case "$por" in *[!a-z0-9_-]*) falha "$E_CONTRATO" "autorizado_por invalido: '$por' (identificador minusculo)" ;; esac ;;
+    *) falha "$E_CONTRATO" "autorizado_por invalido: '$por' (identificador minusculo)" ;;
+  esac
+
+  # A trava antecede toda leitura decisoria. `contexto` relê a mesma raiz depois da aquisicao.
+  RAIZ="$(resolve_raiz)"
+  adquire_trava_autorizacao_f6 "$RAIZ" "$slug"
+  local trava_rc=$?
+  case "$trava_rc" in
+    0) ;;
+    2) falha "$E_RECUSADO" "autorizacao tardia da F6 recusada: trava existente para $slug" ;;
+    *)
+      printf 'autorizacao_f6=recusada\nestado=null\nmotivo=trava_indisponivel\nproxima=PARAR\npersistencia=disco\n'
+      falha "$E_TRANSICAO" "autorizacao tardia da F6 recusada: ambiente nao permite adquirir a trava para $slug"
+      ;;
+  esac
+  contexto "$slug"
+  estado_efetivo
+  persistencia
+  if [ "$P_AUT6" = presente ]; then
+    classifica_autorizacao_tardia_f6 "$max6" "$por"
+    case "$AUT6_ACAO" in
+      checkpoint_pendente)
+        printf 'autorizacao_f6=checkpoint_pendente\nestado=%s\nproxima=CHECKPOINT\npersistencia=pendente\n' "$P_ESTADO"
+        falha "$E_PERSISTENCIA" "autorizacao tardia ja aplicada no disco — $(pendente_msg)" ;;
+      retomada)
+        printf 'autorizacao_f6=retomada\nestado=%s\nreplanejamentos_f6=%s\nmax_replanejamentos_f6=%s\nautorizado_por=%s\nproxima=%s\npersistencia=%s\n' \
+          "$P_ESTADO" "$P_N6" "$P_MAX6" "$P_AUT6_POR" "$(fase_do_estado "$P_ESTADO")" "$PERSIST"
+        return 0 ;;
+      fechamento_pendente)
+        printf 'autorizacao_f6=fechamento_pendente\nestado=%s\nproxima=CHECKPOINT\nfechamento=pendente\npersistencia=%s\n' "$P_ESTADO" "$PERSIST"
+        falha "$E_PERSISTENCIA" "autorizacao tardia aprovada, mas o fechamento da rodada ainda precisa de checkpoint" ;;
+      fechada)
+        printf 'autorizacao_f6=fechada\nestado=%s\nproxima=PARAR\npersistencia=%s\n' "$P_ESTADO" "$PERSIST"
+        falha "$E_TRANSICAO" "autorizacao tardia ja consumida e rodada fechada: nenhuma rodada nova foi aberta" ;;
+    esac
+  fi
+  if [ "$PERSIST" = pendente ]; then
+    printf 'estado=%s\nproxima=CHECKPOINT\npersistencia=pendente\n' "$E_ESTADO"
+    falha "$E_PERSISTENCIA" "autorizacao tardia recusada — $(pendente_msg)"
+  fi
+  if [ "$PERSIST" != duravel ]; then
+    printf 'autorizacao_f6=recusada\nestado=%s\nmotivo=persistencia_%s\nproxima=PARAR\npersistencia=%s\n' \
+      "$E_ESTADO" "$PERSIST" "$PERSIST"
+    falha "$E_TRANSICAO" "autorizacao tardia da F6 exige o terminal duravel no HEAD de feature/$SLUG; a persistencia e '$PERSIST' (modo $G_MODO) e nenhum checkpoint a torna duravel. PARE."
+  fi
+
+  if [ "$E_FONTE" != planejamento ] || [ "$P_ESTADO" != replanejamento_execucao_recusado ] \
+      || [ "$P_RECUSA" != orcamento_f6_nao_declarado ]; then
+    printf 'autorizacao_f6=recusada\nestado=%s\nmotivo=%s\nproxima=PARAR\n' "$E_ESTADO" "${P_RECUSA:-estado}"
+    falha "$E_TRANSICAO" "autorizacao tardia da F6 so parte do terminal orcamento_f6_nao_declarado"
+  fi
+  [ "$P_F6" = presente ] && [ "$P_MAX6" = null ] && [ "$P_N6" -eq 0 ] && [ -z "$P_BLQ" ] \
+    && [ "$P_AUT6" = ausente ] \
+    || falha "$E_TRANSICAO" "terminal sem a fronteira inicial exata da autorizacao tardia da F6"
+
+  le_bloqueios || falha "$E_CONTRATO" "00-BLOQUEIOS.md invalido"
+  abertos="$(abertos_ordenados)"
+  while IFS="$(printf '\t')" read -r b t c; do
+    [ -n "$b" ] || continue
+    if [ "$c" = defeito_de_plano ]; then defeitos="$defeitos $b"; else outros="$outros $b:$c"; fi
+  done <<EOF
+$abertos
+EOF
+  defeitos="${defeitos# }"; outros="${outros# }"
+  [ -n "$defeitos" ] || falha "$E_CONTRATO" "autorizacao tardia exige ao menos um defeito_de_plano aberto"
+  [ -z "$outros" ] || falha "$E_CONTRATO" "autorizacao tardia exige somente defeito_de_plano aberto: $outros"
+
+  BLOQ_TASKS=""
+  for b in $defeitos; do
+    t="$(task_do_bloqueio "$b")"
+    case "$t" in null|-|"") continue ;; esac
+    st="$(status_da_task "$t" | cut -f2)"
+    [ "$st" = bloqueada ] || falha "$E_CONTRATO" "$b aponta $t, que esta '${st:-fora do plano}': a task precisa estar bloqueada"
+    BLOQ_TASKS="$BLOQ_TASKS $t"
+  done
+  fronteira_segura
+
+  abre_rodada_f6 "$defeitos" "$max6" "$por" "$(hoje)" orcamento_f6_nao_declarado
+  le_planejamento
+  persistencia
+  printf 'autorizacao_f6=aplicada\nestado=%s\nreplanejamentos_f6=%s\nmax_replanejamentos_f6=%s\nautorizado_por=%s\nproxima=%s\npersistencia=%s\n' \
+    "$P_ESTADO" "$P_N6" "$P_MAX6" "$P_AUT6_POR" "$(fase_do_estado "$P_ESTADO")" "$PERSIST"
 }
 
 # replanejar-execucao — a F6 registrou defeito_de_plano: volta ao planejamento
@@ -1508,10 +1761,10 @@ EOF
   fi
   if [ -n "$motivo" ]; then recusa_duravel "$motivo" "$defeitos${outros:+ }$outros"; fi
 
-  f6_herda
   if [ "$P_N6" -ge "$P_MAX6" ]; then
     # Orcamento da F6 consumido: nenhuma rodada nova. Estado terminal proprio,
     # distinto de orcamento_esgotado (F5).
+    f6_herda
     escreve "$P_MAX" "$P_POR" replanejamento_execucao_esgotado "$P_REPROV" "$P_HIST"
     evento replanejamento_execucao_esgotado f6 - bloqueado "orcamento da F6 consumido ($P_N6 de $P_MAX6): defeito_de_plano [$defeitos] nao abre rodada nova"
     checkpoint
@@ -1534,11 +1787,7 @@ EOF
   done
   fronteira_segura
 
-  calcula_congeladas
-  W6_N=$((P_N6 + 1)); W6_BLQ="$defeitos"; W6_CONG="$C_IDS"; W6_ASS="$C_ASS"; W6_PARC="$F_PARC"
-  escreve "$P_MAX" "$P_POR" replanejar_execucao "$P_REPROV" "$P_HIST"
-  evento replanejamento_execucao_iniciado f6 - ok "replanejamento da execucao $W6_N de $P_MAX6 aberto por [$defeitos]; reprovacoes da F5 continuam em $P_REPROV; congeladas [$W6_CONG]; trabalho parcial preservado [$(printf '%s\n' "$F_PARC" | awk -F'\t' 'NF { printf "%s%s", (n++ ? "," : ""), $1 }')]"
-  checkpoint
+  abre_rodada_f6 "$defeitos" "$P_MAX6"
   le_planejamento
   printf 'replanejamento=iniciado\nestado=%s\nreprovacoes=%s\nmax_reprovacoes_f5=%s\nproxima=%s\n' \
     "$P_ESTADO" "$P_REPROV" "$P_MAX" "$(fase_do_estado "$P_ESTADO")"
@@ -1705,6 +1954,7 @@ case "$CMD" in
   criar)            cmd_criar "$@" ;;
   avanca)           cmd_avanca "$@" ;;
   replanejar-execucao) cmd_replanejar_execucao "$@" ;;
+  autorizar-replanejamento-execucao) cmd_autorizar_replanejamento_execucao "$@" ;;
   pode-resolver)    cmd_pode_resolver "$@" ;;
   checkpoint)       cmd_checkpoint "$@" ;;
   fase)             cmd_fase "$@" ;;
