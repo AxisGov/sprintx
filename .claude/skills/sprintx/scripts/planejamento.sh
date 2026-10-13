@@ -1214,10 +1214,12 @@ modo_git() {
 # pasta ignorada: `disco`, o estado do disco governa como sempre governou.
 persistencia() {
   PERSIST=disco
+  # O modo pertence ao diagnostico publico de qualquer persistencia, inclusive
+  # quando o planejamento ainda nao existe ou ainda nao tem marco.
+  modo_git
   [ -f "$ARQ" ] || return 0
   marco
   [ -n "$M_FASE" ] || { PERSIST=sem_marco; return 0; }
-  modo_git
   [ "$G_MODO" = canonico ] || return 0
   local rel="${PREFIXO}00-PLANEJAMENTO.md"
   if git -C "$RAIZ" cat-file -e "HEAD:$rel" 2>/dev/null \
@@ -1596,8 +1598,16 @@ cmd_autorizar_replanejamento_execucao() {
 
   # A trava antecede toda leitura decisoria. `contexto` relê a mesma raiz depois da aquisicao.
   RAIZ="$(resolve_raiz)"
-  adquire_trava_autorizacao_f6 "$RAIZ" "$slug" \
-    || falha "$E_RECUSADO" "autorizacao tardia da F6 recusada: trava existente para $slug"
+  adquire_trava_autorizacao_f6 "$RAIZ" "$slug"
+  local trava_rc=$?
+  case "$trava_rc" in
+    0) ;;
+    2) falha "$E_RECUSADO" "autorizacao tardia da F6 recusada: trava existente para $slug" ;;
+    *)
+      printf 'autorizacao_f6=recusada\nestado=null\nmotivo=trava_indisponivel\nproxima=PARAR\npersistencia=disco\n'
+      falha "$E_TRANSICAO" "autorizacao tardia da F6 recusada: ambiente nao permite adquirir a trava para $slug"
+      ;;
+  esac
   contexto "$slug"
   estado_efetivo
   persistencia
