@@ -9,6 +9,19 @@ Você está na F3. Seu objetivo é gerar a árvore de sprints/fases/tasks. Nesta
 - Se `00-DECISOES.md` não existe, a F2 não aconteceu: diga "Falta a F2 (descoberta). Vou executá-la primeiro." e execute `references/02-descoberta.md`.
 - O estado do planejamento é `aguardando_f3`, `replanejar` ou `replanejar_execucao` (`scripts/planejamento.sh fase <slug>` responde `F3`). Com `orcamento_esgotado`, `replanejamento_execucao_esgotado` ou `replanejamento_execucao_recusado` **não há F3**: o estado é terminal e nada continua automaticamente.
 
+`replanejamento_execucao_recusado` continua terminal até uma chamada humana explícita. Somente
+quando o motivo durável for exatamente `orcamento_f6_nao_declarado`, a autoridade humana pode
+executar:
+
+```bash
+bash <raiz-da-skill>/scripts/planejamento.sh autorizar-replanejamento-execucao <slug> <max_replanejamentos_f6> <autorizado_por>
+```
+
+A autorização tardia abre a rodada 1 e devolve o planejamento para F3 em uma única transição; ela
+não apaga a recusa histórica nem reabre qualquer outro terminal. Depois de `aplicada`, siga esta
+seção como retorno da F6. Com `checkpoint_pendente`, execute `checkpoint <slug>` e repita o comando;
+com `retomada`, siga a fase indicada sem consumir outra rodada.
+
 Se este é um retorno da F5 (estado `replanejar`), leia `00-AUDITORIA.md` antes de regerar: cada achado ALTA e MÉDIA deve ser endereçado na nova versão do plano — pela classe, não pelo exemplo (Passo 1.1).
 
 ### Retorno da F6 — replanejamento da execução
