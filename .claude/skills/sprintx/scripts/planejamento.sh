@@ -1484,13 +1484,13 @@ valida_rodada() {
 # tardia nunca reinterpreta uma rodada adulterada. Antes de esse checkpoint
 # existir, a task continua bloqueada e o B-NN ainda precisa estar aberto.
 valida_rodada_aut6() {
-  local b t c e st atuais=""
+  local b t c st atuais=""
   le_bloqueios
-  while IFS="$TAB" read -r b t c e; do
-    [ "$e" = aberto ] || continue
+  while IFS="$TAB" read -r b t c; do
+    [ -n "$b" ] || continue
     atuais="$atuais $b"
   done <<EOF
-$B_TSV
+$(abertos_ordenados)
 EOF
   atuais="${atuais# }"
   [ "$atuais" = "$P_BLQ" ] \

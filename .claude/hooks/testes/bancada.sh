@@ -2432,6 +2432,46 @@ l5_pendente_invalido() {
   done
 }
 
+l5_pendente_reordenado() {
+  local s="$1" d f a hook out rc
+  d="$(kcopia "$FXN")"; f="$(kf "$d")"; a="$f/00-PLANEJAMENTO.md"
+  l_aut_terminal "$s" "$d" || return 1
+  kbl "$s" "$d" registrar menu null defeito_de_plano \
+    'segundo defeito da mesma rodada' 'replanejar os dois defeitos' >/dev/null || return 1
+
+  hook="$(git -C "$d" rev-parse --git-path hooks/pre-commit)"; case "$hook" in /*) ;; *) hook="$d/$hook" ;; esac
+  mkdir -p "${hook%/*}"
+  printf '#!/usr/bin/env bash\nmarcador="%s/reordena-precommit-ja-falhou"\nif [ ! -e "$marcador" ]; then : > "$marcador"; exit 1; fi\nexit 0\n' \
+    "$(git -C "$d" rev-parse --git-dir)" > "$hook"
+  chmod +x "$hook"
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)"; rc=$?
+  [ "$rc" -eq 3 ] && [ "$(fmv "$a" bloqueios_replanejamento_f6)" = '[B-01, B-02]' ] || return 1
+
+  awk '
+    NR == 1 && $0 == "---" { fm=1; print; next }
+    fm && $0 == "bloqueios:" { lista=1; print; next }
+    lista && $0 == "  - id: B-01" { captura=1; b1=$0 ORS; next }
+    lista && $0 == "  - id: B-02" { captura=2; b2=$0 ORS; next }
+    lista && captura && /^    / {
+      if (captura == 1) b1=b1 $0 ORS
+      else b2=b2 $0 ORS
+      next
+    }
+    lista {
+      printf "%s%s", b2, b1
+      lista=0; captura=0
+    }
+    fm && $0 == "---" { fm=0 }
+    { print }
+  ' "$f/00-BLOQUEIOS.md" > "$K/l5-reordena.tmp" \
+    && mv "$K/l5-reordena.tmp" "$f/00-BLOQUEIOS.md" || return 1
+  [ "$(kbl "$s" "$d" listar menu | cut -f1 | paste -sd, -)" = 'B-02,B-01' ] || return 1
+
+  out="$(l_aut_aplica "$s" "$d" 2 usuario)"; rc=$?
+  [ "$rc" -eq 3 ] && [ "$(kv "$out" autorizacao_f6)" = checkpoint_pendente ] \
+    && [ "$(kv "$out" proxima)" = CHECKPOINT ]
+}
+
 l5_parcial_e_congelada_invalidos() {
   local s="$1" d a ev h ck evck rc
   d="$(kcopia "$FXN")"; l5_deixa_checkpoint_pendente "$s" "$d" || return 1
@@ -2538,6 +2578,7 @@ d="$(kcopia "$FXN")"; l_aut_teto_decimal_grande "$PL" "$d"; afirma "l20-teto-dec
   "inteiro positivo sem limite implicito nao corrompe o planejamento"
 d="$(kcopia "$FXN")"; l5_checkpoint_e_retomada "$PL" "$d"; afirma "m1-m4-m7-m10-checkpoint-e-retomada-idempotentes" $? "queda, repeticao, checkpoint, retomada e argumentos"
 l5_pendente_invalido "$PL"; afirma "m6-pendente-valida-bloqueio-classe-e-task" $? "comando e checkpoint falham fechados"
+l5_pendente_reordenado "$PL"; afirma "m6-pendente-normaliza-ordem-dos-bloqueios" $? "reordenar os mesmos B-NN nao invalida a autorizacao"
 l5_parcial_e_congelada_invalidos "$PL"; afirma "m5-congeladas-e-parciais-invalidos-nao-gravam" $? "fronteiras inseguras retornam rc2, sem evento"
 d="$(kcopia "$FXN")"; l5_retomada_duravel_recusa_parcial_perdido "$PL" "$d"; afirma "m5-retomada-duravel-recusa-parcial-perdido" $? "rc2 antes de retomada, sem evento nem gravacao"
 d="$(kcopia "$FXN")"; l5_fechamento_pendente_e_fechado "$PL" "$d"; afirma "m8-m9-m10-fechamento-pendente-e-rodada-fechada" $? "checkpoint fecha uma vez; repeticao para"
