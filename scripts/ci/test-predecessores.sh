@@ -162,6 +162,9 @@ grupo_estado_git() {
   nova_fixture; printf 'mudou\n' >> "$FX/$SPEC"; git -C "$FX" add "$SPEC"; caso_falha 'recusa staged' registra especificacao "$SPEC"
   nova_fixture; printf 'mudou\n' >> "$FX/$SPEC"; caso_falha 'recusa modificado' registra especificacao "$SPEC"
   nova_fixture; rm "$FX/$SPEC"; caso_falha 'recusa removido' registra especificacao "$SPEC"
+  nova_fixture; caso_rc 'precondicao valida-modificado' 0 registra especificacao "$SPEC"; printf 'mudou\n' >> "$FX/$SPEC"; caso_falha 'validar recusa predecessor modificado' pred --validar ft-pre
+  nova_fixture; caso_rc 'precondicao valida-staged' 0 registra especificacao "$SPEC"; printf 'mudou\n' >> "$FX/$SPEC"; git -C "$FX" add "$SPEC"; caso_falha 'validar recusa predecessor staged' pred --validar ft-pre
+  nova_fixture; caso_rc 'precondicao valida-removido' 0 registra especificacao "$SPEC"; rm "$FX/$SPEC"; caso_falha 'validar recusa predecessor removido' pred --validar ft-pre
   nova_fixture; caso_falha 'recusa symlink' registra especificacao 'docs/superpowers/specs/ft-pre-link.md'
   nova_fixture; caso_falha 'recusa gitlink' registra especificacao 'docs/superpowers/gitlink'
   nova_fixture; caso_falha 'recusa diretorio' registra especificacao 'docs/superpowers/specs'
@@ -231,6 +234,46 @@ grupo_schema() {
   schema_invalido 'recusa scalar malformado' scalar
 }
 
+tem() { grep -qF "$2" "$1"; }
+linha_de() { grep -nF "$2" "$1" | head -1 | cut -d: -f1; }
+
+grupo_contrato() {
+  echo '== contrato =='
+  local sk="$RAIZ_SUITE/.claude/skills/sprintx" schema="$RAIZ_SUITE/.claude/skills/sprintx/references/00-schema.md"
+  local ingestao="$RAIZ_SUITE/.claude/skills/sprintx/references/01-ingestao.md" rastro="$RAIZ_SUITE/.claude/skills/sprintx/references/08-rastro.md"
+  local skill="$RAIZ_SUITE/.claude/skills/sprintx/SKILL.md" cmd="$RAIZ_SUITE/.claude/commands/sprintx-base.md" oc="$RAIZ_SUITE/.opencode/command/sprintx-base.md"
+  local l_leu l_reg l_val l_fim ruim
+
+  tem "$schema" '### `00-PREDECESSORES.md` → `kind: predecessores`'
+  afirma 'schema documenta kind predecessores' $? 'kind ausente do schema'
+  tem "$schema" 'origem: superpowers' && tem "$schema" 'papel: especificacao' && tem "$schema" 'papel: plano'
+  afirma 'schema documenta enums do predecessor' $? 'origem ou papel ausente'
+  tem "$skill" '00-PREDECESSORES.md'
+  afirma 'estrutura fixa inclui 00-PREDECESSORES.md' $? 'arquivo ausente da arvore da skill'
+
+  l_leu="$(linha_de "$ingestao" 'Leia esses arquivos de verdade')"
+  l_reg="$(linha_de "$ingestao" 'predecessores.sh --registrar')"
+  l_val="$(linha_de "$ingestao" 'predecessores.sh --validar')"
+  l_fim="$(linha_de "$ingestao" '## Ao terminar')"
+  [ -n "$l_leu" ] && [ -n "$l_reg" ] && [ "$l_reg" -gt "$l_leu" ]
+  afirma 'F1 registra somente depois de ler' $? "leu=$l_leu registra=$l_reg"
+  [ -n "$l_val" ] && [ -n "$l_fim" ] && [ "$l_val" -lt "$l_fim" ]
+  afirma 'F1 valida antes de encerrar' $? "valida=$l_val fim=$l_fim"
+  tem "$ingestao" 'não faça varredura automática' || tem "$ingestao" 'não varra diretórios automaticamente'
+  afirma 'F1 proibe descoberta automatica de predecessores' $? 'proibicao ausente'
+
+  tem "$cmd" 'references/01-ingestao.md' && tem "$oc" 'references/01-ingestao.md'
+  afirma 'entrypoints apontam para a mesma ingestao' $? 'entrypoint divergente'
+  tem "$rastro" 'não cria evento novo' && tem "$rastro" '`commit_criado`'
+  afirma 'rastro preserva vocabulario e commit_criado' $? 'contrato do rastro ausente'
+
+  ruim=0
+  for nome in predecessor_registrado predecessor_validado predecessores_validados retomada_iniciada retomada_concluida; do
+    grep -RqsF "$nome" "$sk" "$RAIZ_SUITE/.claude/commands" "$RAIZ_SUITE/.opencode/command" && ruim=1
+  done
+  [ "$ruim" -eq 0 ]; afirma 'nenhum evento inventado no contrato' $? 'evento fora do enum encontrado'
+}
+
 feature_para_checkpoint() {
   FX="$K/checkpoint-$fx_n"; fx_n=$((fx_n + 1))
   git init -q -b main "$FX"; git -C "$FX" config user.email teste@fixture.invalid; git -C "$FX" config user.name teste; git -C "$FX" config commit.gpgsign false
@@ -245,10 +288,18 @@ feature_para_checkpoint() {
 
 grupo_checkpoint() {
   echo '== checkpoint =='
+  local plano before_plano before_stage before_rastro saida rc depois_plano depois_stage depois_rastro
   feature_para_checkpoint
   manifesto_valido "$SPEC" especificacao "$FX_SPEC_COMMIT" "$FX_SPEC_BLOB"
   sed -i 's/origem: superpowers/origem: invalida/' "$MANIFESTO"
-  caso_falha 'manifesto invalido impede avanca f2' env SPRINTX_RAIZ="$FX" bash "$PL" avanca ft-pre f2
+  plano="$FX/docs/sprintx/features/ft-pre/00-PLANEJAMENTO.md"
+  before_plano="$(cksum < "$plano")"; before_stage="$(git -C "$FX" diff --cached --name-status)"
+  if [ -f "$FX/docs/eventos/ft-pre.jsonl" ]; then before_rastro="$(cksum < "$FX/docs/eventos/ft-pre.jsonl")"; else before_rastro=ausente; fi
+  saida="$(env SPRINTX_RAIZ="$FX" bash "$PL" avanca ft-pre f2 2>&1)"; rc=$?
+  depois_plano="$(cksum < "$plano")"; depois_stage="$(git -C "$FX" diff --cached --name-status)"
+  if [ -f "$FX/docs/eventos/ft-pre.jsonl" ]; then depois_rastro="$(cksum < "$FX/docs/eventos/ft-pre.jsonl")"; else depois_rastro=ausente; fi
+  [ "$rc" -ne 0 ] && [ "$before_plano" = "$depois_plano" ] && [ "$before_stage" = "$depois_stage" ] && [ "$before_rastro" = "$depois_rastro" ]
+  afirma 'manifesto invalido impede avanca f2 sem efeitos' $? "rc=$rc saida=$saida"
 
   feature_para_checkpoint
   manifesto_valido "$SPEC" especificacao "$FX_SPEC_COMMIT" "$FX_SPEC_BLOB"
@@ -257,7 +308,7 @@ grupo_checkpoint() {
   afirma 'checkpoint contem manifesto' $? '00-PREDECESSORES.md ausente do HEAD'
 }
 
-GRUPOS='registro caminhos estado-git historia schema checkpoint'
+GRUPOS='registro caminhos estado-git historia schema contrato checkpoint'
 [ "$#" -gt 0 ] || set -- todos
 selecionado() {
   local pedido="$1" x
@@ -274,6 +325,7 @@ for grupo in $GRUPOS; do
       estado-git) grupo_estado_git ;;
       historia) grupo_historia ;;
       schema) grupo_schema ;;
+      contrato) grupo_contrato ;;
       checkpoint) grupo_checkpoint ;;
     esac
   fi

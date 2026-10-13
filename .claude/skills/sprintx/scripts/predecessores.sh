@@ -21,6 +21,12 @@ valida_slug() {
 
 resolve_raiz() {
   local raiz
+  if [ -n "${SPRINTX_RAIZ:-}" ]; then
+    git -C "$SPRINTX_RAIZ" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+      || falha "$E_PROVA" 'SPRINTX_RAIZ nao aponta para repositorio Git'
+    printf '%s' "$SPRINTX_RAIZ"
+    return 0
+  fi
   raiz="$(git rev-parse --show-toplevel 2>/dev/null)" || falha "$E_PROVA" 'fora de um repositorio Git'
   printf '%s' "$raiz"
 }
@@ -96,6 +102,15 @@ prova_item() { # prova_item <path> <origem> <papel> <commit> <blob>
   git -C "$RAIZ" merge-base --is-ancestor "$commit" HEAD >/dev/null 2>&1 \
     || falha "$E_PROVA" "commit predecessor nao alcancavel de HEAD: $commit"
   prova_nascimento "$commit"
+
+  [ -f "$RAIZ/$caminho" ] && [ ! -L "$RAIZ/$caminho" ] \
+    || falha "$E_CONTRATO" "predecessor ausente ou nao regular no disco: $caminho"
+  git -C "$RAIZ" ls-files --error-unmatch -- "$caminho" >/dev/null 2>&1 \
+    || falha "$E_CONTRATO" "predecessor nao rastreado: $caminho"
+  git -C "$RAIZ" diff --quiet -- "$caminho" \
+    || falha "$E_CONTRATO" "predecessor modificado: $caminho"
+  git -C "$RAIZ" diff --cached --quiet -- "$caminho" \
+    || falha "$E_CONTRATO" "predecessor staged: $caminho"
 
   a="$(modo_blob "$commit" "$caminho")" || falha "$E_PROVA" "predecessor nao e blob regular: $caminho"
   b="$(modo_blob HEAD "$caminho")" || falha "$E_PROVA" "HEAD nao contem blob regular: $caminho"
@@ -276,7 +291,14 @@ MANIFESTO_REL="docs/sprintx/features/$SLUG/00-PREDECESSORES.md"
 MANIFESTO="$RAIZ/$MANIFESTO_REL"
 PLANEJAMENTO_REL="docs/sprintx/features/$SLUG/00-PLANEJAMENTO.md"
 TMP_BASE="$(mktemp -d)" || falha "$E_CONTRATO" 'nao consegui criar temporario de leitura'
-trap 'rc=$?; [ -z "$TMP_ATOMICO" ] || rm -f "$TMP_ATOMICO"; rm -rf "$TMP_BASE"; exit $rc' EXIT HUP INT TERM
+limpa() {
+  local rc=$?
+  trap - EXIT HUP INT TERM
+  [ -z "$TMP_ATOMICO" ] || rm -f "$TMP_ATOMICO"
+  rm -rf "$TMP_BASE"
+  exit "$rc"
+}
+trap limpa EXIT HUP INT TERM
 
 case "$CMD" in
   --registrar) cmd_registrar "$@" ;;

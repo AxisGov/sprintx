@@ -124,6 +124,15 @@ Respostas:
 
 Nunca use uma ferramenta de edição que reescreva o arquivo inteiro: o rastro é append-only, e reescrevê-lo destrói o histórico que o painel usa.
 
+## Predecessores verificáveis
+
+O protocolo de predecessores **não cria evento novo**. Registro e validação são observáveis
+pelas saídas estruturadas de `scripts/predecessores.sh` e pelo artefato durável
+`00-PREDECESSORES.md`. Na integração com a MergeX, os checkpoints de método continuam usando o
+evento existente `commit_criado`; não existem eventos próprios para registrar, validar ou
+retomar predecessores. Uma falha anterior ao commit permanece somente na saída do comando e
+não produz linha de rastro falsa.
+
 ## Versionamento
 
 O rastro é **ignorado pelo versionador** por padrão: é local da máquina de quem executou, cresce rápido, e o painel roda local. A F1 garante isso **localmente**, pelo `info/exclude` do repositório (caminho resolvido com `git rev-parse --git-path info/exclude`), e só quando o padrão ainda não é ignorado — ela **não** mexe no `.gitignore` versionado, que é decisão do projeto, não do trabalho (`references/01-ingestao.md`).

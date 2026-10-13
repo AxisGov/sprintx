@@ -240,6 +240,21 @@ arquivos: siga para o Passo 4 sem registrar nada. A F1 nunca falha por falta del
 dele não é lacuna — não vai para `00-LACUNAS.md`, porque lacuna é o que a skill procurou na
 fonte e não achou, não uma ferramenta opcional que o projeto não instalou.
 
+## Passo 3.2 — Registrar documentos Superpowers realmente consumidos
+
+Depois de **ler de verdade** uma especificação ou um plano em `docs/superpowers/` e de citar
+essa evidência em um arquivo da base, registre exatamente aquele documento:
+
+```bash
+bash <raiz-da-skill>/scripts/predecessores.sh --registrar <slug> \
+  --origem superpowers --papel <especificacao|plano> --caminho <caminho-relativo>
+```
+
+Não registre candidato que não foi lido nem citado e **não faça varredura automática** de
+`docs/superpowers/`: o manifesto declara consumo, não presença. O script calcula commit e blob;
+não os informe à mão. Repetir a mesma prova é no-op. Uma recusa não autoriza editar
+`00-PREDECESSORES.md` manualmente.
+
 ## Passo 4 — Formato de cada arquivo da base
 
 Use `assets/TEMPLATE-base-recurso.md` (caminho relativo à raiz da skill). Todo arquivo tem exatamente estas seções:
@@ -268,6 +283,8 @@ Use `assets/TEMPLATE-base-recurso.md` (caminho relativo à raiz da skill). Todo 
 - [ ] Nenhum campo inventado; todo número referenciado.
 - [ ] `00-BLOQUEIOS.md` e `base/00-INDICE.md` têm frontmatter válido conforme `references/00-schema.md`.
 - [ ] `00-PLANEJAMENTO.md` existe, criado por `scripts/planejamento.sh criar`, com os três tetos que o caller declarou (`max_reprovacoes_f5`, `orcamento_declarado_por`, `max_replanejamentos_f6`) — e `null` em cada um que ele não declarou.
+- [ ] Se `00-PREDECESSORES.md` existe, cada item foi realmente lido e citado pela base, e
+  `bash <raiz-da-skill>/scripts/predecessores.sh --validar <slug>` responde `resultado=ok`.
 
 ## Quando o critério não é atendido
 
