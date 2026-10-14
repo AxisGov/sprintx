@@ -2722,6 +2722,33 @@ l_lock_sinal_durante_aquisicao() {
   rmdir "$p" 2>/dev/null || true
   return "$resultado"
 }
+l_lock_mkdir_interrompido_depois_de_criar() {
+  [ -f "$TRAVA_AUT6" ] || return 1
+  local p rc=0 resultado=1
+  p="$(git -C "$W" rev-parse --git-path sprintx/travas/autorizacao-f6-mkdir-interrompido.lock)" || return 1
+  case "$p" in /*) ;; *) p="$W/$p" ;; esac
+  bash -c '
+    . "$1" || exit 1
+    ALVO_TRAVA_AUT6="$3"
+    mkdir() {
+      local mkdir_rc disposicao
+      command mkdir "$@"; mkdir_rc=$?
+      if [ "$mkdir_rc" -eq 0 ] && [ "$#" -eq 1 ] && [ "$1" = "$ALVO_TRAVA_AUT6" ]; then
+        kill -s TERM "$$"
+        disposicao="$(trap -p TERM)"
+        case "$disposicao" in
+          *"_trava_aut6_adia_term"*) return 143 ;;
+          *) return "$mkdir_rc" ;;
+        esac
+      fi
+      return "$mkdir_rc"
+    }
+    adquire_trava_autorizacao_f6 "$2" mkdir-interrompido
+  ' _ "$TRAVA_AUT6" "$W" "$p" >/dev/null 2>&1 || rc=$?
+  [ "$rc" -ne 0 ] && [ ! -e "$p" ] && resultado=0
+  rmdir "$p" 2>/dev/null || true
+  return "$resultado"
+}
 l_lock_sinal_com_trava_alheia() {
   [ -f "$TRAVA_AUT6" ] || return 1
   local p rc=0 resultado=1 dono="outra-execucao"
@@ -2801,6 +2828,7 @@ l_lock_concorrente; afirma "l-lock-2-concorrente-recusada" $? "uma aquisicao ven
 l_lock_trap; afirma "l-lock-3-trap-remove-so-a-propria" $? "exit 7 preservado e lock adquirido removido"
 l_lock_existente; afirma "l-lock-4-existente-nao-e-removida" $? "lock preexistente falha e permanece"
 l_lock_sinal_durante_aquisicao; afirma "l-lock-5-sinal-na-janela-nao-deixa-orfa" $? "TERM entre mkdir e trap limpa a trava adquirida"
+l_lock_mkdir_interrompido_depois_de_criar; afirma "l-lock-5b-mkdir-interrompido-nao-deixa-orfa" $? "mkdir criado nao retorna falha por sinal antes do registro da posse"
 l_lock_preserva_traps_de_sinal; afirma "l-lock-6-preserva-traps-de-sinal-do-chamador" $? "handlers HUP INT TERM anteriores continuam executaveis"
 l_lock_sinal_com_trava_alheia; afirma "l-lock-7-sinal-nao-remove-trava-alheia" $? "TERM depois do mkdir recusado preserva lock e dono de outra execucao"
 l_lock_sem_janela_default_na_restauracao; afirma "l-lock-8-restauracao-sem-janela-default" $? "restauracao nao limpa os tres handlers antes de repor o chamador"
@@ -9704,7 +9732,7 @@ al_mutante "ds175-mutante-13" $? "$AL_M" l_aut_concorrente
 
 # 14 — lock preexistente e tratado como aquisicao bem sucedida e pode ser removido.
 AL_M="$(al_copia m14)"; AL_LIB="${AL_M%/scripts/planejamento.sh}/scripts/lib/trava-autorizacao-f6.sh"
-al_muta "$AL_LIB" '  mkdir "$caminho" 2>/dev/null || mkdir_rc=$?' '  true # mutante aceita trava existente'
+al_muta "$AL_LIB" 'mkdir "$caminho"' 'true # mutante aceita trava existente'
 al_mutante "ds175-mutante-14" $? "$AL_M" l_aut_trava
 
 # 15 — um eixo legado e promovido automaticamente ao eixo presente.
