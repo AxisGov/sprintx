@@ -33,10 +33,21 @@ _trava_aut6_ao_sair() {
 }
 
 _trava_aut6_restaura_sinais() {
-  trap - HUP INT TERM
-  [ -z "$_TRAVA_AUT6_TRAP_HUP" ] || eval "$_TRAVA_AUT6_TRAP_HUP"
-  [ -z "$_TRAVA_AUT6_TRAP_INT" ] || eval "$_TRAVA_AUT6_TRAP_INT"
-  [ -z "$_TRAVA_AUT6_TRAP_TERM" ] || eval "$_TRAVA_AUT6_TRAP_TERM"
+  if [ -n "$_TRAVA_AUT6_TRAP_HUP" ]; then
+    eval "$_TRAVA_AUT6_TRAP_HUP"
+  else
+    trap - HUP
+  fi
+  if [ -n "$_TRAVA_AUT6_TRAP_INT" ]; then
+    eval "$_TRAVA_AUT6_TRAP_INT"
+  else
+    trap - INT
+  fi
+  if [ -n "$_TRAVA_AUT6_TRAP_TERM" ]; then
+    eval "$_TRAVA_AUT6_TRAP_TERM"
+  else
+    trap - TERM
+  fi
   _TRAVA_AUT6_TRAP_HUP=""
   _TRAVA_AUT6_TRAP_INT=""
   _TRAVA_AUT6_TRAP_TERM=""

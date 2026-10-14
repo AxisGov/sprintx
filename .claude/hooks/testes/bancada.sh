@@ -2381,11 +2381,18 @@ l_aut_sem_planejamento_e_sem_marco() {
 }
 
 l_aut_trava_ambiente() {
-  local s="$1" d out rc
+  local s="$1" d out rc resultado=1
   d="$(mktemp -d "$K/aut-sem-git.XXXXXX")"
-  out="$(kpl "$s" "$d" autorizar-replanejamento-execucao menu 2 usuario)"; rc=$?
+  out="$(cd "$d" && GIT_CEILING_DIRECTORIES="$K" \
+    bash "$s" autorizar-replanejamento-execucao menu 2 usuario 2>&1)"; rc=$?
   [ "$rc" -eq 5 ] && [ "$(kv "$out" motivo)" = trava_indisponivel ] \
-    && ! printf '%s\n' "$out" | grep -q 'trava existente'
+    && ! printf '%s\n' "$out" | grep -q 'trava existente' && resultado=0
+  if [ "$resultado" -ne 0 ]; then
+    printf 'l_aut_trava_ambiente: d=%s repo=%s rc=%s motivo=%s git_dir=%s git_work_tree=%s saida=%s\n' \
+      "$d" "$(git -C "$d" rev-parse --show-toplevel 2>/dev/null || printf sem-git)" \
+      "$rc" "$(kv "$out" motivo)" "${GIT_DIR-}" "${GIT_WORK_TREE-}" "$out" >&2
+  fi
+  return "$resultado"
 }
 
 l_aut_trava() {
@@ -2746,17 +2753,47 @@ l_lock_preserva_traps_de_sinal() {
   [ -f "$TRAVA_AUT6" ] || return 1
   local q="$K/lock-traps-chamador" rc=0
   mkdir -p "$q"
-  (
-    trap ':' HUP
-    trap ':' INT
-    trap ':' TERM
-    antes="$(trap -p HUP INT TERM)"
-    . "$TRAVA_AUT6" || exit 1
-    adquire_trava_autorizacao_f6 "$W" traps || exit 1
-    [ "$(trap -p HUP INT TERM)" = "$antes" ] || exit 1
+  bash -c '
+    recebidos=0
+    ao_sinal() { recebidos=$((recebidos + 1)); }
+    trap ao_sinal HUP
+    trap ao_sinal INT
+    trap ao_sinal TERM
+    . "$1" || exit 1
+    adquire_trava_autorizacao_f6 "$2" traps || exit 1
+    kill -s HUP "$$"
+    kill -s INT "$$"
+    kill -s TERM "$$"
+    [ "$recebidos" -eq 3 ] || exit 1
     libera_trava_autorizacao_f6 || exit 1
-    [ "$(trap -p HUP INT TERM)" = "$antes" ]
-  ) || rc=$?
+    kill -s HUP "$$"
+    kill -s INT "$$"
+    kill -s TERM "$$"
+    [ "$recebidos" -eq 6 ]
+  ' _ "$TRAVA_AUT6" "$W" || rc=$?
+  return "$rc"
+}
+l_lock_sem_janela_default_na_restauracao() {
+  [ -f "$TRAVA_AUT6" ] || return 1
+  local rc=0
+  bash -c '
+    recebidos=0
+    ao_sinal() { recebidos=$((recebidos + 1)); }
+    trap ao_sinal HUP
+    trap ao_sinal INT
+    trap ao_sinal TERM
+    trap() {
+      if [ "$#" -eq 4 ] && [ "$1" = - ] && [ "$2" = HUP ] && [ "$3" = INT ] && [ "$4" = TERM ]; then
+        builtin trap "$@"
+        kill -s TERM "$$"
+        return
+      fi
+      builtin trap "$@"
+    }
+    . "$1" || exit 1
+    adquire_trava_autorizacao_f6 "$2" janela || exit 1
+    [ "$recebidos" -eq 0 ]
+  ' _ "$TRAVA_AUT6" "$W" >/dev/null 2>&1 || rc=$?
   return "$rc"
 }
 l_lock_caminho; afirma "l-lock-1-caminho-por-worktree-e-slug" $? "git-path distingue worktree e slug"
@@ -2764,8 +2801,9 @@ l_lock_concorrente; afirma "l-lock-2-concorrente-recusada" $? "uma aquisicao ven
 l_lock_trap; afirma "l-lock-3-trap-remove-so-a-propria" $? "exit 7 preservado e lock adquirido removido"
 l_lock_existente; afirma "l-lock-4-existente-nao-e-removida" $? "lock preexistente falha e permanece"
 l_lock_sinal_durante_aquisicao; afirma "l-lock-5-sinal-na-janela-nao-deixa-orfa" $? "TERM entre mkdir e trap limpa a trava adquirida"
-l_lock_preserva_traps_de_sinal; afirma "l-lock-6-preserva-traps-de-sinal-do-chamador" $? "HUP INT TERM anteriores sobrevivem a aquisicao"
+l_lock_preserva_traps_de_sinal; afirma "l-lock-6-preserva-traps-de-sinal-do-chamador" $? "handlers HUP INT TERM anteriores continuam executaveis"
 l_lock_sinal_com_trava_alheia; afirma "l-lock-7-sinal-nao-remove-trava-alheia" $? "TERM depois do mkdir recusado preserva lock e dono de outra execucao"
+l_lock_sem_janela_default_na_restauracao; afirma "l-lock-8-restauracao-sem-janela-default" $? "restauracao nao limpa os tres handlers antes de repor o chamador"
 
 # Contrato nos documentos: estados, comando da F6, resolucao, congelamento e decisoes.
 SCHK="$SK/references/00-schema.md"
