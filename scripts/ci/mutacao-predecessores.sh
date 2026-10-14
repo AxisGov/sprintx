@@ -32,7 +32,7 @@ old, new = sys.argv[2], sys.argv[3]
 text = p.read_text(encoding="utf-8")
 if old not in text:
     raise SystemExit(f"mutacao nao aplicada em {p}: {old!r}")
-with p.open("w", encoding="utf-8", newline="") as f:
+with open(p, "w", encoding="utf-8", newline="") as f:
     f.write(text.replace(old, new))
 PY
 }
