@@ -2693,10 +2693,79 @@ l_lock_existente() {
   rmdir "$p"
   return "$rc"
 }
+l_lock_sinal_durante_aquisicao() {
+  [ -f "$TRAVA_AUT6" ] || return 1
+  local p rc=0 resultado=1
+  p="$(git -C "$W" rev-parse --git-path sprintx/travas/autorizacao-f6-sinal.lock)" || return 1
+  case "$p" in /*) ;; *) p="$W/$p" ;; esac
+  bash -c '
+    . "$1" || exit 1
+    ALVO_TRAVA_AUT6="$3"
+    mkdir() {
+      local mkdir_rc
+      command mkdir "$@"; mkdir_rc=$?
+      if [ "$mkdir_rc" -eq 0 ] && [ "$#" -eq 1 ] && [ "$1" = "$ALVO_TRAVA_AUT6" ]; then
+        kill -s TERM "$$"
+      fi
+      return "$mkdir_rc"
+    }
+    adquire_trava_autorizacao_f6 "$2" sinal
+  ' _ "$TRAVA_AUT6" "$W" "$p" >/dev/null 2>&1 || rc=$?
+  [ "$rc" -ne 0 ] && [ ! -e "$p" ] && resultado=0
+  rmdir "$p" 2>/dev/null || true
+  return "$resultado"
+}
+l_lock_sinal_com_trava_alheia() {
+  [ -f "$TRAVA_AUT6" ] || return 1
+  local p rc=0 resultado=1 dono="outra-execucao"
+  p="$(git -C "$W" rev-parse --git-path sprintx/travas/autorizacao-f6-sinal-alheia.lock)" || return 1
+  case "$p" in /*) ;; *) p="$W/$p" ;; esac
+  mkdir -p "$p" || return 1
+  printf '%s\n' "$dono" > "$p/dono" || { rm -rf "$p"; return 1; }
+  bash -c '
+    . "$1" || exit 1
+    ALVO_TRAVA_AUT6="$3"
+    mkdir() {
+      local mkdir_rc
+      command mkdir "$@"; mkdir_rc=$?
+      if [ "$#" -eq 1 ] && [ "$1" = "$ALVO_TRAVA_AUT6" ]; then
+        kill -s TERM "$$"
+      fi
+      return "$mkdir_rc"
+    }
+    adquire_trava_autorizacao_f6 "$2" sinal-alheia
+  ' _ "$TRAVA_AUT6" "$W" "$p" >/dev/null 2>&1 || rc=$?
+  if [ "$rc" -ne 0 ] && [ -d "$p" ] && [ "$(cat "$p/dono" 2>/dev/null)" = "$dono" ]; then
+    resultado=0
+  fi
+  rm -f "$p/dono"
+  rmdir "$p" 2>/dev/null || true
+  return "$resultado"
+}
+l_lock_preserva_traps_de_sinal() {
+  [ -f "$TRAVA_AUT6" ] || return 1
+  local q="$K/lock-traps-chamador" rc=0
+  mkdir -p "$q"
+  (
+    trap ':' HUP
+    trap ':' INT
+    trap ':' TERM
+    antes="$(trap -p HUP INT TERM)"
+    . "$TRAVA_AUT6" || exit 1
+    adquire_trava_autorizacao_f6 "$W" traps || exit 1
+    [ "$(trap -p HUP INT TERM)" = "$antes" ] || exit 1
+    libera_trava_autorizacao_f6 || exit 1
+    [ "$(trap -p HUP INT TERM)" = "$antes" ]
+  ) || rc=$?
+  return "$rc"
+}
 l_lock_caminho; afirma "l-lock-1-caminho-por-worktree-e-slug" $? "git-path distingue worktree e slug"
 l_lock_concorrente; afirma "l-lock-2-concorrente-recusada" $? "uma aquisicao vence e a outra falha fechada"
 l_lock_trap; afirma "l-lock-3-trap-remove-so-a-propria" $? "exit 7 preservado e lock adquirido removido"
 l_lock_existente; afirma "l-lock-4-existente-nao-e-removida" $? "lock preexistente falha e permanece"
+l_lock_sinal_durante_aquisicao; afirma "l-lock-5-sinal-na-janela-nao-deixa-orfa" $? "TERM entre mkdir e trap limpa a trava adquirida"
+l_lock_preserva_traps_de_sinal; afirma "l-lock-6-preserva-traps-de-sinal-do-chamador" $? "HUP INT TERM anteriores sobrevivem a aquisicao"
+l_lock_sinal_com_trava_alheia; afirma "l-lock-7-sinal-nao-remove-trava-alheia" $? "TERM depois do mkdir recusado preserva lock e dono de outra execucao"
 
 # Contrato nos documentos: estados, comando da F6, resolucao, congelamento e decisoes.
 SCHK="$SK/references/00-schema.md"
@@ -9597,7 +9666,7 @@ al_mutante "ds175-mutante-13" $? "$AL_M" l_aut_concorrente
 
 # 14 — lock preexistente e tratado como aquisicao bem sucedida e pode ser removido.
 AL_M="$(al_copia m14)"; AL_LIB="${AL_M%/scripts/planejamento.sh}/scripts/lib/trava-autorizacao-f6.sh"
-al_muta "$AL_LIB" '  if ! mkdir "$caminho" 2>/dev/null; then' '  if false; then # mutante aceita trava existente'
+al_muta "$AL_LIB" '  mkdir "$caminho" 2>/dev/null || mkdir_rc=$?' '  true # mutante aceita trava existente'
 al_mutante "ds175-mutante-14" $? "$AL_M" l_aut_trava
 
 # 15 — um eixo legado e promovido automaticamente ao eixo presente.
