@@ -2,13 +2,67 @@
 # bancada.sh — script de bancada minimo para os hooks de sessoes paralelas.
 #
 # Nao e uma suite completa (a sprintx nao tinha nenhuma antes desta feature —
-# ver base/testes-e-mimocode.md). Monta uma fixture git real em /tmp, com um
+# ver base/testes-e-mimocode.md). Monta uma fixture git real em disco, com um
 # worktree derivado, e roda cada hook novo contra ela, conferindo exit code e,
 # quando aplicavel, o conteudo de stderr (bloqueio) ou stdout (aviso).
 set -uo pipefail
 
 H="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-W="$(mktemp -d)"
+BANCADA_CACHE="${XDG_CACHE_HOME:-${HOME:?HOME ausente}/.cache}/sprintx-bancada"
+mkdir -p "$BANCADA_CACHE" || { printf 'bancada: cache indisponivel: %s\n' "$BANCADA_CACHE" >&2; exit 1; }
+[ ! -L "$BANCADA_CACHE" ] || { printf 'bancada: cache nao pode ser symlink: %s\n' "$BANCADA_CACHE" >&2; exit 1; }
+
+# Só remove workdirs que esta própria bancada marcou, com mais de uma hora e
+# cujo PID já não existe. Diretórios genéricos de /tmp e caches de terceiros
+# nunca entram nesta limpeza.
+find "$BANCADA_CACHE" -mindepth 1 -maxdepth 1 -type d -name 'bancada.*' -mmin +60 -print0 2>/dev/null \
+  | while IFS= read -r -d '' antigo; do
+      [ -f "$antigo/.sprintx-bancada" ] || continue
+      pid_antigo="$(sed -n 's/^pid=//p' "$antigo/.sprintx-bancada" | sed -n 1p)"
+      case "$pid_antigo" in ''|*[!0-9]*) continue ;; esac
+      kill -0 "$pid_antigo" 2>/dev/null && continue
+      if command -v lsof >/dev/null 2>&1; then
+        lsof +D "$antigo" >/dev/null 2>&1 && continue
+      elif command -v fuser >/dev/null 2>&1; then
+        fuser -v "$antigo" >/dev/null 2>&1 && continue
+      else
+        # Sem uma segunda prova de desuso, preservar é mais seguro que apagar.
+        continue
+      fi
+      rm -rf -- "$antigo"
+    done
+
+WORKDIR="$(mktemp -d "$BANCADA_CACHE/bancada.XXXXXX")" \
+  || { printf 'bancada: nao foi possivel criar workdir em disco\n' >&2; exit 1; }
+printf 'pid=%s\nscript=%s\ncriado_em=%s\n' "$$" "$0" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  > "$WORKDIR/.sprintx-bancada"
+mkdir -p "$WORKDIR/tmp" "$BANCADA_CACHE/node-compile-cache" \
+  "$BANCADA_CACHE/npm-cache" "$BANCADA_CACHE/playwright"
+export TMPDIR="$WORKDIR/tmp"
+export NODE_COMPILE_CACHE="$BANCADA_CACHE/node-compile-cache"
+export NPM_CONFIG_CACHE="$BANCADA_CACHE/npm-cache"
+export PLAYWRIGHT_BROWSERS_PATH="$BANCADA_CACHE/playwright"
+
+W=""; WT=""
+limpa_workdir() {
+  local rc="$?"
+  trap - EXIT HUP INT TERM
+  [ -z "$W" ] || [ -z "$WT" ] || git -C "$W" worktree remove --force "$WT" >/dev/null 2>&1
+  rm -rf -- "$WORKDIR"
+  exit "$rc"
+}
+trap limpa_workdir EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+TMP_USO_KB="$(du -sk /tmp 2>/dev/null | awk '{ print $1 }')"
+if [ "${TMP_USO_KB:-0}" -gt 1048576 ]; then
+  printf 'bancada: aviso: /tmp usa mais de 1 GiB (%s KiB); a bancada atual usa %s\n' \
+    "$TMP_USO_KB" "$WORKDIR" >&2
+fi
+
+W="$(mktemp -d "$TMPDIR/fixture.XXXXXX")"
 # $W e um repositorio git real (nao so um .git vazio): os hooks novos precisam
 # de raiz_repo() e de git status funcionando de verdade. WT e um worktree
 # derivado, usado pelo caso que prova o comportamento em worktree.
@@ -19,7 +73,6 @@ git -C "$W" add -A -- .gitignore >/dev/null 2>&1 || true
 git -C "$W" -c commit.gpgsign=false commit -q -m init --allow-empty >/dev/null 2>&1
 WT="${W}--worktree"
 git -C "$W" worktree add -q -b feature/exportacao-csv "$WT" main >/dev/null 2>&1
-trap 'git -C "$W" worktree remove --force "$WT" >/dev/null 2>&1; rm -rf "$W" "$WT"' EXIT
 
 OC="$W/docs/sprintx/features/exportacao-csv"
 mkdir -p "$OC/sprint-01" "$OC/base" "$W/src/frete" "$W/src/pedido"
@@ -236,7 +289,9 @@ tem "$EXEC" '**`suite: parcial` fecha task e sustenta commit**'; afirma "parcial
 tem "$EXEC" '**Task marcada `bloqueada` não gera commit**'; afirma "bloqueada-sem-e1" $? "bloqueada nao commita"
 
 # 4. A integracao para no E8: nenhum arquivo da skill encadeia a revisao.
-REV=$(grep -rlF "mergex-""revisar" "$SK" "$H/.." 2>/dev/null | grep -v "/testes/bancada.sh$" | wc -l)
+# O contrato é da skill SprintX. Limitar a busca a ela evita que uma cópia de
+# teste com H corrompido transforme a asserção numa varredura da raiz inteira.
+REV=$(grep -rlF "mergex-""revisar" "$SK" 2>/dev/null | wc -l)
 [ "$REV" -eq 0 ]; afirma "sem-mergex-revisar" $? "$REV arquivo(s) citam o comando de revisao"
 E910=$(grep -rnE '\bE(9|10)\b' "$SK" 2>/dev/null | grep -i mergex | wc -l)
 [ "$E910" -eq 0 ]; afirma "sem-e9-e10" $? "$E910 mencao(oes) a E9/E10 da mergex"
