@@ -404,6 +404,7 @@ Os kinds `orquestrador`, `sprint`, `fases`, `tasks`, `bloqueios` e `base_indice`
       TEMPLATE-*.md             templates preenchíveis usados pelas fases
     scripts/
       planejamento.sh           estado, orçamentos (F5 e F6), fase, replanejamento da execução e checkpoints
+      predecessores.sh          registra e prova documentos Superpowers consumidos antes do planejamento
       bloqueios.sh              registra, resolve e lê o B-NN tipado (classe obrigatória e imutável)
       rastro.sh                 único escritor dos eventos da skill no rastro; deriva sessão e harness
   commands/
@@ -425,6 +426,9 @@ Os kinds `orquestrador`, `sprint`, `fases`, `tasks`, `bloqueios` e `base_indice`
   plugin/sprintx.ts             ponte que invoca os mesmos scripts de .claude/hooks/
 .github/assets/                 banner e badges do README
 install.sh                      instalador para Claude Code e OpenCode
+scripts/ci/
+  test-predecessores.sh         contrato executável do manifesto `00-PREDECESSORES.md`
+  mutacao-predecessores.sh      certifica o contrato matando os mutantes obrigatórios
 ```
 
 A pasta `.claude/skills/sprintx/` é a **fonte única** da skill: ela não cita `.claude` em lugar nenhum e usa só caminhos relativos à própria raiz, por isso o mesmo conteúdo funciona sem alteração nos dois harnesses. O `.opencode/command/` é gerado a partir de `.claude/commands/`.

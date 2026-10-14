@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+# mutacao-predecessores.sh — certifica o contrato matando mutantes obrigatórios.
+set -uo pipefail
+
+RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+K="$(mktemp -d)"
+trap 'rm -rf "$K"' EXIT HUP INT TERM
+
+mortos=0
+falhou=0
+
+passa() {
+  [ "$1" = CONTROLE ] || mortos=$((mortos + 1))
+  printf '  ok    %-10s %s: %s\n' "$1" "$( [ "$1" = CONTROLE ] && printf verde || printf 'morto por' )" "$2"
+}
+reprova() { falhou=$((falhou + 1)); printf '  FALHA %-10s sobreviveu: %s\n' "$1" "$2"; }
+
+prepara() { # prepara <nome>
+  CASO="$K/$1"
+  mkdir -p "$CASO"
+  cp -R "$RAIZ/.claude" "$CASO/.claude"
+  cp -R "$RAIZ/.opencode" "$CASO/.opencode"
+  cp -R "$RAIZ/scripts" "$CASO/scripts"
+  cp "$RAIZ/README.md" "$CASO/README.md"
+}
+
+substitui() { # substitui <arquivo> <antigo> <novo>
+  python3 - "$1" "$2" "$3" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+old, new = sys.argv[2], sys.argv[3]
+text = p.read_text(encoding="utf-8")
+if old not in text:
+    raise SystemExit(f"mutacao nao aplicada em {p}: {old!r}")
+with open(p, "w", encoding="utf-8", newline="") as f:
+    f.write(text.replace(old, new))
+PY
+}
+
+mata() { # mata <nome> <grupo>
+  local nome="$1" grupo="$2" saida rc
+  saida="$(cd "$CASO" && bash scripts/ci/test-predecessores.sh "$grupo" 2>&1)"; rc=$?
+  if [ "$rc" -ne 0 ]; then passa "$nome" "$grupo"
+  else reprova "$nome" "$grupo terminou verde"; fi
+}
+
+echo '== controle =='
+controle="$(bash "$RAIZ/scripts/ci/test-predecessores.sh" todos 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ]; then
+  passa CONTROLE "$(printf '%s\n' "$controle" | tail -1)"
+else
+  reprova CONTROLE "suite original vermelha: $(printf '%s\n' "$controle" | tail -3 | tr '\n' ' ')"
+fi
+
+echo '== mutantes =='
+
+prepara PREFIXO
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '  printf '\''%s\t%s\t%s\t%s\t%s\n'\'' "$caminho" "$origem" "$papel" "$commit" "$blob" >> "$t"' \
+  $'  printf '\''%s\\t%s\\t%s\\t%s\\t%s\\n'\'' "$caminho" "$origem" "$papel" "$commit" "$blob" >> "$t"\n  while IFS= read -r auto; do\n    [ "$auto" = "$caminho" ] && continue\n    case "$auto" in\n      docs/superpowers/specs/*) auto_papel=especificacao ;;\n      docs/superpowers/plans/*) auto_papel=plano ;;\n      *) continue ;;\n    esac\n    auto_commit="$(git -C "$RAIZ" log -1 --format=%H -- "$auto")"\n    auto_meta="$(modo_blob "$auto_commit" "$auto")" || continue\n    auto_blob="${auto_meta#*\t}"\n    printf '\''%s\\t%s\\t%s\\t%s\\t%s\\n'\'' "$auto" superpowers "$auto_papel" "$auto_commit" "$auto_blob" >> "$t"\n  done < <(GIT_LITERAL_PATHSPECS=0 git -C "$RAIZ" ls-files -- '\''docs/superpowers/**'\'')'
+mata PREFIXO registro
+
+prepara GLOB
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '|*\**|*\?*|*\[*|*\]*)' ')'
+mata GLOB caminhos
+
+prepara DISCO
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  'b="$(modo_blob HEAD "$caminho")"' \
+  'b="$(printf '\''100644\t%s\n'\'' "$(git -C "$RAIZ" hash-object --path="$caminho" -- "$RAIZ/$caminho")")"'
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '[ "$oid_disco" = "$oid_head" ] || falha "$E_CONTRATO" "predecessor modificado: $caminho"' \
+  '[ "$oid_disco" = "$blob" ] || falha "$E_CONTRATO" "predecessor modificado: $caminho"'
+mata DISCO historia
+
+prepara PATHROOT
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '    docs/superpowers/*) ;;' '    *) ;; # mutante PATHROOT aceita qualquer raiz'
+mata PATHROOT caminhos
+
+prepara SYMLINKM
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '[ -f "$arq" ] && [ ! -L "$arq" ] || falha "$E_CONTRATO" '"'"'00-PREDECESSORES.md ausente ou nao regular'"'"'' \
+  '[ -f "$arq" ] || falha "$E_CONTRATO" '"'"'00-PREDECESSORES.md ausente ou nao regular'"'"''
+mata SYMLINKM schema
+
+prepara SCALARASCII
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '    *[!\ -~]*|*'"'"' '"'"') falha "$E_CONTRATO" "caminho fora do subconjunto YAML seguro: $p" ;;' \
+  '    __scalar_ascii_impossivel__) : # mutante SCALARASCII aceita controles e espaco final ;;'
+mata SCALARASCII caminhos
+
+prepara LOCKRMW
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '  mkdir "$candidata" 2>/dev/null || falha "$E_CONTRATO" '"'"'trava de registro ocupada'"'"'' \
+  '  mkdir "$candidata" 2>/dev/null || true # mutante LOCKRMW ignora contencao'
+mata LOCKRMW registro
+
+prepara DIRSYMLINK
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '    [ ! -L "$caminho" ] || falha "$E_CONTRATO" "diretorio do manifesto nao pode ser symlink: $rel"' \
+  '    : # mutante DIRSYMLINK segue diretorio simbolico'
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '    [ "$(pwd -P)" = "$esperado" ] || falha "$E_CONTRATO" '\''diretorio do manifesto mudou durante a gravacao'\''' \
+  '    : # mutante DIRSYMLINK nao confere o diretorio fisico'
+mata DIRSYMLINK registro
+
+prepara SHA256M
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '    sha256) OID_LEN=64 ;;' '    sha256) OID_LEN=40 ;; # mutante SHA256M trunca o protocolo'
+mata SHA256M registro
+
+prepara ASSUME
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '[ "$oid_disco" = "$oid_head" ] || falha "$E_CONTRATO" "predecessor modificado: $caminho"' \
+  ': # mutante ASSUME confia em git diff e ignora os bytes do disco'
+mata ASSUME estado-git
+
+prepara ORFAO
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '[ "$I_OPEN" -eq 1 ] || falha "$E_CONTRATO" "campo de predecessor fora de item: $k"' \
+  ': # mutante ORFAO aceita campo de item fora de item aberto'
+mata ORFAO schema
+
+prepara LISTA
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '[ "$P_LIST_STATE" = lista ] || falha "$E_CONTRATO" '\''item fora da secao predecessores'\''' \
+  ': # mutante LISTA aceita item antes de predecessores'
+mata LISTA schema
+
+prepara REABRE
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '    P_LIST_STATE=depois' '    P_LIST_STATE=lista # mutante REABRE mantem a lista aberta'
+mata REABRE schema
+
+prepara HEADBLOB
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '[ "$oid_head" = "$blob" ] || falha "$E_PROVA" "blob atual diverge do predecessor: $caminho"' \
+  ': # mutante HEADBLOB ignora o blob atual'
+mata HEADBLOB historia
+
+prepara POSTERIOR
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  'git -C "$RAIZ" merge-base --is-ancestor "$commit" "$nascimento" >/dev/null 2>&1' \
+  'git -C "$RAIZ" merge-base --is-ancestor "$nascimento" HEAD >/dev/null 2>&1'
+mata POSTERIOR historia
+
+prepara IGUAL
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '[ "$commit" != "$nascimento" ] || falha "$E_PROVA" '\''predecessor nasceu junto com o planejamento'\''' \
+  ': # mutante IGUAL aceita o commit de nascimento'
+mata IGUAL historia
+
+prepara PARCIAL
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '    prova_item "$caminho" "$origem" "$papel" "$commit" "$blob"' \
+  '    ( prova_item "$caminho" "$origem" "$papel" "$commit" "$blob" ) || true'
+mata PARCIAL schema
+
+prepara AUSENCIA
+substitui "$CASO/.claude/skills/sprintx/scripts/planejamento.sh" \
+  '      || falha "$E_CONTRATO" '\''00-PREDECESSORES.md invalido; F2 nao alterou estado, stage ou rastro'\''' \
+  '      || true # mutante AUSENCIA trata manifesto invalido como ausente'
+mata AUSENCIA checkpoint
+
+prepara SUJO
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  'git -C "$RAIZ" diff --quiet -- "$caminho"' 'true'
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  'git -C "$RAIZ" diff --cached --quiet -- "$caminho"' 'true'
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '[ "$oid_disco" = "$oid_head" ] || falha "$E_CONTRATO" "predecessor modificado: $caminho"' \
+  ': # mutante SUJO aceita bytes do disco divergentes de HEAD'
+mata SUJO estado-git
+
+prepara SHAINPUT
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '[ "$#" -eq 6 ] || uso' '[ "$#" -ge 6 ] || uso'
+mata SHAINPUT registro
+
+prepara EVENTO
+printf '\nEvento proibido de mutacao: predecessor_registrado\n' >> "$CASO/.claude/skills/sprintx/references/08-rastro.md"
+mata EVENTO contrato
+
+printf '\n  %s mutantes mortos, %s sobreviventes\n' "$mortos" "$falhou"
+[ "$falhou" -eq 0 ]

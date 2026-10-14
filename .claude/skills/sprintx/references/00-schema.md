@@ -340,6 +340,63 @@ Num plano com várias sprints, **cada uma resolve o seu próprio formato**: a de
 condensada, a de três fases vai nos três arquivos, e as duas convivem no mesmo trabalho. Nunca
 migre um plano já escrito de um formato para o outro.
 
+### `00-PREDECESSORES.md` → `kind: predecessores`
+
+Manifesto opcional, criado pela F1 somente quando ela consumiu um documento Superpowers antes
+do planejamento. O caminho canônico é
+`docs/sprintx/features/<slug>/00-PREDECESSORES.md`; ele é artefato de método da SprintX, não
+produto e não task.
+
+```yaml
+---
+expx_schema: 1
+expx_tool: sprintx
+kind: predecessores
+trabalho_id: exportacao-csv-relatorios
+predecessores:
+  - caminho: docs/superpowers/specs/2026-10-13-exportacao-design.md
+    origem: superpowers
+    papel: especificacao
+    commit_sha: 0123456789abcdef0123456789abcdef01234567
+    blob_oid: 89abcdef0123456789abcdef0123456789abcdef
+  - caminho: docs/superpowers/plans/2026-10-13-exportacao.md
+    origem: superpowers
+    papel: plano
+    commit_sha: fedcba9876543210fedcba9876543210fedcba98
+    blob_oid: 76543210fedcba9876543210fedcba9876543210
+criado_em: 2026-10-13
+atualizado_em: 2026-10-13
+---
+```
+
+Regras duras deste kind:
+
+- `predecessores` é lista não vazia; arquivo presente com `[]` é contrato inválido.
+- `trabalho_id` é o slug da pasta.
+- `caminho` é relativo à raiz Git, literal e canônico: sem absoluto, `./`, `.`, `..`, segmento
+  vazio, barra invertida ou glob. Precisa estar sob `docs/superpowers/` e ser seguro como scalar
+  YAML sem aspas: somente ASCII imprimível, sem espaço final; `: `, `:` no fim, ` #` e controles
+  são recusados. Não pode apontar para a
+  própria pasta da feature nem para `docs/entregas/<slug>/`.
+- `origem` aceita somente `superpowers` nesta versão.
+- `papel` aceita somente `especificacao` ou `plano`.
+- `commit_sha` e `blob_oid` são calculados por `scripts/predecessores.sh`; nunca são argumentos
+  fornecidos pelo agente. São OIDs completos no formato de objetos declarado pelo repositório:
+  40 hexadecimais para SHA-1 ou 64 para SHA-256.
+- Cada caminho aparece uma vez. Chave repetida, scalar malformado, o próprio manifesto ou
+  qualquer diretório pai dele como symlink, predecessor como symlink, gitlink, diretório,
+  arquivo especial ou estado Git sujo reprovam o manifesto. O registrador valida os pais antes
+  de criar o temporário, para nunca materializar o manifesto fora do repositório.
+- O predecessor antecede estritamente o primeiro commit que adiciona `00-PLANEJAMENTO.md`, e o
+  blob no predecessor continua idêntico ao blob em `HEAD`. Antes desse primeiro checkpoint, o
+  validador aceita somente o estado pré-checkpoint em que planejamento e manifesto ainda não são
+  rastreados e o predecessor já é ancestral de `HEAD`.
+- A prosa repete caminho, origem e papel para leitura humana; a máquina usa só o frontmatter.
+- `scripts/predecessores.sh --validar <slug>` é a leitura normativa. Repositório raso, objeto
+  ausente ou história ambígua falham fechados.
+- O registrador serializa por worktree e slug antes de ler o manifesto. Trava ocupada falha
+  fechada, sem remover a trava alheia nem alterar os bytes já registrados.
+
 ### `00-BLOQUEIOS.md` → `kind: bloqueios`
 
 ```yaml

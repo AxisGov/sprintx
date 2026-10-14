@@ -242,6 +242,7 @@ Todo artefato desta skill vive sob `docs/sprintx/`, nunca solto em `docs/`. A es
 docs/sprintx/
   features/<slug-da-feature>/    um diretório por feature, com a estrutura completa
     00-PLANEJAMENTO.md           estado durável do laço F3 ↔ F5, nascido na F1
+    00-PREDECESSORES.md          prova Git dos documentos Superpowers consumidos na F1 (opcional)
     FECHAMENTO.md                gravado ao fim da F6: o que a feature entregou, e onde
   estimativas/HISTORICO.md       esforço real do projeto inteiro (atravessa features)
 ```
