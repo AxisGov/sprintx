@@ -283,9 +283,20 @@ valida_tsv() {
 }
 
 valida_manifesto() {
-  local t="$TMP_BASE/manifesto.tsv"
+  local t="$TMP_BASE/manifesto.tsv" snapshot="$TMP_BASE/manifesto-estavel.md" dir esperado
   valida_diretorio_manifesto
-  parse_manifesto "$MANIFESTO" "$t"
+  dir="$(dirname "$MANIFESTO")"
+  esperado="$RAIZ_FISICA/docs/sprintx/features/$SLUG"
+  (
+    cd -P "$dir" || falha "$E_CONTRATO" 'diretorio do manifesto inacessivel'
+    [ "$(pwd -P)" = "$esperado" ] \
+      || falha "$E_CONTRATO" 'diretorio do manifesto mudou durante a leitura'
+    cp -P 00-PREDECESSORES.md "$snapshot" \
+      || falha "$E_CONTRATO" 'nao foi possivel obter copia estavel do manifesto'
+    [ "$(pwd -P)" = "$esperado" ] \
+      || falha "$E_CONTRATO" 'diretorio do manifesto mudou durante a leitura'
+  )
+  parse_manifesto "$snapshot" "$t"
   valida_tsv "$t"
   P_TSV_FINAL="$t"
 }

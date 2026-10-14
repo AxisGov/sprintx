@@ -350,6 +350,10 @@ grupo_schema() {
   mv "$MANIFESTO" "$MANIFESTO.real"; ln -s "$(basename "$MANIFESTO.real")" "$MANIFESTO"
   caso_falha 'recusa manifesto como symlink valido' pred --validar ft-pre
 
+  nova_fixture; manifesto_valido "$SPEC" especificacao "$FX_SPEC_COMMIT" "$FX_SPEC_BLOB"
+  mv "$MANIFESTO" "$MANIFESTO.real"; ln -s "$MANIFESTO.real" "$MANIFESTO"
+  caso_falha 'recusa manifesto como symlink absoluto valido' pred --validar ft-pre
+
   nova_fixture; mkdir -p "$(dirname "$MANIFESTO")"; ln -s ausente.md "$MANIFESTO"
   caso_falha 'recusa manifesto como symlink quebrado' pred --validar ft-pre
 
@@ -359,6 +363,33 @@ grupo_schema() {
   ln -s "$fora_pai" "$FX/docs/sprintx/features/ft-pre"
   caso_falha_com 'validar recusa diretorio pai do manifesto como symlink' \
     'diretorio do manifesto nao pode ser symlink' pred --validar ft-pre
+
+  nova_fixture; manifesto_valido "$SPEC" especificacao "$FX_SPEC_COMMIT" "$FX_SPEC_BLOB"
+  local fora_corrida="$K/fora-validar-corrida-$fx_n"
+  local original_corrida="$K/original-validar-corrida-$fx_n"
+  local bin_corrida="$K/bin-validar-corrida-$fx_n" real_cp
+  mkdir -p "$fora_corrida" "$bin_corrida"
+  cp "$MANIFESTO" "$fora_corrida/00-PREDECESSORES.md"
+  sed -i 's/^kind: predecessores/kind: externo/' "$fora_corrida/00-PREDECESSORES.md"
+  real_cp="$(command -v cp)"
+  cat > "$bin_corrida/cp" <<EOF
+#!/bin/sh
+if { [ "\${1:-}" = '-P' ] && [ "\${2:-}" = '00-PREDECESSORES.md' ]; } \
+  || [ "\${1:-}" = "$MANIFESTO" ]; then
+  mv "$FX/docs/sprintx/features/ft-pre" "$original_corrida"
+  ln -s "$fora_corrida" "$FX/docs/sprintx/features/ft-pre"
+  "$real_cp" "\$@"
+  rc=\$?
+  rm "$FX/docs/sprintx/features/ft-pre"
+  mv "$original_corrida" "$FX/docs/sprintx/features/ft-pre"
+  exit "\$rc"
+fi
+exec "$real_cp" "\$@"
+EOF
+  chmod +x "$bin_corrida/cp"
+  PATH="$bin_corrida:$PATH" caso_rc \
+    'validar ancora leitura apesar da troca concorrente do diretorio' \
+    0 pred --validar ft-pre
 }
 
 tem() { grep -qF "$2" "$1"; }

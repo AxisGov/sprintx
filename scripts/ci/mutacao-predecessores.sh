@@ -85,6 +85,12 @@ substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
   '[ -f "$arq" ] || falha "$E_CONTRATO" '"'"'00-PREDECESSORES.md ausente ou nao regular'"'"''
 mata SYMLINKM schema
 
+prepara DIRRACE
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '    cp -P 00-PREDECESSORES.md "$snapshot" \' \
+  '    cp "$MANIFESTO" "$snapshot" \'
+mata DIRRACE schema
+
 prepara SCALARASCII
 substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
   '    *[!\ -~]*|*'"'"' '"'"') falha "$E_CONTRATO" "caminho fora do subconjunto YAML seguro: $p" ;;' \
