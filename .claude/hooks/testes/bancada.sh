@@ -9404,7 +9404,7 @@ al_tem "$AL_RASTRO" '`orcamento_f6_autorizado`' \
   && al_tem "$AL_RASTRO" 'Retomada e checkpoint pendente não duplicam nenhum dos dois eventos'
 afirma "ds175-contrato-rastro" $? "dois eventos uma vez, repeticao silenciosa"
 
-al_tem "$AL_SKILL" 'autorizar-replanejamento-execucao <slug> <max_replanejamentos_f6> <autorizado_por>' \
+al_tem "$AL_SKILL" 'scripts/planejamento.sh autorizar-replanejamento-execucao <slug> <max_replanejamentos_f6> <autorizado_por>' \
   && al_tem "$AL_SKILL" 'Somente `orcamento_f6_nao_declarado` é recuperável por autorização tardia' \
   && al_tem "$AL_SKILL" '`classes_mistas`, legados e orçamentos esgotados continuam terminais'
 afirma "ds175-contrato-skill" $? "comando e fronteira exata entre terminais"
