@@ -426,7 +426,7 @@ Os kinds `orquestrador`, `sprint`, `fases`, `tasks`, `bloqueios` e `base_indice`
   plugin/sprintx.ts             ponte que invoca os mesmos scripts de .claude/hooks/
 .github/assets/                 banner e badges do README
 install.sh                      instalador para Claude Code e OpenCode
-scripts/ci/
+scripts/ci/                     somente no repositório-fonte; não fazem parte do pacote instalado
   test-predecessores.sh         contrato executável do manifesto `00-PREDECESSORES.md`
   mutacao-predecessores.sh      certifica o contrato matando os mutantes obrigatórios
 ```

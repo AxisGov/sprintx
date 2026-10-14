@@ -284,6 +284,7 @@ valida_tsv() {
 
 valida_manifesto() {
   local t="$TMP_BASE/manifesto.tsv"
+  valida_diretorio_manifesto
   parse_manifesto "$MANIFESTO" "$t"
   valida_tsv "$t"
   P_TSV_FINAL="$t"

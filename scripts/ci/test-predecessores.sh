@@ -352,6 +352,13 @@ grupo_schema() {
 
   nova_fixture; mkdir -p "$(dirname "$MANIFESTO")"; ln -s ausente.md "$MANIFESTO"
   caso_falha 'recusa manifesto como symlink quebrado' pred --validar ft-pre
+
+  nova_fixture; manifesto_valido "$SPEC" especificacao "$FX_SPEC_COMMIT" "$FX_SPEC_BLOB"
+  local fora_pai="$K/fora-validar-$fx_n"
+  mv "$FX/docs/sprintx/features/ft-pre" "$fora_pai"
+  ln -s "$fora_pai" "$FX/docs/sprintx/features/ft-pre"
+  caso_falha_com 'validar recusa diretorio pai do manifesto como symlink' \
+    'diretorio do manifesto nao pode ser symlink' pred --validar ft-pre
 }
 
 tem() { grep -qF "$2" "$1"; }
@@ -401,8 +408,10 @@ grupo_contrato() {
     tem "$decisoes" "| $ds |" || ruim=1
   done
   [ "$ruim" -eq 0 ]; afirma 'decisoes DS-176 a DS-180 publicadas' $? 'decisao append-only ausente'
-  tem "$readme" '00-PREDECESSORES.md' && tem "$readme" 'mutacao-predecessores.sh'
-  afirma 'README publica manifesto e gate de mutacao' $? 'README sem contrato ou comando de certificacao'
+  tem "$readme" '00-PREDECESSORES.md' && tem "$readme" 'mutacao-predecessores.sh' \
+    && tem "$readme" 'somente no repositório-fonte; não fazem parte do pacote instalado'
+  afirma 'README distingue a arvore fonte do pacote instalado' $? \
+    'README sugere que os scripts de CI existem no pacote instalado'
 }
 
 feature_para_checkpoint() {
