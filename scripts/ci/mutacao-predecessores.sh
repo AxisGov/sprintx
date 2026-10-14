@@ -97,6 +97,15 @@ substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
   '  mkdir "$candidata" 2>/dev/null || true # mutante LOCKRMW ignora contencao'
 mata LOCKRMW registro
 
+prepara DIRSYMLINK
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '    [ ! -L "$caminho" ] || falha "$E_CONTRATO" "diretorio do manifesto nao pode ser symlink: $rel"' \
+  '    : # mutante DIRSYMLINK segue diretorio simbolico'
+substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
+  '    [ "$(pwd -P)" = "$esperado" ] || falha "$E_CONTRATO" '\''diretorio do manifesto mudou durante a gravacao'\''' \
+  '    : # mutante DIRSYMLINK nao confere o diretorio fisico'
+mata DIRSYMLINK registro
+
 prepara SHA256M
 substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
   '    sha256) OID_LEN=64 ;;' '    sha256) OID_LEN=40 ;; # mutante SHA256M trunca o protocolo'

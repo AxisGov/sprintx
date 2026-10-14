@@ -175,7 +175,7 @@ predecessores.sh --validar <slug>
 predecessores.sh --listar <slug>
 ```
 
-`--registrar` calcula `commit_sha` e `blob_oid`; nunca aceita esses valores informados pelo agente. A gravação é atômica, preserva entradas anteriores, ordena pelo caminho e é idempotente quando a prova não mudou. Antes de ler o manifesto, adquire uma trava exclusiva por worktree e slug; contenda falha fechada e a trava só é removida por quem a adquiriu. O script não faz commit.
+`--registrar` calcula `commit_sha` e `blob_oid`; nunca aceita esses valores informados pelo agente. A gravação é atômica, preserva entradas anteriores, ordena pelo caminho e é idempotente quando a prova não mudou. O registrador recusa o diretório da feature ou qualquer pai simbólico antes de criar o temporário, impedindo que a escrita escape do repositório. Antes de ler o manifesto, adquire uma trava exclusiva por worktree e slug; contenda falha fechada e a trava só é removida por quem a adquiriu. O script não faz commit.
 
 `--validar` é somente leitura e aplica todas as regras de schema, caminho, história e blob que pertencem à SprintX.
 
@@ -367,7 +367,8 @@ A suíte deve provar pelo menos:
 13. manifesto como symlink, inclusive quebrado, falha antes do checkpoint F2;
 14. repositório SHA-256 preserva OIDs completos de 64 caracteres;
 15. grupo de teste desconhecido devolve erro de uso;
-16. trava concorrente preserva o manifesto e permite repetição depois de liberada.
+16. trava concorrente preserva o manifesto e permite repetição depois de liberada;
+17. diretório da feature ou pai simbólico falha antes de qualquer escrita no alvo externo.
 
 ## 13. Testes da MergeX
 

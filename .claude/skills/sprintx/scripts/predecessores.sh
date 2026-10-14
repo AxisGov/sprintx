@@ -256,6 +256,24 @@ adquire_trava_registro() {
   LOCK_DIR="$candidata"
 }
 
+valida_diretorio_manifesto() {
+  local rel='' componente caminho
+  for componente in docs sprintx features "$SLUG"; do
+    rel="${rel:+$rel/}$componente"
+    caminho="$RAIZ/$rel"
+    [ ! -L "$caminho" ] || falha "$E_CONTRATO" "diretorio do manifesto nao pode ser symlink: $rel"
+    if [ -e "$caminho" ]; then
+      [ -d "$caminho" ] || falha "$E_CONTRATO" "componente do diretorio do manifesto nao e diretorio: $rel"
+    fi
+  done
+}
+
+prepara_diretorio_manifesto() {
+  valida_diretorio_manifesto
+  mkdir -p "$(dirname "$MANIFESTO")" || falha "$E_CONTRATO" 'nao consegui preparar diretorio do manifesto'
+  valida_diretorio_manifesto
+}
+
 valida_tsv() {
   local caminho origem papel commit blob
   while IFS="	" read -r caminho origem papel commit blob; do
@@ -290,6 +308,31 @@ renderiza() { # renderiza <tsv> <destino> <criado>
   } > "$dest"
 }
 
+grava_manifesto_atomico() { # <tsv> <criado_em>
+  local novo="$1" criado="$2" dir esperado
+  dir="$(dirname "$MANIFESTO")"
+  esperado="$RAIZ_FISICA/docs/sprintx/features/$SLUG"
+  (
+    local tmp=''
+    trap 'rc=$?; [ -z "$tmp" ] || rm -f -- "$tmp"; exit "$rc"' EXIT HUP INT TERM
+    cd -P "$dir" || falha "$E_CONTRATO" 'diretorio do manifesto inacessivel'
+    [ "$(pwd -P)" = "$esperado" ] || falha "$E_CONTRATO" 'diretorio do manifesto mudou durante a gravacao'
+    tmp="$(mktemp '.00-PREDECESSORES.md.tmp.XXXXXX')" || falha "$E_CONTRATO" 'nao consegui criar temporario'
+    [ "$(pwd -P)" = "$esperado" ] || falha "$E_CONTRATO" 'diretorio do manifesto mudou durante a gravacao'
+    renderiza "$novo" "$tmp" "$criado" || falha "$E_CONTRATO" 'nao consegui renderizar manifesto'
+    parse_manifesto "$tmp" "$TMP_BASE/confere.tsv"
+    valida_tsv "$TMP_BASE/confere.tsv"
+    chmod 0644 "$tmp" || falha "$E_CONTRATO" 'nao consegui aplicar modo 0644'
+    [ "$(pwd -P)" = "$esperado" ] || falha "$E_CONTRATO" 'diretorio do manifesto mudou durante a gravacao'
+    mv "$tmp" 00-PREDECESSORES.md || falha "$E_CONTRATO" 'nao consegui instalar manifesto'
+    tmp=''
+    if [ "$(pwd -P)" != "$esperado" ]; then
+      rm -f -- 00-PREDECESSORES.md
+      falha "$E_CONTRATO" 'diretorio do manifesto mudou durante a gravacao'
+    fi
+  )
+}
+
 cmd_registrar() {
   [ "$#" -eq 6 ] || uso
   [ "$1" = --origem ] && [ "$2" = superpowers ] && [ "$3" = --papel ] && [ "$5" = --caminho ] || uso
@@ -305,6 +348,7 @@ cmd_registrar() {
   blob="${meta#*	}"
   prova_item "$caminho" "$origem" "$papel" "$commit" "$blob"
 
+  prepara_diretorio_manifesto
   adquire_trava_registro
   t="$TMP_BASE/atuais.tsv"; : > "$t"; criado="$(date +%Y-%m-%d)"
   if [ -e "$MANIFESTO" ] || [ -L "$MANIFESTO" ]; then
@@ -322,14 +366,7 @@ cmd_registrar() {
 
   printf '%s\t%s\t%s\t%s\t%s\n' "$caminho" "$origem" "$papel" "$commit" "$blob" >> "$t"
   novo="$TMP_BASE/novo.tsv"; LC_ALL=C sort -t "	" -k1,1 "$t" > "$novo"
-  mkdir -p "$(dirname "$MANIFESTO")"
-  TMP_ATOMICO="$(mktemp "$(dirname "$MANIFESTO")/.00-PREDECESSORES.md.tmp.XXXXXX")" || falha "$E_CONTRATO" 'nao consegui criar temporario'
-  renderiza "$novo" "$TMP_ATOMICO" "$criado" || falha "$E_CONTRATO" 'nao consegui renderizar manifesto'
-  parse_manifesto "$TMP_ATOMICO" "$TMP_BASE/confere.tsv"
-  valida_tsv "$TMP_BASE/confere.tsv"
-  chmod 0644 "$TMP_ATOMICO" || falha "$E_CONTRATO" 'nao consegui aplicar modo 0644'
-  mv "$TMP_ATOMICO" "$MANIFESTO" || falha "$E_CONTRATO" 'nao consegui instalar manifesto'
-  TMP_ATOMICO=""
+  grava_manifesto_atomico "$novo" "$criado" || falha "$E_CONTRATO" 'gravacao atomica do manifesto falhou'
   printf 'manifesto=%s\n' "$MANIFESTO_REL"
 }
 
@@ -343,6 +380,7 @@ case "$CMD" in
   *) uso ;;
 esac
 RAIZ="$(resolve_raiz)"
+RAIZ_FISICA="$(cd -P "$RAIZ" 2>/dev/null && pwd -P)" || falha "$E_PROVA" 'raiz Git fisica inacessivel'
 resolve_formato_objetos
 MANIFESTO_REL="docs/sprintx/features/$SLUG/00-PREDECESSORES.md"
 MANIFESTO="$RAIZ/$MANIFESTO_REL"

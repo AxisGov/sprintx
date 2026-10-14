@@ -177,6 +177,35 @@ grupo_registro() {
   rmdir "$trava"
   caso_rc 'registro pode ser repetido depois de liberar a trava' 0 registra plano "$PLAN"
   caso_rc 'manifesto conserva as duas entradas depois da contencao' 0 pred --validar ft-pre
+
+  nova_fixture
+  local fora="$K/fora-$fx_n"
+  mkdir -p "$fora"
+  rm -rf "$FX/docs/sprintx/features/ft-pre"
+  ln -s "$fora" "$FX/docs/sprintx/features/ft-pre"
+  caso_falha_com 'recusa diretorio da feature como symlink' 'diretorio do manifesto nao pode ser symlink' registra especificacao "$SPEC"
+  [ ! -e "$fora/00-PREDECESSORES.md" ]
+  afirma 'symlink do diretorio nao escreve fora do repositorio' $? 'manifesto escapou para o alvo do symlink'
+
+  nova_fixture
+  fora="$K/fora-corrida-$fx_n"
+  local bin="$K/bin-corrida-$fx_n" real_mktemp
+  mkdir -p "$fora" "$bin"
+  real_mktemp="$(command -v mktemp)"
+  cat > "$bin/mktemp" <<EOF
+#!/bin/sh
+case "\${1:-}" in
+  .00-PREDECESSORES.md.tmp.*|*/.00-PREDECESSORES.md.tmp.*)
+    mv "$FX/docs/sprintx/features/ft-pre" "$FX/docs/sprintx/features/ft-pre-original"
+    ln -s "$fora" "$FX/docs/sprintx/features/ft-pre"
+    ;;
+esac
+exec "$real_mktemp" "\$@"
+EOF
+  chmod +x "$bin/mktemp"
+  PATH="$bin:$PATH" caso_falha 'troca concorrente por symlink falha fechado' registra especificacao "$SPEC"
+  [ ! -e "$fora/00-PREDECESSORES.md" ]
+  afirma 'corrida nao escreve no alvo externo' $? 'manifesto escapou durante a corrida de symlink'
 }
 
 invalido_preserva() { # invalido_preserva <nome> <papel> <caminho>

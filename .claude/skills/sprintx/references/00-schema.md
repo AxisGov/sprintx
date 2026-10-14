@@ -383,9 +383,10 @@ Regras duras deste kind:
 - `commit_sha` e `blob_oid` são calculados por `scripts/predecessores.sh`; nunca são argumentos
   fornecidos pelo agente. São OIDs completos no formato de objetos declarado pelo repositório:
   40 hexadecimais para SHA-1 ou 64 para SHA-256.
-- Cada caminho aparece uma vez. Chave repetida, scalar malformado, o próprio manifesto como
-  symlink, predecessor como symlink, gitlink, diretório, arquivo especial ou estado Git sujo
-  reprovam o manifesto.
+- Cada caminho aparece uma vez. Chave repetida, scalar malformado, o próprio manifesto ou
+  qualquer diretório pai dele como symlink, predecessor como symlink, gitlink, diretório,
+  arquivo especial ou estado Git sujo reprovam o manifesto. O registrador valida os pais antes
+  de criar o temporário, para nunca materializar o manifesto fora do repositório.
 - O predecessor antecede estritamente o primeiro commit que adiciona `00-PLANEJAMENTO.md`, e o
   blob no predecessor continua idêntico ao blob em `HEAD`. Antes desse primeiro checkpoint, o
   validador aceita somente o estado pré-checkpoint em que planejamento e manifesto ainda não são
