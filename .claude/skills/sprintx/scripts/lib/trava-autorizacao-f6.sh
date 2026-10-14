@@ -94,7 +94,9 @@ adquire_trava_autorizacao_f6() {
   trap '_trava_aut6_adia_int' INT
   trap '_trava_aut6_adia_term' TERM
 
-  mkdir "$caminho" 2>/dev/null || mkdir_rc=$?
+  # O filho nao pode morrer depois de criar o diretorio e antes de devolver 0.
+  # O shell pai continua adiando o sinal e o reemite depois de registrar a posse.
+  ( trap '' HUP INT TERM; mkdir "$caminho" ) 2>/dev/null || mkdir_rc=$?
   if [ "$mkdir_rc" -ne 0 ]; then
     _trava_aut6_restaura_sinais
     if [ -n "$TRAVA_AUT6_SINAL_PENDENTE" ]; then
