@@ -75,13 +75,21 @@ shopt -s nullglob
 EVENTOS=("$RAIZ"/docs/eventos/*.jsonl)
 shopt -s dotglob
 PLANOS=()
+# Plano que existe mas nao se le fica FORA da decisao, e nao a encerra: um plano
+# ilegivel de outra feature nao pode impedir a conferencia da task corrente. Se a
+# decisao, sem ele, nao achar task aberta, o hook avisa que nao conferiu (abaixo).
+ILEGIVEIS=()
 for f in "$RAIZ"/docs/tasks.md "$RAIZ"/docs/*/tasks.md "$RAIZ"/docs/*/*/tasks.md \
          "$RAIZ"/docs/*/*/*/tasks.md "$RAIZ"/docs/*/*/*/*/tasks.md \
          "$RAIZ"/docs/sprintx/features/*/*/*/tasks.md; do
-  [ -f "$f" ] && [ ! -L "$f" ] && PLANOS+=("$f")
+  [ -f "$f" ] && [ ! -L "$f" ] || continue
+  if [ -r "$f" ]; then PLANOS+=("$f"); else ILEGIVEIS+=("${f#"$RAIZ"/}"); fi
 done
 shopt -u nullglob dotglob
-[ "${#PLANOS[@]}" -gt 0 ] || exit 0
+if [ "${#PLANOS[@]}" -eq 0 ]; then
+  [ "${#ILEGIVEIS[@]}" -eq 0 ] || rastro_aviso_ao_modelo PreToolUse "sprintx/escopo-da-task: plano(s) ilegivel(is): ${ILEGIVEIS[*]}; a edicao de $REL NAO foi conferida contra a task."
+  exit 0
+fi
 
 rastro_sessao_em MINHA_SESSAO
 
@@ -216,8 +224,12 @@ fi
 
 # Nenhuma task aberta em lugar nenhum da feature => a skill nao esta em
 # execucao (F6). Fora de execucao, o hook preserva o comportamento antigo:
-# nao opina.
-[ "$G" = 1 ] || exit 0
+# nao opina. Com plano ilegivel, "nenhuma task aberta" pode ser so o plano que
+# nao se leu: o hook avisa em vez de calar.
+if [ "$G" != 1 ]; then
+  [ "${#ILEGIVEIS[@]}" -eq 0 ] || rastro_aviso_ao_modelo PreToolUse "sprintx/escopo-da-task: plano(s) ilegivel(is): ${ILEGIVEIS[*]}; a edicao de $REL NAO foi conferida contra a task."
+  exit 0
+fi
 
 # ---------------------------------------------------- caminho comum: task corrente
 # A reivindicacao e unica e coerente, o plano do trabalho corrente declara a task, e o
