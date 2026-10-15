@@ -84,8 +84,12 @@ for f in "$RAIZ"/docs/tasks.md "$RAIZ"/docs/*/tasks.md "$RAIZ"/docs/*/*/tasks.md
          "$RAIZ"/docs/sprintx/features/*/*/*/tasks.md; do
   # Plano por link nao se le (pode apontar para fora do projeto), mas entra no
   # aviso: pular em silencio deixaria a edicao passar sem conferencia nenhuma.
+  # Vale para a pasta tambem (docs/<x> por link): sobe ate a raiz so com builtins.
   if [ -L "$f" ]; then ILEGIVEIS+=("${f#"$RAIZ"/} (link)"); continue; fi
   [ -f "$f" ] || continue
+  p="${f%/*}"
+  while [ "${#p}" -gt "${#RAIZ}" ] && [ ! -L "$p" ]; do p="${p%/*}"; done
+  if [ "${#p}" -gt "${#RAIZ}" ]; then ILEGIVEIS+=("${f#"$RAIZ"/} (pasta por link)"); continue; fi
   if [ -r "$f" ]; then PLANOS+=("$f"); else ILEGIVEIS+=("${f#"$RAIZ"/}"); fi
 done
 shopt -u nullglob dotglob
