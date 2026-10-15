@@ -17,6 +17,22 @@ Passe a ele o caminho da feature e peça a tabela de achados e o veredito, no fo
 
 Grave no rastro o `veredito_emitido` com `agente: auditor-plano` (formato em `references/08-rastro.md`).
 
+## Passo 1.0 — O pedido neutro
+
+O que você manda ao `auditor-plano` e ao `revisor-testes` faz parte da independência deles, tanto quanto o contexto separado. Um pedido que carrega as suas hipóteses sobre o que "estaria errado" faz o agente confirmar a hipótese em vez de julgar o que está escrito.
+
+O pedido tem **quatro campos, e só eles**:
+
+```
+Alvo:     <slug da feature, ou a task T-NN.MM>
+Arquivos: <os caminhos que ele deve ler: ORQUESTRADOR.md, tasks.md, os testes>
+Prova:    <o que o plano ou o teste deve provar, citando o criterio_aceite ou a decisão D-NN>
+Formato:  <a tabela e o veredito do Passo 4, ou `solido`/`fraco` por task>
+```
+
+Não entra no pedido: as implementações erradas que você imagina, "preste atenção em X", o que você acha que já está sólido e o resultado da suíte. Se você sabe qual erro teme, escreva o `criterio_aceite` de modo que o teste certo o pegue — não sopre a resposta ao revisor.
+
+
 Se o agente não estiver disponível neste harness, faça a auditoria você mesma, seguindo os Passos 3 e 4 — e sabendo que a regra "só aponta, nunca corrige" volta a depender da sua disciplina.
 
 ## Passo 2 — Reler tudo com olhos de auditora
