@@ -99,7 +99,18 @@ copy_hooks_claude() {
   # So os arquivos que ESTA skill publica sao trocados; nada mais e apagado.
   run "mkdir -p '$root/.claude/agents'"
   copy_hooks_tree "$root"
-  run "cp '$AGENTS_SRC'/*.md '$root/.claude/agents/'"
+  # Um agente de mesmo nome que DIFERE do publicado (editado no projeto, ou de
+  # outra skill) nao some: vira `<nome>.md.bak-<data>` antes da troca. O
+  # Claude Code so carrega `*.md`, entao a copia nao compete com o agente novo.
+  local a dest
+  for a in "$AGENTS_SRC"/*.md; do
+    dest="$root/.claude/agents/${a##*/}"
+    if [ -f "$dest" ] && ! cmp -s "$a" "$dest"; then
+      run "cp '$dest' '$dest.bak-$(date +%Y%m%d%H%M%S)'"
+      say "agente   ${a##*/} existia diferente: copia de seguranca em ${dest##*/}.bak-*"
+    fi
+    run "cp '$a' '$dest'"
+  done
   say "hooks    -> $root/.claude/hooks/ (sprintx/ e os arquivos da sprintx em comum/)"
   say "agentes  -> $root/.claude/agents/"
 
