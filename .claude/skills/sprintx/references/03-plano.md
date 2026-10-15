@@ -70,7 +70,7 @@ Com a base (`base/`) e as decisões (`00-DECISOES.md`) na mão, desenhe Sprints 
 
 **Regra de granularidade:** se `teste_integracao` e `teste_funcional` de uma task não cabem em uma frase cada, a task está grande demais — quebre em duas ou mais.
 
-**Regra de tamanho (F3 do contrato `expx-fatiamento`):** a task fecha em um commit — o E1 da mergex commita por task — e esse commit tem no máximo **300 linhas alteradas**. Estime pelo que a task muda: se passa de 300 linhas, quebre. O mesmo vale para o que vira PR: as tasks de uma sprint somadas respeitam F2 (400 linhas, 20 arquivos). Arquivo que já passa de 4.000 linhas ou 150 KB não recebe conteúdo novo (F4): a task cria arquivo novo ou, antes dela, uma task mecânica divide o existente.
+**Regra de tamanho (F3 do contrato `expx-fatiamento`):** a task fecha em um commit — o E1 da mergex commita por task — e esse commit tem no máximo **300 linhas alteradas**. Estime pelo que a task muda: se passa de 300 linhas, quebre. O mesmo vale para o que vira PR: a mergex abre **um PR por trabalho**, no fechamento da F6, então as tasks do trabalho inteiro, somadas, respeitam F2 (400 linhas, 20 arquivos). Trabalho que não cabe se divide em trabalhos menores, cada um com o seu PR — não em mais sprints do mesmo trabalho. Arquivo que já passa de 4.000 linhas ou 150 KB não recebe conteúdo novo (F4): a task cria arquivo novo ou, antes dela, uma task mecânica divide o existente.
 
 **Paralelismo declarado:** para CADA task, declare `paralelizavel` e `depende_de`; para CADA fase, declare com qual outra fase pode rodar em paralelo (ou "nenhuma"). A execução nunca decidirá isso — se você não declarar, é sequencial.
 
