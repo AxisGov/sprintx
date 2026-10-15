@@ -167,7 +167,7 @@ um veredito dado por um modelo mais fraco que o do autor não verifica nada. Que
 sobrepõe no projeto, em `.expx/agentes.json` (instalação pelo `expx`; o `install.sh` manual instala o piso).
 Isto vale para o Claude Code; os agentes de `.opencode/agent/` não declaram modelo nem esforço e ficam fora desta política.
 
-Hooks e skill gravam um rastro append-only em `docs/eventos/<slug>.jsonl` (ignorado pelo versionador). Dele sai a linha do tempo do trabalho, quem fez o quê — e a **duração real por task sem ninguém anotar nada**, que alimenta a calibração da estimativa. Com um cuidado: tempo de parede não é esforço, então o valor entra como `duracao_observada`, nunca como `real`, e a calibração usa mediana.
+Hooks e skill gravam um rastro append-only em `docs/eventos/<slug>.jsonl` (ignorado pelo versionador). Dele sai a linha do tempo do trabalho, quem fez o quê — e a **duração de cada task sem ninguém anotar nada**, que entra no histórico da estimativa como `duracao_observada`. Com um cuidado: tempo de parede não é esforço, então ela nunca entra como `real` e fica fora da calibração — o que calibra é o desvio entre o estimado e o `real` anotado.
 
 ---
 

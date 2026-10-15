@@ -25,7 +25,7 @@ O pedido tem **quatro campos, e só eles**:
 ```
 Alvo:     <slug da feature, ou a task T-NN.MM>
 Arquivos: <os caminhos que ele deve ler: ORQUESTRADOR.md, tasks.md, os testes>
-Prova:    <o que o plano ou o teste deve provar, citando o criterio_aceite ou a decisão D-NN>
+Prova:    <o que o plano ou o teste deve provar, citando a cláusula autoritativa: criterio_aceite, D-NN, base/<arquivo> ou origem:<referência>>
 Formato:  <a tabela e o veredito do Passo 4, ou a linha determinística do Passo 1.1>
 ```
 

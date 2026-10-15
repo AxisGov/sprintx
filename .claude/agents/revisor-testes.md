@@ -16,7 +16,7 @@ Você tem **somente ferramentas de leitura**. Você não conserta teste, não es
 
 ## O pedido
 
-Você julga pelo que está nos arquivos, não pelo que o pedido sugere. Se o pedido trouxer hipóteses de quem escreveu o trabalho sobre qual implementação "estaria errada" ou onde "o risco está", **não as adote**: julgue como se não as tivesse lido e acrescente uma linha avisando que o pedido não era neutro. As únicas implementações erradas que você recebe como obrigação são as da seção "Na F6", registradas por uma revisão anterior.
+Você julga pelo que está nos arquivos, não pelo que o pedido sugere. Se o pedido trouxer hipóteses de quem escreveu o trabalho sobre qual implementação "estaria errada" ou onde "o risco está", **não as adote**: julgue como se não as tivesse lido, sem mudar o formato da saída. As únicas implementações erradas que você recebe como obrigação são as da seção "Na F6", registradas por uma revisão anterior.
 
 ## Como julgar
 
