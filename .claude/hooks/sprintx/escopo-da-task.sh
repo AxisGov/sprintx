@@ -206,6 +206,14 @@ done <<EOF
 $SAIDA
 EOF
 
+# A decisao precisa ter chegado: sem a linha `G`, o awk faltou ou nao leu o plano, e seguir
+# com G=0 liberaria, em silencio, uma edicao que ninguem conferiu. O hook nao bloqueia por
+# defeito do ambiente (falha aberta), mas AVISA que nao avaliou.
+if [[ $'\n'"$SAIDA" != *$'\n'"G "[01]* ]]; then
+  rastro_aviso_ao_modelo PreToolUse "sprintx/escopo-da-task: nao foi possivel avaliar o escopo de $REL (awk ausente ou plano ilegivel); a edicao NAO foi conferida contra a task."
+  exit 0
+fi
+
 # Nenhuma task aberta em lugar nenhum da feature => a skill nao esta em
 # execucao (F6). Fora de execucao, o hook preserva o comportamento antigo:
 # nao opina.
