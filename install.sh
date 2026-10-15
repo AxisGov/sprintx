@@ -102,12 +102,21 @@ copy_hooks_claude() {
   # Um agente de mesmo nome que DIFERE do publicado (editado no projeto, ou de
   # outra skill) nao some: vira `<nome>.md.bak-<data>` antes da troca. O
   # Claude Code so carrega `*.md`, entao a copia nao compete com o agente novo.
-  local a dest
+  local a dest bak n
   for a in "$AGENTS_SRC"/*.md; do
     dest="$root/.claude/agents/${a##*/}"
+    # Destino que e link simbolico NAO e escrito: o `cp` seguiria o link e
+    # sobrescreveria o arquivo de destino dele, que pode estar fora do projeto.
+    if [ -L "$dest" ]; then
+      say "agente   ${a##*/} NAO instalado: $dest e um link simbolico; remova o link e rode de novo"
+      continue
+    fi
     if [ -f "$dest" ] && ! cmp -s "$a" "$dest"; then
-      run "cp '$dest' '$dest.bak-$(date +%Y%m%d%H%M%S)'"
-      say "agente   ${a##*/} existia diferente: copia de seguranca em ${dest##*/}.bak-*"
+      # nome unico: dois backups no mesmo segundo nao se sobrescrevem
+      bak="$dest.bak-$(date +%Y%m%d%H%M%S)"; n=0
+      while [ -e "$bak" ]; do n=$((n + 1)); bak="$dest.bak-$(date +%Y%m%d%H%M%S)-$n"; done
+      run "cp '$dest' '$bak'"
+      say "agente   ${a##*/} existia diferente: copia de seguranca em ${bak##*/}"
     fi
     run "cp '$a' '$dest'"
   done
