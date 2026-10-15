@@ -49,7 +49,7 @@ O método Expx é um conjunto de skills que se compõem, instaladas e mantidas p
 | **[runx](https://github.com/bittencourtthulio/runx)** | **Run** — ocorrência em produção, E1…E5 | skill irmã; mesmos contratos, gatilho diferente |
 | **[legadox](https://github.com/bittencourtthulio/legadox)** | **camada** de segurança para código legado | endurece as fases da `sprintx` quando existe `PERFIL.md` |
 | **[stackx](https://github.com/bittencourtthulio/stackx)** | **camada** de convenções do repositório | a `sprintx` lê o `CONVENCOES.md` antes de planejar e de escrever código |
-| **[mergex](https://github.com/bittencourtthulio/mergex)** | entrega: branch, commit por task, PR e pacote de QA | abre a branch no início da F6 e entrega ao fim dela |
+| **[mergex](https://github.com/bittencourtthulio/mergex)** | entrega: branch, commit por task, PR e pacote de QA | adota na F6 a branch e o worktree que a F1 abriu (regra 21), commita cada task concluída e entrega ao fim da fase |
 | **[memox](https://github.com/bittencourtthulio/MemoX)** | **camada** de memória do projeto | consultada na F1 e na F3, sobre os arquivos que o plano pretende tocar |
 | **[prodx](https://github.com/bittencourtthulio/prodx)** | **camada** de produto: decide **se** há trabalho | roda antes da F1 e entrega o `BRIEFING.md` assinado como entrada dela |
 | **[buildx](https://github.com/bittencourtthulio/buildx)** | orquestra um projeto inteiro, da descrição ao sistema pronto | invoca a `sprintx` uma vez por feature do mapa; quebra a regra 10 — a F2 deixa de entrevistar o humano, a `buildx` responde no lugar dele derivando de `PROJETO.md`, `PREMISSAS.md` e `CONVENCOES.md` e registrando em `00-DECISOES.md` com `respondido_por: buildx`. TDD, regra 4 e auditoria da F5 seguem intactos. É dependência obrigatória dela |
@@ -144,7 +144,7 @@ Hooks e agentes **não criam regra nova** — eles garantem regras que já exist
 | `sem-placeholder-no-plano` | após escrever o plano | aviso | Nenhum `{{marcador}}` de template sobrando |
 | `tdd-teste-antes` | após escrever código | aviso | Teste antes da implementação |
 | `segredo` | antes de escrever | **bloqueio** | Segredo não vai para arquivo versionado |
-| `git-perigoso` | antes de rodar Bash | **bloqueio** | Nada irreversível durante a execução autônoma |
+| `sprintx/git-perigoso` | antes de rodar Bash | **bloqueio** | Barra os comandos `git` destrutivos que reconhece (push forçado, `reset --hard`, `clean`, `checkout .`, `branch -D`, `rebase`…). Não é sandbox: outros comandos destrutivos (`rm -rf`) não passam por ele |
 
 **Todo hook de método nasce em `aviso`.** Hook que dá falso positivo é desinstalado, e junto com ele vão os que funcionavam — então a promoção a `bloqueio` só acontece depois de evidência de uso real:
 
@@ -167,7 +167,7 @@ um veredito dado por um modelo mais fraco que o do autor não verifica nada. Que
 sobrepõe no projeto, em `.expx/agentes.json` (instalação pelo `expx`; o `install.sh` manual instala o piso).
 Isto vale para o Claude Code; os agentes de `.opencode/agent/` não declaram modelo nem esforço e ficam fora desta política.
 
-Hooks e skill gravam um rastro append-only em `docs/eventos/<slug>.jsonl` (ignorado pelo versionador). Dele sai a linha do tempo do trabalho, quem fez o quê — e a **duração real por task sem ninguém anotar nada**, que alimenta a calibração da estimativa. Com um cuidado: tempo de parede não é esforço, então o valor entra como `duracao_observada`, nunca como `real`, e a calibração usa mediana.
+Hooks e skill gravam um rastro append-only em `docs/eventos/<slug>.jsonl` (ignorado pelo versionador). Dele sai a linha do tempo do trabalho, quem fez o quê — e a **duração de cada task sem ninguém anotar nada**, que entra no histórico da estimativa como `duracao_observada`. Com um cuidado: tempo de parede não é esforço, então ela nunca entra como `real` e fica fora da calibração — o que calibra é o desvio entre o estimado e o `real` anotado.
 
 ---
 
@@ -256,7 +256,7 @@ Os comandos de fase **recusam execução fora de ordem**: peça o plano sem a in
 F1 INGESTÃO → F2 DESCOBERTA → F3 PLANO → [F3.5 ESTIMATIVA] → F4 ORQUESTRADOR → F5 AUDITORIA → F6 EXECUÇÃO
 ```
 
-Estritamente sequenciais. A skill descobre onde está **inspecionando o disco**, não perguntando — você nunca precisa dizer "estou na fase X".
+Estritamente sequenciais. A skill descobre onde está **inspecionando o disco**, não perguntando — você nunca precisa dizer "estou na fase X". A fonte primária é o `00-PLANEJAMENTO.md` da feature, o estado durável do laço F3 ↔ F5; com Git, cada fim de F2, F3, F4 e cada veredito da F5 vira um checkpoint local na branch `feature/<slug>`, só da pasta da feature, para o planejamento sobreviver à sessão antes da execução.
 
 A elas se soma uma única fase **opcional**, a F3.5 (estimativa), que roda entre a F3 e a F4 apenas quando você pede — e cuja ausência nunca impede nada.
 
@@ -267,8 +267,8 @@ A elas se soma uma única fase **opcional**, a F3.5 (estimativa), que roda entre
 | **F3** | Plano | Gera a árvore de sprints, fases e tasks com todos os contratos preenchidos. Bloqueia se sobrar pendência não resolvida. A primeira sprint sempre entrega a capacidade de testar (config, client, harness, fixtures) antes de qualquer funcionalidade de negócio. |
 | **F3.5** | Estimativa *(opcional)* | Converte o plano pronto em **faixa de esforço** — nunca número único, nunca prazo de calendário. Só roda a pedido, e nunca bloqueia a F4. |
 | **F4** | Orquestrador | Gera o `ORQUESTRADOR.md` — o mapa de execução, escrito para quem abre o repositório sem saber nada: rota de execução, paralelismo, caminho crítico, ferramentas, agentes, regras de autonomia e como retomar uma sessão interrompida. |
-| **F5** | Auditoria | A IA vira auditora do próprio plano e não corrige nada — só aponta. Verifica tasks sem teste, testes fracos, critérios subjetivos, dependências circulares, paralelismo falso e mais. Veredito único: pronto para execução autônoma, SIM ou NÃO. |
-| **F6** | Execução | Lê o orquestrador e implementa até o fim, sob as regras de autonomia. Escreve o teste antes do código, atualiza o status de cada task, e entrega um relatório final com o que foi concluído, os bloqueios e a saída da suíte. |
+| **F5** | Auditoria | A IA vira auditora do próprio plano e não corrige nada — só aponta. Verifica tasks sem teste, testes fracos, critérios subjetivos, dependências circulares, paralelismo falso e mais. Veredito único: pronto para execução autônoma, SIM ou NÃO. Teste fraco é tipado (`ausente`, `criterio`, `teste`) e a severidade sai do tipo, não do julgamento da sessão. Quem aciona a skill pode declarar um teto de reprovações; ao atingi-lo, o planejamento para em `orcamento_esgotado`, sem F6. |
+| **F6** | Execução | Lê o orquestrador e implementa até o fim, sob as regras de autonomia. Escreve o teste antes do código, atualiza o status de cada task, e entrega um relatório final com o que foi concluído, os bloqueios e a saída da suíte. Um bloqueio `defeito_de_plano` devolve o plano à F3 (`replanejar_execucao`, com orçamento próprio declarado pelo caller) sem descartar nem reabrir as tasks já concluídas. |
 
 ---
 
@@ -337,6 +337,7 @@ docs/sprintx/
   features/
     <slug-da-feature>/
       ORQUESTRADOR.md      mapa e porta de entrada da execução
+      00-PLANEJAMENTO.md   estado durável do laço F3 ↔ F5 e orçamento de reprovações
       00-DECISOES.md       uma linha por decisão tomada no planejamento
       00-BLOQUEIOS.md      bloqueios registrados durante a execução
       00-AUDITORIA.md      relatório e veredito da F5
@@ -390,7 +391,7 @@ tasks:
 
 O painel apenas **lê**; a skill continua sendo a única a escrever. A máquina lê o YAML, a pessoa lê a prosa abaixo dele.
 
-Os kinds `orquestrador`, `sprint`, `fases`, `tasks`, `bloqueios` e `base_indice` são **idênticos campo por campo** aos da [`runx`](https://github.com/bittencourtthulio/runx) — o campo `expx_tool` (`sprintx` | `runx`) diz qual das duas escreveu. A única diferença é na task: a `runx` acrescenta `teste_regressao`, que só faz sentido quando existe um comportamento errado a provar. A `sprintx` tem ainda dois kinds próprios da camada de estimativa: `estimativa` e `estimativa_historico`. Contrato completo em [`references/00-schema.md`](.claude/skills/sprintx/references/00-schema.md).
+Os kinds `orquestrador`, `sprint`, `fases`, `tasks`, `bloqueios` e `base_indice` são **idênticos campo por campo** aos da [`runx`](https://github.com/bittencourtthulio/runx) — o campo `expx_tool` (`sprintx` | `runx`) diz qual das duas escreveu. A única diferença é na task: a `runx` acrescenta `teste_regressao`, que só faz sentido quando existe um comportamento errado a provar. Pendente: o bloqueio da `sprintx` ganhou a chave `classe` (tipada, nunca inferida da descrição), ainda não adotada pela `runx`; sem ela, o B-NN é lido como legado. A `sprintx` tem ainda dois kinds próprios da camada de estimativa: `estimativa` e `estimativa_historico`. Contrato completo em [`references/00-schema.md`](.claude/skills/sprintx/references/00-schema.md).
 
 ---
 
@@ -407,12 +408,17 @@ Os kinds `orquestrador`, `sprint`, `fases`, `tasks`, `bloqueios` e `base_indice`
       <uma por fase>            roteiro operacional detalhado (as 6 + a F3.5 opcional)
     assets/
       TEMPLATE-*.md             templates preenchíveis usados pelas fases
+    scripts/
+      planejamento.sh           estado, orçamentos (F5 e F6), fase, replanejamento da execução e checkpoints
+      predecessores.sh          registra e prova documentos Superpowers consumidos antes do planejamento
+      bloqueios.sh              registra, resolve e lê o B-NN tipado (classe obrigatória e imutável)
+      rastro.sh                 único escritor dos eventos da skill no rastro; deriva sessão e harness
   commands/
     sprintx*.md                 atalhos de comando para cada fase
   hooks/
     doctor.sh                   modo de cada hook e violações acumuladas
-    comum/                      rastro, segredo, git — não específicos da sprintx
-    sprintx/                    escopo-da-task, task-so-fecha-verde, tdd, placeholder
+    comum/                      rastro e segredo — não específicos da sprintx
+    sprintx/                    escopo-da-task, git-perigoso, task-so-fecha-verde, tdd, placeholder
   agents/
     auditor-plano.md            F5 em contexto separado, somente leitura
     revisor-testes.md           o teste passaria com a implementação errada?
@@ -426,6 +432,9 @@ Os kinds `orquestrador`, `sprint`, `fases`, `tasks`, `bloqueios` e `base_indice`
   plugin/sprintx.ts             ponte que invoca os mesmos scripts de .claude/hooks/
 .github/assets/                 banner e badges do README
 install.sh                      instalador para Claude Code e OpenCode
+scripts/ci/                     somente no repositório-fonte; não fazem parte do pacote instalado
+  test-predecessores.sh         contrato executável do manifesto `00-PREDECESSORES.md`
+  mutacao-predecessores.sh      certifica o contrato matando os mutantes obrigatórios
 ```
 
 A pasta `.claude/skills/sprintx/` é a **fonte única** da skill: ela não cita `.claude` em lugar nenhum e usa só caminhos relativos à própria raiz, por isso o mesmo conteúdo funciona sem alteração nos dois harnesses. O `.opencode/command/` é gerado a partir de `.claude/commands/`.

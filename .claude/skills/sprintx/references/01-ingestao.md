@@ -23,6 +23,10 @@ Antes do scaffold: verifique se `docs/sprintx/features/` já tem outra pasta com
 responde `true`). Sem git, ou com "sem worktree" explícito no pedido: `worktree: null` (será
 copiado ao `ORQUESTRADOR.md` na F4) e nada muda no restante desta fase.
 
+Onde esta fase diz `CONVENCOES.md`, o arquivo é localizado pela regra única de
+`references/00-schema.md` ("Como localizar o `CONVENCOES.md`"), que reconhece o caminho
+canônico `docs/stack/CONVENCOES.md`.
+
 1. **Nome da branch e base**: `feature/<slug>`. Base, nesta ordem: `CONVENCOES.md` (seção de
    versionamento, se marcada e não `PROPOSTA`) → `git symbolic-ref refs/remotes/origin/HEAD`
    → a branch atual, se `main`/`master`/`develop` ou equivalente detectada.
@@ -82,16 +86,77 @@ recurso da base NÃO levam frontmatter.
 Use `assets/TEMPLATE-BLOQUEIOS.md` e `assets/TEMPLATE-base-indice.md` (caminhos relativos à
 raiz da skill) como ponto de partida desses dois arquivos.
 
-**O rastro no `.gitignore`.** Garanta a linha `docs/eventos/` no `.gitignore` da raiz do
-repositório — acrescente-a se não existir, e não faça nada se já existir. O rastro de
-eventos (`references/08-rastro.md`) é local da máquina de quem executou, cresce rápido e o
-painel roda local; versioná-lo por acidente traz conflito de merge em arquivo append-only,
-que é chato de resolver. Quem quiser rastro compartilhado troca isso conscientemente.
+**O estado durável do planejamento nasce aqui.** Crie `00-PLANEJAMENTO.md` (`kind: planejamento`,
+`references/00-schema.md`) sempre pelo script, nunca à mão:
 
-Na mesma passada, garanta também a linha `.expx/estado.json` no `.gitignore` — o arquivo que a
-barra de status lê (`references/09-estado.md`), pela mesma razão: é estado da máquina de quem
-está trabalhando, reescrito a cada transição. Se `.expx/` não existe no projeto, não crie nada
-e não acrescente a linha: não há o que ignorar.
+```bash
+bash <raiz-da-skill>/scripts/planejamento.sh criar <slug> [max_reprovacoes_f5] [orcamento_declarado_por] [max_replanejamentos_f6]
+```
+
+**O orçamento pertence a quem acionou a `sprintx`, nunca a ela.** Leia do pedido (o briefing do
+caller) as três chaves `max_reprovacoes_f5`, `orcamento_declarado_por` e `max_replanejamentos_f6`
+e repasse cada uma, na posição dela, exatamente como veio. Chave que o pedido não declara vai como
+`null` — nunca como um valor que você escolheu; `null` ao fim da linha pode ser omitido. A
+`sprintx` não tem teto padrão: não arredonde, não complete e não invente nenhum dos três.
+
+| O pedido declara | Comando |
+|---|---|
+| nada | `criar <slug>` |
+| `max_reprovacoes_f5: 3`, `orcamento_declarado_por: buildx` | `criar <slug> 3 buildx` |
+| `max_reprovacoes_f5: 3`, `orcamento_declarado_por: buildx`, `max_replanejamentos_f6: 1` | `criar <slug> 3 buildx 1` |
+
+- **A `sprintx` sozinha** — ninguém declarou orçamento: rode só `criar <slug>`. O arquivo nasce
+  com `max_reprovacoes_f5: null`, `orcamento_declarado_por: null` e `max_replanejamentos_f6: null`:
+  o laço F3 ↔ F5 não tem teto e o retorno da F6 ao planejamento não abre.
+- **Um caller declarou orçamento** — a `buildx`, por exemplo, declara `max_reprovacoes_f5: 3`,
+  `orcamento_declarado_por: buildx` e `max_replanejamentos_f6: 1`: repasse os três,
+  `criar <slug> 3 buildx 1`. O arquivo nasce com `max_replanejamentos_f6: 1` e
+  `replanejamentos_f6: 0`. Um pedido que declara só o teto da F5 e o dono (um caller anterior ao
+  eixo da F6) vira `criar <slug> 3 buildx`: o teto da F6 fica `null` — o `1` do BuildX não é
+  presumido.
+- **Orçamento inválido** — zero, negativo, texto, teto sem dono ou dono sem teto: o script sai
+  com código `4` (erro de contrato) e não grava nada. Isso não é bloqueio a contornar: devolva o
+  erro a quem pediu, e não siga com um teto que ninguém declarou.
+- Numa retomada o arquivo já existe: `criar` com o mesmo orçamento é no-op; com orçamento
+  diferente é erro de contrato — o teto não muda em silêncio no meio do trabalho. Planejamento
+  legado (anterior ao eixo da F6, sem `max_replanejamentos_f6`) não ganha teto numa retomada:
+  repita só o que ele já registra; pedir o teto da F6 a ele é erro de contrato (código `4`).
+
+O arquivo nasce com `estado: null`: o planejamento só ganha estado ao fim da F2. A F1 **não** faz
+checkpoint.
+
+**O rastro e o estado ficam fora do versionador — sem tocar no `.gitignore`.** O rastro de
+eventos (`references/08-rastro.md`) e o `.expx/estado.json` (`references/09-estado.md`) são
+**estado local da máquina** de quem executou: crescem rápido, são reescritos a cada transição,
+o painel roda local, e versioná-los traz conflito de merge em arquivo que ninguém lê à mão. Mas
+eles não são produto nem decisão do projeto — e a F1 **não suja uma branch de feature com uma
+alteração global de `.gitignore` antes de o plano existir**.
+
+Com Git, garanta isso pelo mecanismo **local** do repositório: ele não aparece em `git status`
+e não entra em commit nenhum. Para cada um dos padrões `docs/eventos/` e `.expx/estado.json`:
+
+1. **Confira se já é ignorado** pela configuração existente — `git check-ignore -q <padrão>`
+   responde isso e cobre `.gitignore` versionado, excludes globais e o que mais o repositório já
+   tenha. Já ignorado: **não faça nada**.
+2. **Não sendo ignorado**, acrescente a linha ao arquivo que o próprio Git indicar:
+
+   ```bash
+   git rev-parse --git-path info/exclude
+   ```
+
+   **Resolva o caminho com esse comando, sempre.** Nunca escreva `.git/info/exclude` na mão: num
+   linked worktree o `.git` é um arquivo, não um diretório, e o exclude real vive no repositório
+   principal — o caminho fixo gravaria no lugar errado, ou em lugar nenhum. O comando devolve o
+   caminho certo nos dois casos.
+3. **Acrescente idempotentemente**: se a linha já está lá, não duplique. Crie o arquivo, e o
+   diretório dele, se não existirem.
+
+Se `.expx/` não existe no projeto, não crie nada e não acrescente a regra do `estado.json`: não
+há o que ignorar. **Sem Git** não existe `info/exclude` — siga sem erro e sem aviso.
+
+**A `sprintx` nunca modifica o `.gitignore` por conta própria.** Um time que queira política
+compartilhada versiona essas entradas por fora da F1 — e aí o passo 1 já as respeita, e a F1
+não faz nada.
 
 **O estado da barra — abertura do trabalho.** Com o scaffold no disco, grave `.expx/estado.json`
 com `trabalho: <slug>`, `ferramenta: sprintx`, `titulo_curto` (a feature em até 30 caracteres),
@@ -175,6 +240,21 @@ arquivos: siga para o Passo 4 sem registrar nada. A F1 nunca falha por falta del
 dele não é lacuna — não vai para `00-LACUNAS.md`, porque lacuna é o que a skill procurou na
 fonte e não achou, não uma ferramenta opcional que o projeto não instalou.
 
+## Passo 3.2 — Registrar documentos Superpowers realmente consumidos
+
+Depois de **ler de verdade** uma especificação ou um plano em `docs/superpowers/` e de citar
+essa evidência em um arquivo da base, registre exatamente aquele documento:
+
+```bash
+bash <raiz-da-skill>/scripts/predecessores.sh --registrar <slug> \
+  --origem superpowers --papel <especificacao|plano> --caminho <caminho-relativo>
+```
+
+Não registre candidato que não foi lido nem citado e **não faça varredura automática** de
+`docs/superpowers/`: o manifesto declara consumo, não presença. O script calcula commit e blob;
+não os informe à mão. Repetir a mesma prova é no-op. Uma recusa não autoriza editar
+`00-PREDECESSORES.md` manualmente.
+
 ## Passo 4 — Formato de cada arquivo da base
 
 Use `assets/TEMPLATE-base-recurso.md` (caminho relativo à raiz da skill). Todo arquivo tem exatamente estas seções:
@@ -202,6 +282,9 @@ Use `assets/TEMPLATE-base-recurso.md` (caminho relativo à raiz da skill). Todo 
 - [ ] `00-LACUNAS.md` registra tudo que não foi encontrado (ou declara que não há lacunas).
 - [ ] Nenhum campo inventado; todo número referenciado.
 - [ ] `00-BLOQUEIOS.md` e `base/00-INDICE.md` têm frontmatter válido conforme `references/00-schema.md`.
+- [ ] `00-PLANEJAMENTO.md` existe, criado por `scripts/planejamento.sh criar`, com os três tetos que o caller declarou (`max_reprovacoes_f5`, `orcamento_declarado_por`, `max_replanejamentos_f6`) — e `null` em cada um que ele não declarou.
+- [ ] Se `00-PREDECESSORES.md` existe, cada item foi realmente lido e citado pela base, e
+  `bash <raiz-da-skill>/scripts/predecessores.sh --validar <slug>` responde `resultado=ok`.
 
 ## Quando o critério não é atendido
 

@@ -22,20 +22,25 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENTRADA="$(cat)"
 CWD="$(rastro_json_get "$ENTRADA" cwd)"
 [ -n "$CWD" ] || CWD="$PWD"
+# Caminho do payload (no Windows, C:\dir com caixa de drive variavel) sempre pelo helper.
+rastro_caminho_em CWD "$CWD"
 RAIZ="$(rastro_raiz "$CWD")"
 
 # ---------------------------------------------------- porta: exige stackx
 # Sem CONVENCOES.md nao ha como saber onde o teste mora neste projeto.
 # Inativo e a resposta certa; chutar produziria falso positivo, e falso
 # positivo desinstala o hook (e leva junto os que funcionavam).
+# Localizacao: regra unica em references/00-schema.md ("Como localizar o
+# CONVENCOES.md"). Primeiro que existir vence; nunca mescla, nunca por data.
 CONV=""
-for c in "$RAIZ/CONVENCOES.md" "$RAIZ/docs/stackx/CONVENCOES.md" "$RAIZ/.expx/CONVENCOES.md"; do
+for c in "$RAIZ/CONVENCOES.md" "$RAIZ/docs/stack/CONVENCOES.md" "$RAIZ/docs/stackx/CONVENCOES.md" "$RAIZ/.expx/CONVENCOES.md"; do
   [ -f "$c" ] && { CONV="$c"; break; }
 done
 [ -n "$CONV" ] || exit 0
 
 ALVO="$(rastro_tool_input_get "$ENTRADA" file_path)"
 [ -n "$ALVO" ] || exit 0
+rastro_caminho_em ALVO "$ALVO"
 [ -f "$ALVO" ] || exit 0
 REL="${ALVO#"$RAIZ"/}"
 

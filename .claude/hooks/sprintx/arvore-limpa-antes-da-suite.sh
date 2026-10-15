@@ -22,6 +22,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENTRADA="$(cat)"
 CWD="$(rastro_json_get "$ENTRADA" cwd)"
 [ -n "$CWD" ] || CWD="$PWD"
+# Caminho do payload (no Windows, C:\dir com caixa de drive variavel) sempre pelo helper.
+rastro_caminho_em CWD "$CWD"
 RAIZ="$(rastro_raiz "$CWD")"
 
 CMD="$(rastro_tool_input_get "$ENTRADA" command)"
@@ -36,8 +38,12 @@ esac
 # Sem git, nada a comparar.
 git -C "$RAIZ" rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 
-TRABALHO="$(rastro_trabalho_id "$RAIZ")"
-[ "$TRABALHO" != "sem-trabalho" ] || exit 0
+# O trabalho corrente e o da SESSAO — a reivindicacao ativa no rastro —, nao
+# a feature que mexeu por ultimo no disco: a pergunta aqui e "a arvore esta
+# contaminada em relacao ao escopo do MEU trabalho" (DS-155). Sem trabalho
+# corrente inequivoco nao ha escopo a comparar: falha aberta, sai calado.
+TRABALHO="$(rastro_trabalho_da_sessao "$RAIZ")"
+[ -n "$TRABALHO" ] || exit 0
 
 # --------------------------------------------------------- escopo declarado
 # Uniao de `arquivos` (cria + altera) de TODAS as tasks de TODAS as sprints da
@@ -78,7 +84,7 @@ FORA_ESCOPO=""
 while IFS= read -r caminho; do
   [ -n "$caminho" ] || continue
   case "$caminho" in
-    docs/sprintx/*|docs/eventos/*|.expx/*) continue ;;
+    docs/sprintx/*|docs/eventos/*|docs/entregas/*|.expx/*) continue ;;
   esac
   # Isencao de arquivo de teste, mesmo espirito de escopo-da-task.sh: o metodo
   # MANDA escrever teste antes do codigo (regra 3), e cobrar escopo dele
@@ -139,9 +145,9 @@ MODO="$(rastro_modo "$RAIZ" arvore-limpa-antes-da-suite metodo)"
 [ "$MODO" = "desligado" ] && exit 0
 
 if [ "$MODO" = "bloqueio" ]; then
-  rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "arvore contaminada" "[]"
+  rastro_grava_trabalho "$RAIZ" "$TRABALHO" acao_bloqueada hook bloqueado "arvore contaminada" "[]"
   rastro_bloqueia "$MSG"
 fi
 
-rastro_grava "$RAIZ" regra_violada hook aviso "arvore contaminada" "[]"
+rastro_grava_trabalho "$RAIZ" "$TRABALHO" regra_violada hook aviso "arvore contaminada" "[]"
 rastro_aviso_ao_modelo PreToolUse "$MSG"

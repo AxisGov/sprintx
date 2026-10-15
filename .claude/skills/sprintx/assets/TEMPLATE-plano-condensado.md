@@ -64,6 +64,10 @@ tasks:
 >
 > A escolha e por SPRINT, nao pelo trabalho inteiro: num plano de tres sprints, cada uma vai
 > no formato que couber.
+>
+> **Sem diagrama.** O grafo visual de tasks so existe no formato de tres arquivos, dentro de
+> `fases.md`. Aqui a estrutura vive inteira no frontmatter (`fases`, `tasks`, `depende_de`,
+> `paralelizavel`) — a ausencia de grafo neste arquivo e o formato, nao uma lacuna.
 
 # Plano — Sprint {{NN}} — {{título da sprint}}
 
@@ -94,29 +98,6 @@ que ela é cobrada. Ex.: "a suíte roda com `<comando>` e termina com 0 failed".
 **Critério de saída:** {{condição verificável e binária}}
 
 **Roda em paralelo com:** nenhuma.
-
-### Grafo de tasks
-
-```mermaid
-%% Grafo de tasks — sprint-{{NN}} — gerado pela sprintx a partir deste arquivo
-flowchart LR
-  subgraph fase_{{NN}}_1["F-{{NN}}.1 {{título curto da fase}}"]
-    T_{{NN}}_01["T-{{NN}}.01<br/>{{título curto}}"]
-    T_{{NN}}_02["T-{{NN}}.02<br/>{{título curto}}"]
-  end
-  T_{{NN}}_01 --> T_{{NN}}_02
-  classDef pendente fill:#F3F0EA,stroke:#8A7F70,color:#1A1815
-  classDef em_andamento fill:#FDF0D5,stroke:#B4541E,color:#1A1815
-  classDef concluida fill:#DFF0D8,stroke:#4A6B3A,color:#1A1815
-  classDef bloqueada fill:#F8D7DA,stroke:#8C2F24,color:#1A1815
-  classDef critico stroke-width:3px
-  class T_{{NN}}_01 pendente
-  class T_{{NN}}_02 pendente
-```
-
-> Regras do diagrama em `references/09-diagrama.md`. Os identificadores dos nós vêm concretos
-> (`T_02_01`), nunca com marcador — `{{ }}` é sintaxe de nó hexagonal do Mermaid e quebraria
-> o bloco em posição de identificador.
 
 ## Tasks
 

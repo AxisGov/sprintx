@@ -8,7 +8,7 @@ O rastro é um arquivo **append-only**, uma linha JSON por evento:
 docs/eventos/<trabalho_id>.jsonl
 ```
 
-Escrito pelos hooks e **pela própria skill nas transições de fase e de task**. Lido pelo painel de operação. **Ninguém edita à mão.**
+Escrito pelos hooks, pelos scripts da skill e **pela própria skill nas transições de fase e de task — sempre pelo escritor `scripts/rastro.sh`** (seção "Como gravar"). Lido pelo painel de operação e pelos hooks. **Ninguém edita à mão.**
 
 `<trabalho_id>` é o `<slug-da-feature>` — o mesmo da pasta `docs/sprintx/features/<slug>/` e do frontmatter.
 
@@ -16,22 +16,43 @@ Escrito pelos hooks e **pela própria skill nas transições de fase e de task**
 
 | Evento | Quem grava |
 |---|---|
-| `fase_iniciada` · `fase_concluida` | **a skill**, ao entrar e sair de cada fase |
-| `task_iniciada` · `task_concluida` · `task_bloqueada` | **a skill**, na F6 |
-| `veredito_emitido` | **a skill/agente**, na F5 (auditor) |
-| `agente_iniciado` · `agente_concluido` | hook `SubagentStop` e a skill |
+| `fase_iniciada` · `fase_concluida` | **a skill**, ao entrar e sair de cada fase, por `scripts/rastro.sh fase-iniciada` / `fase-concluida` |
+| `task_iniciada` · `task_concluida` · `task_bloqueada` | **a skill**, na F6, **só** por `scripts/rastro.sh task-iniciada` / `task-concluida` / `task-bloqueada` — são a reivindicação da task que os hooks leem |
+| `veredito_emitido` | **a skill/agente**, na F5 (auditor), por `scripts/rastro.sh veredito-emitido` |
+| `checkpoint_planejamento` | **`scripts/planejamento.sh`**, ao fim da F2, F3, F4, a cada veredito da F5 e ao entrar em `replanejar_execucao`, `replanejamento_execucao_esgotado` ou `replanejamento_execucao_recusado`. `resultado`: `ok` (`commitado`, `sem_mudanca`), `aviso` (checkpoint ignorado: sem Git, outra branch, pasta ignorada), `bloqueado` (path staged fora da pasta da feature) ou `falha` (`persistencia_falhou`: o commit foi rejeitado). `avanca` recusado por checkpoint pendente também grava `bloqueado`. O `detalhe` começa pelo resultado do checkpoint |
+| `replanejamento_execucao_iniciado` · `replanejamento_execucao_retomado` · `replanejamento_execucao_aprovado` · `replanejamento_execucao_esgotado` · `replanejamento_execucao_recusado` | **`scripts/planejamento.sh`**: rodada nova aceita (`fase: f6`, `ok`, com os B-NN que a abriram e as reprovações da F5 em curso); `replanejar-execucao` chamado de novo na mesma rodada (`ok`, orçamento não consumido); F5 aprovou o plano replanejado e a rodada fechou (`fase: f5`, `ok`); orçamento da F6 consumido e o estado terminal gravado (`bloqueado`); transição recusada (`bloqueado`, o motivo no começo do `detalhe`): a recusa **operacional** — `classes_mistas`, `orcamento_f6_legado`, `orcamento_f6_nao_declarado`, `planejamento_legado` — é registrada uma vez, quando o terminal `replanejamento_execucao_recusado` é gravado (a repetição não registra de novo); a de contrato — nenhum bloqueio aberto, nenhum `defeito_de_plano`, fronteira insegura, task concluída alterada — a cada tentativa, sem estado gravado. O evento é rastro, não fonte: a retomada lê o motivo de `00-PLANEJAMENTO.md` |
+| `orcamento_f6_autorizado` | **`scripts/planejamento.sh`**, quando a autoridade humana aplica a autorização tardia ao terminal exato `orcamento_f6_nao_declarado`. O detalhe leva teto, `autorizacao_tardia_f6_por`, origem e B-NN abertos. É gravado exatamente uma vez junto de `replanejamento_execucao_iniciado`. Retomada e checkpoint pendente não duplicam nenhum dos dois eventos |
+| `task_reaberta` | **`scripts/planejamento.sh`**, no fechamento da rodada: a task do B-NN volta de `bloqueada` a `pendente` (`fase: f5`, `task` preenchida). Task concluída nunca gera este evento |
+| `bloqueio_resolvido` | **`scripts/bloqueios.sh resolver`**, ao gravar `resolvido_em` (`fase: null`, `task` do B-NN; a classe, inalterada, vai no `detalhe`) |
+| `agente_concluido` | hook `SubagentStop` |
+| `agente_iniciado` | reservado no contrato; nenhum passo do método o grava hoje |
 | `suite_executada` · `arquivo_alterado` | hook `PostToolUse` |
 | `regra_violada` | hook, em modo aviso |
 | `acao_bloqueada` | hook, em modo bloqueio |
 
 Você não grava o que o hook já grava. Gravar duas vezes o mesmo fato faz o painel contar em dobro.
 
+## Em qual arquivo o evento entra
+
+O destino é `docs/eventos/<trabalho_id>.jsonl` do **trabalho corrente** — e "corrente" tem uma definição mecânica, não uma heurística de disco:
+
+| Quem grava | De onde sai o `<trabalho_id>` |
+|---|---|
+| a skill (F1–F6), `planejamento.sh`, `bloqueios.sh` | o slug da feature que a fase está tratando — a skill sempre o conhece |
+| hook que conhece o trabalho | ele o **declara**: `rastro_grava_trabalho <raiz> <trabalho_id> <evento> ...` |
+| hook sem contexto de trabalho | `rastro_grava <raiz> <evento> ...`, e o destino é o **trabalho corrente da sessão**: a reivindicação ativa dela no rastro (`task_iniciada` sem fechamento posterior), exatamente uma e coerente |
+| nada disso resolve | `docs/eventos/sem-trabalho.jsonl` |
+
+**`mtime` nunca seleciona o destino** (DS-155). "Qual feature mexeu por último no disco" é outra pergunta, e a resposta dela não pertence a esta: num repositório com features acumuladas, ou com duas sessões em trabalhos diferentes, ela manda o evento para o rastro errado sem ninguém perceber.
+
+**Trabalho declarado que contradiz o trabalho provado pelo rastro da sessão é erro de contexto, e falha fechado**: a linha não entra nem num arquivo nem no outro. A incoerência é registrada em `sem-trabalho.jsonl` como `acao_bloqueada` com `contexto_de_trabalho_divergente` no `detalhe`, para o painel ver que o evento existiu e por que não foi atribuído.
+
 ## Formato da linha
 
-Chaves em `snake_case` sem acento, enums minúsculos sem acento, datas ISO, e **chave nunca omitida** — ausente é `null`. As mesmas regras do `expx-schema` (`references/00-schema.md`).
+Chaves em `snake_case` sem acento, enums minúsculos sem acento, datas ISO, e **chave nunca omitida** — ausente é `null`. As mesmas regras do `expx-schema` (`references/00-schema.md`). O formato é o contrato de quem **lê** o rastro; quem grava os eventos da skill é o escritor (seção "Como gravar"), que monta a linha inteira.
 
 ```json
-{"ts":"2026-08-29T14:32:10Z","expx_eventos":1,"trabalho_id":"exportacao-csv","ferramenta":"sprintx","origem":"skill","evento":"task_concluida","fase":"f6","task":"T-01.02","agente":"principal","resultado":"ok","detalhe":"suite verde, 14 testes","arquivos":["src/frete/calculo.ts"]}
+{"ts":"2026-08-29T14:32:10Z","expx_eventos":1,"trabalho_id":"exportacao-csv","ferramenta":"sprintx","origem":"hook","evento":"arquivo_alterado","fase":null,"task":null,"agente":"principal","resultado":"ok","detalhe":"Edit","arquivos":["src/frete/calculo.ts"]}
 ```
 
 | Campo | Conteúdo |
@@ -48,21 +69,73 @@ Chaves em `snake_case` sem acento, enums minúsculos sem acento, datas ISO, e **
 | `resultado` | `ok` \| `falha` \| `aviso` \| `bloqueado` |
 | `detalhe` | uma linha de texto |
 | `arquivos` | lista de caminhos relativos, ou `[]` |
+| `sessao` · `harness` | identidade da sessão (`<harness>@<id>`), **derivada** pelo escritor `scripts/rastro.sh` — obrigatória em `task_iniciada`/`task_concluida`/`task_bloqueada`, `null` quando não existe num evento que não depende dela. Nunca é preenchida por quem chama |
 
 ## Como gravar
 
-Acrescente **uma linha** ao arquivo, sem reescrever nada do que já está lá:
+Pelo escritor da skill — o caminho é relativo à raiz desta skill, como o de `scripts/planejamento.sh`:
 
 ```bash
-mkdir -p docs/eventos
-printf '%s\n' '{"ts":"...","expx_eventos":1,...}' >> docs/eventos/<trabalho_id>.jsonl
+bash <raiz-da-skill>/scripts/rastro.sh task-iniciada  <slug> <T-NN.MM> ["<detalhe>"]
+bash <raiz-da-skill>/scripts/rastro.sh task-concluida <slug> <T-NN.MM> ["<detalhe>"] [<arquivo> ...]
+bash <raiz-da-skill>/scripts/rastro.sh task-bloqueada <slug> <T-NN.MM> ["<detalhe>"]
+bash <raiz-da-skill>/scripts/rastro.sh fase-iniciada  <slug> <f1..f6> ["<detalhe>"]
+bash <raiz-da-skill>/scripts/rastro.sh fase-concluida <slug> <f1..f6> ["<detalhe>"]
+bash <raiz-da-skill>/scripts/rastro.sh veredito-emitido <slug> <SIM|NAO> ["<detalhe>"]
 ```
+
+Exemplo, ao abrir e ao fechar a task `T-01.02` da feature `exportacao-csv`:
+
+```bash
+bash <raiz-da-skill>/scripts/rastro.sh task-iniciada exportacao-csv T-01.02
+bash <raiz-da-skill>/scripts/rastro.sh task-concluida exportacao-csv T-01.02 "suite parcial verde, 14 testes" src/frete/calculo.ts test/frete/calculo.test.ts
+```
+
+| Você fornece | O mecanismo deriva — nunca é argumento |
+|---|---|
+| o evento (o subcomando) | `ts`, `expx_eventos`, `ferramenta`, `origem`, `agente` |
+| `<slug>` — o trabalho da fase | o arquivo de destino `docs/eventos/<slug>.jsonl` e a coerência dele com o trabalho que a sessão já reivindica |
+| a task, a fase ou o veredito | `fase` e `resultado` de cada evento |
+| `detalhe` (uma linha, opcional) e, no `task-concluida`, os arquivos da task | **a identidade da sessão: `sessao` e `harness`** |
+
+A identidade é o que liga a task à sessão que a abriu: é por ela que o hook `escopo-da-task` sabe que a edição seguinte pertence à task corrente. Você **não** a descobre, não a copia de mensagem nenhuma e não a escreve: o escritor a deriva do próprio harness pela mesma regra que os hooks usam para lê-la.
+
+Respostas:
+
+| Código | Significado | O que fazer |
+|---|---|---|
+| `0` | gravado; a saída diz `evento=`, `trabalho=`, `task=` e `rastro=` | siga |
+| `3` | a identidade da sessão não está disponível neste processo (`task-*`) — **nada foi gravado** | não grave à mão; registre bloqueio `prerequisito_ausente` (`scripts/bloqueios.sh registrar`) |
+| `4` | contrato: o trabalho não tem pasta, a task não está no plano do trabalho, a sessão ainda reivindica task aberta de **outro** trabalho, ou — em `task-concluida`/`task-bloqueada` — a task está reivindicada por outra sessão — **nada foi gravado** no rastro pedido | corrija o slug/task; feche a task aberta do outro trabalho; ou, se a task é de outra sessão, não a feche: registre bloqueio `task_reivindicada` |
+| `5` | ambiente: a biblioteca do rastro (`.claude/hooks/comum/rastro.sh`) não está instalada, a escrita falhou, ou — em `task-concluida`/`task-bloqueada` — a **reivindicação não pôde ser lida** (falta `awk` no `PATH`, ou erro de leitura/execução sobre `docs/eventos/`) — **nada foi gravado** | nos três `task_*`, **falha fechado como o código `3`**: sem `task_iniciada` não há reivindicação, e o `escopo-da-task` barra a primeira edição da task com `sessao_ambigua` — não abra a task, não grave à mão, registre bloqueio `prerequisito_ausente` (`scripts/bloqueios.sh registrar`). Nos demais eventos (`fase-*`, `veredito-emitido`), que nenhum hook lê, siga sem o evento |
+| `64` | uso incorreto | releia o uso acima |
+
+**Fechar a task é do dono da reivindicação.** `task_concluida` e `task_bloqueada` **são**, para toda leitura do rastro, o fechamento da reivindicação daquela (trabalho, task). Gravados por outra sessão, eles tirariam do dono uma reivindicação que ele nunca fechou — a próxima edição dele seria barrada com `sessao_ambigua` — e deixariam a task reivindicável por quem fechou. O escritor **recusa** (código `4`, nada gravado) quando a task está aberta por outra sessão, inclusive quando essa reivindicação está num arquivo já rotacionado. Se a outra sessão parou e a task precisa sair do caminho, o caminho é registrar bloqueio `task_reivindicada` — nunca gravar o fechamento à mão, nunca fechar por ela. Abrir é outra pergunta: reivindicar por cima continua aceito pelo escritor, e quem avisa ou barra isso é o hook `task-reivindicada`, pelo modo configurado.
+
+**Dona indeterminada não é dona ausente.** O portão só recusa o fechamento alheio se souber de quem a task é — e "não deu para saber" não é "não tem dono". Quando existe arquivo de rastro do trabalho mas a leitura da reivindicação não se completa (falta `awk` no `PATH`, erro de leitura de `docs/eventos/` ou erro do próprio `awk`), o escritor para no código `5`, de ambiente, e **não** grava o fechamento: presumir ausência ali abriria o portão exatamente no ambiente em que a prova de ownership está ilegível. Ausência **conclusiva** continua liberando o fechamento como sempre — não há pasta `docs/eventos/`, não há arquivo daquele trabalho, ou os arquivos foram lidos e nenhum evento reivindica aquela task. Isso vale só para os dois fechamentos: `task-iniciada` **não** ganha dependência de `awk` por causa disto, porque abrir task não lê reivindicação nenhuma.
+
+**Limite conhecido: o portão é `check-then-append`, não exclusão mútua.** O escritor lê a dona e depois acrescenta a linha, em dois passos, sem lock. Duas sessões que fecham a mesma task no mesmo instante ainda podem ler o mesmo estado antes de qualquer uma escrever — a janela é estreita, mas existe, e nenhuma verificação local a elimina. O desfecho dela não é silencioso: sobra uma reivindicação encerrada por quem não devia, que aparece como `sessao_ambigua` na edição seguinte da dona ou como bloqueio `task_reivindicada`. Fechá-la de verdade exige atomicidade — um lock no `docs/eventos/`, ou mudança **coordenada** das quatro leituras que hoje concordam sobre o que libera uma reivindicação (`_RASTRO_AWK_REIV`, `rastro_sessao_dona`, `_sessao_dona` do `task-reivindicada`, o filtro do `arvore-limpa`) — e isso é decisão própria, não remendo local: leituras divergentes seriam pior que o TOCTOU residual. Registrado na DS-174.
+
+**Nada foi gravado é fail-closed nos três `task_*`.** Qualquer código diferente de `0` em `task-iniciada`, `task-concluida` ou `task-bloqueada` significa que a linha **não** existe — e, no caso do `task-iniciada`, que a task **não** está reivindicada. Com o `escopo-da-task` ativo, seguir dali é editar o primeiro arquivo da task para ser barrado com `sessao_ambigua`. Não existe "siga sem o evento" para esses três: registre o bloqueio que a tabela indica e não abra a task. "Siga sem o evento" vale só para `fase-*` e `veredito-emitido`, que nenhum hook lê.
+
+**Por que não à mão.** `task_iniciada`, `task_concluida` e `task_bloqueada` são lidos pelo enforcement (`escopo-da-task`, `task-reivindicada`, `arvore-limpa-antes-da-suite`): uma linha montada à mão sem a identidade que o hook espera não reivindica nada, e a primeira edição da task é bloqueada com `sessao_ambigua`. O escritor falha fechado — sem identidade válida, a linha não é gravada, nem incompleta. Evento de outra ferramenta (a `mergex`, por exemplo) segue o contrato daquela ferramenta.
+
+**Anotação informativa.** Quando uma referência pede "uma linha no rastro com `resultado: aviso`" (atualização do diagrama que falhou, gravação do `.expx/estado.json` que falhou), a linha é informativa: nenhum hook a lê. Ela pode ser acrescentada no formato acima, append-only, com `"task": null` e um `evento` que **nunca** é `task_iniciada`, `task_concluida` ou `task_bloqueada` — esses três só saem do escritor.
 
 Nunca use uma ferramenta de edição que reescreva o arquivo inteiro: o rastro é append-only, e reescrevê-lo destrói o histórico que o painel usa.
 
+## Predecessores verificáveis
+
+O protocolo de predecessores **não cria evento novo**. Registro e validação são observáveis
+pelas saídas estruturadas de `scripts/predecessores.sh` e pelo artefato durável
+`00-PREDECESSORES.md`. Na integração com a MergeX, os checkpoints de método continuam usando o
+evento existente `commit_criado`; não existem eventos próprios para registrar, validar ou
+retomar predecessores. Uma falha anterior ao commit permanece somente na saída do comando e
+não produz linha de rastro falsa.
+
 ## Versionamento
 
-O rastro é **ignorado pelo versionador** por padrão: é local da máquina de quem executou, cresce rápido, e o painel roda local. A F1 garante a linha `docs/eventos/` no `.gitignore` do projeto.
+O rastro é **ignorado pelo versionador** por padrão: é local da máquina de quem executou, cresce rápido, e o painel roda local. A F1 garante isso **localmente**, pelo `info/exclude` do repositório (caminho resolvido com `git rev-parse --git-path info/exclude`), e só quando o padrão ainda não é ignorado — ela **não** mexe no `.gitignore` versionado, que é decisão do projeto, não do trabalho (`references/01-ingestao.md`).
 
 Rotação: acima de 5 MB, o arquivo vira `<trabalho_id>.1.jsonl` e um novo começa (os hooks fazem isso sozinhos). O painel lê os dois.
 
@@ -77,5 +150,5 @@ Um cuidado que não é opcional:
 Por isso:
 
 1. O valor entra como **`duracao_observada`**, nunca como `real`, e nunca substitui o `real` anotado por quem executou.
-2. A calibração usa **mediana**, não média — um intervalo com pausa no meio distorce uma média e quase não move uma mediana.
+2. A `duracao_observada` **não entra na calibração**, e por isso **não escolhe o agregador** dela: o que a calibração agrega é o `desvio_calibracao_task`, nunca o `desvio_padrao_task` — razão adimensional, não a dispersão em horas da estimativa —, e ele vem do `real` anotado, já sem a pausa. O agregado por tipo é a **média** dos `desvio_calibracao_task` daquele tipo, gravada em `desvio_medio`, nunca a mediana (`references/06-execucao.md`, `references/00-schema.md`).
 3. Divergência grande entre `duracao_observada` e `real` é sinal de interrupção, e vale registrar como tal em vez de "corrigir" um dos dois.

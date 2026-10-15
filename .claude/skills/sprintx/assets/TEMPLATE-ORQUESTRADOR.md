@@ -31,14 +31,14 @@ palavras_chave: [{{ate 8 termos, minusculo, sem acento}}]
 1. Este arquivo (`ORQUESTRADOR.md`)
 2. `00-DECISOES.md` — decisões que governam o plano
 3. `base/00-INDICE.md` — e os arquivos da base que ele lista
-4. `sprint-01/sprint.md` → `fases.md` → `tasks.md`
+4. `sprint-01/` — os arquivos que ela de fato tem: `sprint.md` → `fases.md` → `tasks.md` nos três arquivos, ou só `tasks.md` quando a sprint é condensada (`kind: plano`)
 5. {{`sprint-02/` em diante, na ordem}}
 6. `00-BLOQUEIOS.md` — bloqueios registrados durante a execução
 7. `00-AUDITORIA.md` — achados MÉDIA/BAIXA que permanecem válidos
 
 ## 3. Rota de execução
 
-{{Sequência de sprints e fases. Marque explicitamente o que roda em paralelo com o quê, derivado de fases.md e dos depende_de. Ex.:}}
+{{Sequência de sprints e fases. Marque explicitamente o que roda em paralelo com o quê, derivado das fases da sprint (de `fases.md`, ou da chave `fases` do `tasks.md` condensado) e dos depende_de. Ex.:}}
 
 - Sprint 01: F-01.1 → F-01.2
 - Sprint 02: F-02.1 ∥ F-02.2 (paralelas) → F-02.3
@@ -66,7 +66,7 @@ palavras_chave: [{{ate 8 termos, minusculo, sem acento}}]
 1. Não pergunte nada; não peça autorização para nada.
 2. O teste vem antes do código, sempre.
 3. Task só é `concluida` com teste de integração E funcional passando e `criterio_aceite` verificado. Não existe "concluído com ressalva".
-4. Dúvida nova ou pré-requisito faltando: registrar em `00-BLOQUEIOS.md` (`B-NN | task | bloqueio | o que destravaria`), marcar a task `bloqueada`, pular para a próxima paralelizável. Nunca parar e esperar.
+4. Dúvida nova ou pré-requisito faltando: registrar em `00-BLOQUEIOS.md` (`B-NN | task | bloqueio | o que destravaria`) pelo `bash <raiz-da-skill>/scripts/bloqueios.sh registrar` da skill, com a `classe` do caminho que bloqueou (tabela em `references/06-execucao.md`), marcar a task `bloqueada`, pular para a próxima paralelizável. Nunca parar e esperar.
 5. Só rode em paralelo o que o plano declarou paralelizável; a execução nunca decide paralelismo.
 6. Atualize `status` em `tasks.md` a cada transição; ao concluir, acrescente data e resultado da suíte.
 7. Critério de saída de fase/sprint não atendido = não avança.

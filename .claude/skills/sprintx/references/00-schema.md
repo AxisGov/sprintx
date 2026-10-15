@@ -27,7 +27,9 @@ Run com a mesma consulta.
 
 **Ao mudar qualquer kind compartilhado, a mudança vale para as duas skills** — um painel que lê as
 duas não pode encontrar o mesmo `kind` com formatos diferentes. Kind exclusivo de uma delas pode
-evoluir sozinho.
+evoluir sozinho. **Pendência registrada:** a chave `classe` de `bloqueios` (DS-139) nasceu na
+sprintx e ainda não foi adotada pela runx. Ela é aditiva — quem não a conhece a ignora — e todo
+B-NN sem ela é lido como legado, nunca com classe inferida.
 
 ## Regras universais
 
@@ -61,6 +63,10 @@ Valem para todo arquivo que leva frontmatter:
 | `metodo_agregacao` | `pert_quadratura` |
 | `densidade` | `mvp` \| `padrao` \| `completo` \| `profundo` |
 | `modo_construcao` | `entrevista` \| `autonomo` |
+| `estado` (planejamento) | `aguardando_f3` \| `aguardando_f4` \| `aguardando_f5` \| `replanejar` \| `aprovado` \| `orcamento_esgotado` \| `replanejar_execucao` \| `replanejamento_execucao_esgotado` \| `replanejamento_execucao_recusado` (ou `null` antes do fim da F2) |
+| `recusa_replanejamento_f6` (planejamento) | `classes_mistas` \| `orcamento_f6_legado` \| `orcamento_f6_nao_declarado` \| `planejamento_legado` |
+| `veredito` (rodada da F5) | `sim` \| `nao` |
+| `classe` (bloqueio) | `defeito_de_plano` \| `lacuna_de_decisao` \| `prerequisito_ausente` \| `suite_vermelha` \| `task_reivindicada` |
 
 Atenção a duas distinções que o painel trata como coisas diferentes:
 
@@ -126,7 +132,8 @@ listas e seguem a regra universal 6: **nunca omita a chave**; vazia é `[]`, jam
 - `modulo_afetado` lista os módulos que o trabalho toca, em minúscula e sem acento, um termo
   por módulo (`autenticacao`, não `Autenticação`; `relatorios`, não `Relatórios`). É derivado
   na F3 a partir dos arquivos declarados nas tasks — as camadas do `CONVENCOES.md` do projeto
-  quando ele existe, a estrutura de pastas quando não (`references/03-plano.md`). É a única
+  quando ele existe (localizado pela regra única "Como localizar o `CONVENCOES.md`", neste
+  arquivo), a estrutura de pastas quando não (`references/03-plano.md`). É a única
   das três listas que a F3 já grava preenchida.
 - `arquivos_alterados` é a união, **sem repetição**, dos campos `arquivos` (`cria` + `altera`)
   de todas as tasks **concluídas** do trabalho. Nasce `[]` na F3 e é preenchido pela F6 ao
@@ -299,6 +306,97 @@ Regras duras deste kind:
 - Os kinds `sprint`, `fases` e `tasks` **continuam válidos e não são descontinuados**.
   Plano já escrito neles permanece como está e nunca é migrado retroativamente.
 
+### Como resolver o formato de uma sprint — regra única
+
+Uma sprint existe em **um dos dois formatos**, e nenhum deles é plano incompleto. Todo leitor
+de plano — **F3.5, F4, F5 e F6** — resolve o formato assim, e esta é a única descrição da regra:
+
+1. Leia `sprint-NN/tasks.md`. Ele existe **sempre**, nos dois formatos.
+2. O frontmatter declara `kind: plano`? Então a sprint é **condensada**:
+   - dados da sprint = chave `sprint`;
+   - fases = chave `fases`;
+   - tasks = chave `tasks`;
+   - **não exija `sprint.md`**, **não exija `fases.md`** — a ausência dos dois é o formato
+     funcionando, não arquivo faltando.
+3. Qualquer outro kind (`tasks`): a sprint está nos **três arquivos**. Exija
+   `sprint.md`, `fases.md` e `tasks.md`, e leia os três como sempre.
+
+O que muda entre os formatos é **onde a informação mora**, nunca quais campos existem nem
+quanto rigor se cobra:
+
+| Informação | Condensado (`kind: plano`) | Três arquivos |
+|---|---|---|
+| Status da sprint | `tasks.md` → `sprint.status` | `sprint.md` |
+| Critério de saída da sprint | `tasks.md` → `sprint.criterio_saida` | `sprint.md` |
+| Fases e seus critérios | `tasks.md` → `fases[]` | `fases.md` |
+| Tasks | `tasks.md` → `tasks[]` | `tasks.md` |
+| Diagrama Mermaid | não existe (só a F3 o gera, e só em `fases.md`) | `fases.md` |
+
+**Ao gravar no condensado**, tudo acontece no mesmo frontmatter: fechar uma task atualiza o
+item em `tasks`, fechar uma fase atualiza o item em `fases`, fechar a sprint atualiza
+`sprint.status`. Um único arquivo é reescrito, com um único bloco YAML.
+
+Num plano com várias sprints, **cada uma resolve o seu próprio formato**: a de fase única vai
+condensada, a de três fases vai nos três arquivos, e as duas convivem no mesmo trabalho. Nunca
+migre um plano já escrito de um formato para o outro.
+
+### `00-PREDECESSORES.md` → `kind: predecessores`
+
+Manifesto opcional, criado pela F1 somente quando ela consumiu um documento Superpowers antes
+do planejamento. O caminho canônico é
+`docs/sprintx/features/<slug>/00-PREDECESSORES.md`; ele é artefato de método da SprintX, não
+produto e não task.
+
+```yaml
+---
+expx_schema: 1
+expx_tool: sprintx
+kind: predecessores
+trabalho_id: exportacao-csv-relatorios
+predecessores:
+  - caminho: docs/superpowers/specs/2026-10-13-exportacao-design.md
+    origem: superpowers
+    papel: especificacao
+    commit_sha: 0123456789abcdef0123456789abcdef01234567
+    blob_oid: 89abcdef0123456789abcdef0123456789abcdef
+  - caminho: docs/superpowers/plans/2026-10-13-exportacao.md
+    origem: superpowers
+    papel: plano
+    commit_sha: fedcba9876543210fedcba9876543210fedcba98
+    blob_oid: 76543210fedcba9876543210fedcba9876543210
+criado_em: 2026-10-13
+atualizado_em: 2026-10-13
+---
+```
+
+Regras duras deste kind:
+
+- `predecessores` é lista não vazia; arquivo presente com `[]` é contrato inválido.
+- `trabalho_id` é o slug da pasta.
+- `caminho` é relativo à raiz Git, literal e canônico: sem absoluto, `./`, `.`, `..`, segmento
+  vazio, barra invertida ou glob. Precisa estar sob `docs/superpowers/` e ser seguro como scalar
+  YAML sem aspas: somente ASCII imprimível, sem espaço final; `: `, `:` no fim, ` #` e controles
+  são recusados. Não pode apontar para a
+  própria pasta da feature nem para `docs/entregas/<slug>/`.
+- `origem` aceita somente `superpowers` nesta versão.
+- `papel` aceita somente `especificacao` ou `plano`.
+- `commit_sha` e `blob_oid` são calculados por `scripts/predecessores.sh`; nunca são argumentos
+  fornecidos pelo agente. São OIDs completos no formato de objetos declarado pelo repositório:
+  40 hexadecimais para SHA-1 ou 64 para SHA-256.
+- Cada caminho aparece uma vez. Chave repetida, scalar malformado, o próprio manifesto ou
+  qualquer diretório pai dele como symlink, predecessor como symlink, gitlink, diretório,
+  arquivo especial ou estado Git sujo reprovam o manifesto. O registrador valida os pais antes
+  de criar o temporário, para nunca materializar o manifesto fora do repositório.
+- O predecessor antecede estritamente o primeiro commit que adiciona `00-PLANEJAMENTO.md`, e o
+  blob no predecessor continua idêntico ao blob em `HEAD`. Antes desse primeiro checkpoint, o
+  validador aceita somente o estado pré-checkpoint em que planejamento e manifesto ainda não são
+  rastreados e o predecessor já é ancestral de `HEAD`.
+- A prosa repete caminho, origem e papel para leitura humana; a máquina usa só o frontmatter.
+- `scripts/predecessores.sh --validar <slug>` é a leitura normativa. Repositório raso, objeto
+  ausente ou história ambígua falham fechados.
+- O registrador serializa por worktree e slug antes de ler o manifesto. Trava ocupada falha
+  fechada, sem remover a trava alheia nem alterar os bytes já registrados.
+
 ### `00-BLOQUEIOS.md` → `kind: bloqueios`
 
 ```yaml
@@ -311,13 +409,55 @@ atualizado_em: 2026-08-29
 bloqueios:
   - id: B-01
     task: T-01.03
+    classe: prerequisito_ausente
     aberto_em: 2026-08-29
     resolvido_em: null
-    descricao: Falta credencial de sandbox para validar o webhook
+    descricao: "Falta credencial de sandbox para validar o webhook"
 ---
 ```
 
 Sem bloqueios registrados, `bloqueios: []`.
+
+**O bloqueio é dado tipado (DS-139).** Todo B-NN novo tem `classe`, do enum `classe` (bloqueio).
+A classe diz **o que** bloqueou a execução; o que fazer com isso é decisão de quem consome — o
+vocabulário do consumidor não entra aqui. **A prosa explica, não classifica:** `descricao` e a
+linha `B-NN | …` são para humano; nenhum consumidor deriva classe delas, nem por palavra-chave,
+nem por "leitura atenta".
+
+| Classe | Caminho de criação na F6 (`references/06-execucao.md`) | Fato mecânico que a fixa |
+|---|---|---|
+| `defeito_de_plano` | cumprir a task exige mudar o plano aprovado: arquivo necessário fora de `arquivos` da task (de outra task ou de nenhuma); `depende_de` que o plano não declara; obrigação `fraco:teste` impossível de discriminar dentro da task; `criterio_saida` de fase/sprint sem task que o cumpra | dá para nomear o campo do plano aprovado que teria de mudar (`arquivos`, `depende_de`, teste declarado, tasks da fase) |
+| `lacuna_de_decisao` | dúvida nova que nenhuma `D-NN` responde; operação barrada pelo `git-perigoso` | nenhuma `D-NN` cobre a escolha, ou o hook barrou a ação por exigir decisão humana |
+| `prerequisito_ausente` | segredo inexistente, serviço fora do ar, dependência externa quebrada | um recurso fora do repositório não está disponível (variável ausente, serviço sem resposta, pacote que não instala) |
+| `suite_vermelha` | portão da sprint: a suíte inteira terminou com falha que a execução não corrigiu | o comando da suíte inteira saiu com falha |
+| `task_reivindicada` | não resta task executável porque as restantes estão reivindicadas por outra sessão | o rastro tem `task_iniciada` de outra sessão sem `task_concluida`/`task_bloqueada` depois |
+
+Regras duras de `classe`:
+
+- **Escritor.** Entrada nova só nasce por `scripts/bloqueios.sh registrar` (caminho relativo à
+  raiz da skill), na F6, no mesmo instante em que a task vira `bloqueada`. Ele recusa com código
+  `4` — e não grava nada — classe vazia, ausente ou fora do enum.
+- **Imutável.** Gravada, a classe não muda: nem quando a descrição é reescrita, nem quando o
+  bloqueio é resolvido (`resolvido_em` deixa de ser `null` e a classe fica). Classe errada não se
+  edita; o bloqueio é resolvido e um B-NN novo é registrado com a classe certa.
+- **Resolução.** Só por `scripts/bloqueios.sh resolver <slug> <B-NN>`, nunca editando
+  `resolvido_em` à mão. Ele grava **somente** `resolvido_em` (data do sistema), `atualizado_em` e o
+  sufixo ` · resolvido em AAAA-MM-DD` na linha `B-NN | …` da prosa; `id`, `task`, `classe`,
+  `aberto_em` e `descricao` ficam byte a byte. B-NN já resolvido: nada muda (código `0`). Um
+  `defeito_de_plano` só é resolvido quando `scripts/planejamento.sh pode-resolver` aceita — o B-NN
+  abriu a rodada de replanejamento da execução (`bloqueios_replanejamento_f6`) e o plano
+  replanejado já voltou a `aprovado` pela F5; fora disso, código `5` e nada gravado. Editar o plano
+  não resolve um defeito de plano. As demais classes, e o legado, são resolvidas diretamente.
+- **Legado.** Entrada sem a chave `classe` é anterior a este contrato: continua legível, e
+  `scripts/bloqueios.sh listar` a devolve como `legado`. **Ela nunca recebe classe inferida** —
+  nem na leitura, nem na migração, nem quando o arquivo é regravado com um B-NN novo (a entrada
+  antiga fica como está). `legado` não é valor do enum e nunca é gravado.
+- **Legado só antes do primeiro tipado.** Entrada sem `classe` depois de uma entrada com
+  `classe` é bloqueio novo sem classe: `scripts/bloqueios.sh validar` recusa o arquivo (código `4`).
+  `classe: null` também é recusado — ausência de classe só existe como chave ausente, no legado.
+- **Kind compartilhado.** `bloqueios` é compartilhado com a runx: a chave é aditiva, e um leitor
+  que não a conhece a ignora. Arquivo `expx_tool: runx` sem `classe` é lido como legado até a runx
+  adotar o mesmo enum.
 
 ### `00-DECISOES.md` → `kind: decisoes`
 
@@ -400,6 +540,11 @@ caminho_critico_max: 63
 confianca: media
 confianca_motivo: Sem historico comparavel no projeto e uma lacuna nao bloqueante na base
 fator_correcao_aplicado: null
+calibracao_por_tipo:
+  - tipo_task: config
+    fator: null
+    origem: nenhum — canônico sem fator ativo
+    divergencia: não se aplica — HISTORICO.md ausente
 metodo_agregacao: pert_quadratura
 tasks_estimadas: 11
 premissas: [Credenciais de sandbox emitidas antes da sprint-02]
@@ -420,10 +565,57 @@ Regras duras deste kind:
 - `esforco_total_*` cobre TODAS as tasks estimadas (paralelas ou não); `caminho_critico_*`
   cobre apenas a cadeia de dependências mais longa. Os dois são normalmente diferentes — é o
   paralelismo declarado no plano que os separa.
-- `fator_correcao_aplicado` é `null` quando não houve calibração; um número (ex.: `1.25`)
-  quando um desvio histórico foi aplicado. Nunca `1.0` para disfarçar ausência de histórico.
+- `fator_correcao_aplicado` é o fator **efetivamente aplicado** (DS-165), e a **origem da
+  calibração** tem **três estados** possíveis: `null`, com origem `nenhum — canônico sem fator
+  ativo`, quando o canônico daquele tipo tem `fator_ativo: false` (menos de 3 entradas elegíveis,
+  ou `HISTORICO.md` ausente) — **isto vale mesmo quando o bloco `calibracao` gravado diverge e
+  dizia `fator_ativo: true`**: a origem da calibração continua sendo a ausência de fator, nunca
+  `persistido` nem `recomputado`, porque o canônico é quem decide se há fator, não o que está
+  escrito; ou, com o canônico ativo, é o `desvio_medio`
+  dele — **persistido** quando o leitor confere e bate contra o bloco `calibracao` gravado,
+  **recomputado** quando diverge —, copiado como está — número com as mesmas **duas casas
+  decimais** do `kind: estimativa_historico` (ex.: `1.25`, e `1.20` para o desvio de `1,2`).
+  Nunca `1.00` para disfarçar ausência de fator (DS-46): neutro declarado é indistinguível
+  de fator inventado, e a ausência se diz com `null`.
+- **`1.00` medido é um fator legítimo, e é obrigatório gravá-lo (DS-172).** Quando
+  o canônico daquele tipo tem `fator_ativo: true` e a média dos `desvio` elegíveis é exatamente
+  `1.00` — depois do arredondamento de duas casas half-up da DS-160 —, o fator **é** `1.00`, e
+  vai gravado assim: ele diz "este tipo tem histórico suficiente e o projeto acerta a estimativa
+  dele", que é um fato medido, não a ausência de um. O que a DS-46 proíbe é `1.00` **no lugar de**
+  `null`: sem `HISTORICO.md`, com menos de 3 entradas elegíveis ou com o canônico
+  `fator_ativo: false`, o valor é `null` e a origem é `nenhum — canônico sem fator ativo` —
+  nunca `1.00`. Os dois estados continuam distinguíveis exatamente porque um é número e o outro
+  é `null`; converter o `1.00` medido em `null` seria a mentira simétrica, e apagaria do projeto
+  justamente o tipo melhor calibrado que ele tem.
 - `confianca` segue o enum `confianca`; `confianca_motivo` é uma linha derivada dos sinais.
-  Sem `docs/sprintx/estimativas/HISTORICO.md`, `confianca` nunca é `alta`.
+  Sem `docs/sprintx/estimativas/HISTORICO.md`, `confianca` nunca é `alta`. Divergência entre o
+  bloco `calibracao` persistido e o canônico recomputado (DS-165) também limita `confianca` a
+  `media`, mesmo com um fator canônico ativo sendo aplicado.
+- **A colecao canônica é `calibracao_por_tipo` (DS-166), nunca o escalar.** Um trabalho mistura
+  tipos de task, e cada `tipo_task` tem o seu próprio canônico de calibração (DS-165) — um
+  trabalho com `config` e `integracao_externa` pode ter fator ativo num e não no outro, ou
+  fatores ativos diferentes nos dois. `calibracao_por_tipo` traz **exatamente uma linha por
+  `tipo_task` presente, em ordem lexical**, cada uma com `tipo_task`, `fator` (número com as
+  duas casas da DS-160, ou `null`), `origem` (`persistido` \| `recomputado` \| `nenhum —
+  canônico sem fator ativo`, DS-165) e `divergencia` (`confere` \| `diverge com valores` \| `não
+  se aplica — HISTORICO.md ausente`, DS-165) — os mesmos três estados da DS-165, só que
+  calculados por tipo, nunca um único canônico para o trabalho inteiro.
+  **Nenhum item de `calibracao_por_tipo` usa `1.00` no lugar de `null`** (a mesma proibição da
+  DS-46, por tipo): tipo sem fator ativo grava `fator: null` e `origem: nenhum — canônico sem
+  fator ativo`. `fator: 1.00` só aparece — e aí é **obrigatório** — quando o canônico daquele
+  tipo tem `fator_ativo: true` e a média dos desvios elegíveis é exatamente `1.00` (DS-172).
+  `calibracao_por_tipo` é `[]` apenas quando não há nenhuma task estimada — na prática, sempre
+  tem ao menos um item quando há tasks.
+- **O escalar legado `fator_correcao_aplicado` é derivado da coleção, nunca gravado à parte.**
+  Resolvido o `fator` de cada item de `calibracao_por_tipo`: o escalar fica **numérico** —
+  escalar numérico somente quando TODOS os tipos presentes recebem o MESMO fator ativo —, com
+  esse mesmo número; fica **`null`** — escalar `null` somente quando NENHUM tipo presente
+  recebe fator ativo — quando nenhum item tem fator ativo; e em qualquer mistura — fator ativo
+  e inativo, ou fatores ativos diferentes — grava `fator_correcao_aplicado: por_tipo`, o
+  literal string `por_tipo` (nunca um número escolhido entre os fatores, nunca a média deles).
+  Um trabalho com um único `tipo_task` nunca produz `por_tipo`: o escalar é sempre o fator (ou
+  `null`) desse único item.
+- **Consumidor legado e fail-closed (DS-166).** Consumidor que não reconhece `calibracao_por_tipo` lê `fator_correcao_aplicado: por_tipo` e, por não saber o que esse literal significa, declara a estimativa indisponível e não a usa — nunca coerção, média ou escolha arbitrária. Um consumidor assim nunca trata `por_tipo` como número, nem o ignora e segue como se o fator fosse `null`: as duas leituras produziriam esforço errado em silêncio.
 - `premissas`, `invalidadores` e `nao_incluido` são listas de strings de uma linha e não são
   vazias. `tasks_a_quebrar` lista ids `T-NN.MM` de tasks que NÃO foram estimadas e NÃO entram
   nos totais; `[]` quando nenhuma.
@@ -454,7 +646,44 @@ entradas:
     estimado_media: 3
     real: 3.5
     desvio: 1.17
+    duracao_observada: 5.2
     registrado_em: 2026-08-29
+  - trabalho_id: exportacao-csv-relatorios
+    task_id: T-01.02
+    tipo_task: config
+    area: configuracao de ambiente
+    sinais: [arquivo_novo_isolado]
+    estimado_min: 3
+    estimado_max: 5
+    estimado_media: 4
+    real: 4.5
+    desvio: 1.13
+    duracao_observada: 4.8
+    registrado_em: 2026-08-29
+  - trabalho_id: relatorio-financeiro
+    task_id: T-02.01
+    tipo_task: config
+    area: configuracao de ambiente
+    sinais: [arquivo_novo_isolado]
+    estimado_min: 4
+    estimado_max: 8
+    estimado_media: 6
+    real: 7.0
+    desvio: 1.17
+    duracao_observada: 7.5
+    registrado_em: 2026-09-10
+  - trabalho_id: relatorio-financeiro
+    task_id: T-02.02
+    tipo_task: config
+    area: configuracao de ambiente
+    sinais: [arquivo_novo_isolado]
+    estimado_min: 1
+    estimado_max: 3
+    estimado_media: 2
+    real: 2.25
+    desvio: 1.13
+    duracao_observada: 2.1
+    registrado_em: 2026-09-10
 calibracao:
   - tipo_task: config
     entradas: 4
@@ -471,9 +700,80 @@ Regras duras deste kind:
   (`[]` se nenhum).
 - `estimado_min`, `estimado_max`, `estimado_media` e `desvio` são `null` quando o trabalho
   rodou sem a F3.5; `real` é sempre preenchido.
-- `desvio` é `real / estimado_media`. `fator_ativo` só é `true` com 3 ou mais entradas
-  encerradas daquele tipo.
-- `calibracao` é `[]` enquanto não houver entrada suficiente para calcular desvio por tipo.
+- **Entrada calibrável (DS-164).** É a entrada encerrada cujo `desvio` persistido é número — não
+  nulo. Entrada que rodou sem a F3.5 também encerra, com `real` e sem `desvio`: é entrada encerrada
+  que a calibração não tem como agregar. Por isso a cadeia inteira lê só as calibráveis —
+  `entradas` conta somente as entradas daquele tipo com `desvio` numérico (não nulo),
+  `desvio_medio` é a média somente dessas entradas elegíveis, e o limiar do `fator_ativo` conta
+  somente elas.
+  Entrada com `desvio: null` fica fora da contagem e nunca como zero: duas elegíveis
+  `1.20` e `1.30`, com duas entradas nulas do mesmo tipo ao lado, gravam `entradas: 2` com
+  `desvio_medio: 1.25` — nunca `entradas: 4` com `desvio_medio: 0.63`.
+- `desvio` é `real / estimado_media`, **arredondado a duas casas decimais com meio para cima
+  (half-up)** — e é o valor **arredondado antes** de ser gravado que a chave carrega.
+  `fator_ativo` só é `true` com **3 ou mais entradas elegíveis** daquele tipo.
+- **Quantas calibráveis, qual forma (DS-164).** Com **1 ou 2 entradas elegíveis**, o item daquele
+  `tipo_task` existe na `calibracao`, com o contador já preenchido e `fator_ativo: false` — o
+  próximo fechamento o incrementa, e apagá-lo perderia a contagem.
+  `calibracao: []` é o estado de **nenhuma entrada elegível** em tipo nenhum, nunca o de
+  "poucas entradas".
+- **Precisão e desempate (DS-160).** `desvio` e `desvio_medio` têm
+  **duas casas decimais**, com desempate **half-up**: quando a terceira casa é exatamente `5`, a
+  segunda sobe. A razão `1,125` — o empate exato, de `real: 4.5` sobre `estimado_media: 4.0` —
+  vira `1,13`, nunca `1,12`; no YAML, `desvio: 1.13`. As duas casas são
+  **fixas**, não "até duas": a razão `1,2` grava-se `1.20` no YAML e escreve-se `1,20` na prosa, e
+  número com uma casa ou com três é número fora do contrato. O YAML usa ponto e a prosa em pt-BR usa
+  vírgula — as duas formas do mesmo número, com as mesmas duas casas (regra universal 7); a única
+  exceção é a sintaxe de fórmula, onde o contrato a indica explicitamente.
+- `desvio_medio` é a **média** dos `desvio_calibracao_task`, nunca o `desvio_padrao_task` — a
+  chave `desvio` de cada entrada elegível daquele tipo, já **persistida** e portanto já
+  arredondada, nunca a média das razões brutas —, **arredondada de novo pela mesma regra**:
+  duas casas, half-up. O agregador é **único** e a precisão também: dois executores que leiam
+  este contrato gravam o mesmo número, dígito a dígito, a partir do mesmo histórico. Nem o
+  agregador nem a precisão dependem de `duracao_observada`, que a `calibracao` não lê (DS-37).
+- **Dois nomes, duas grandezas (DS-162).** O símbolo interno do número que `desvio` e
+  `desvio_medio` carregam é o `desvio_calibracao_task`, a razão entre `real` e
+  `estimado_media`: **adimensional**. Ele nunca é o `desvio_padrao_task` da
+  `references/07-estimativa.md`, que é o desvio-padrão PERT de uma estimativa, medido em
+  **horas** e somado em quadratura. As duas grandezas **não são intercambiáveis**, e nenhum
+  dos dois símbolos vira chave do YAML: em disco continuam valendo `desvio` e `desvio_medio`.
+- `calibracao` é `[]` enquanto não houver **nenhuma entrada elegível** em tipo nenhum — uma só já
+  cria o item do tipo, com `fator_ativo: false`. Com
+  `calibracao: []`, a tabela `Calibração por tipo de task` da prosa fica **com cabeçalho e separador
+  e sem nenhuma linha de dados** — regra universal 7 aplicada à lista vazia: o YAML diz `[]` e a
+  prosa não mostra linha nenhuma. Cada linha de dados corresponde a **um** item de `calibracao` e
+  começa por um valor do enum `tipo_task`. Linha sem item correspondente é linha fabricada, e
+  sentinela no lugar da linha — `—`, `n/a`, `null` ou célula vazia no campo do tipo — é tabela
+  corrompida, nunca "calibração vazia": o leitor do arquivo recusa a linha cujo primeiro campo não
+  está no enum, e está certo em recusar.
+- `duracao_observada` é **opcional**: o tempo de parede da task, derivado do par
+  `task_iniciada`/`task_concluida` do rastro (`references/08-rastro.md`). Vale
+  `null` quando o par `task_iniciada`/`task_concluida` do rastro não existe — rastro desligado,
+  task iniciada em outra sessão, ou execução que nunca gravou as duas pontas.
+  Entrada legada sem a chave é lida como `duracao_observada: null`, nunca recusada.
+- `duracao_observada` **não é `real`** e nunca o substitui: `real` é o esforço anotado por quem
+  executou; `duracao_observada` é tempo de parede medido pelo rastro (DS-37). As duas chaves
+  coexistem, e divergência grande entre elas é sinal de interrupção — não erro de nenhuma das duas.
+- `duracao_observada` fica **fora do cálculo de `desvio`** — que continua sendo
+  `real / estimado_media`, só — e **fora da `calibracao`**: `desvio_medio` e `fator_ativo` não a
+  leem. Por isso ela aparece **depois** de `desvio` na entrada: a cadeia de calibração termina ali.
+- **Conferência e regravação (DS-165).** `entradas:` é **append-only** — nunca se migra nem se
+  reescreve (regra do cabeçalho desta seção) —, mas o bloco `calibracao` é **derivado e
+  regravável**: a cada fechamento (F6, `references/07-estimativa.md` Passo 10) a leitura canônica
+  da DS-164 — `entradas`, `desvio_medio` e `fator_ativo` recalculados só das entradas elegíveis —
+  recalcula e regrava o bloco `calibracao` inteiro. O leitor da F3.5 (Passo 1) sempre **confere** o
+  bloco `calibracao` gravado contra esse canônico antes de usar: bate, aplica o persistido; diverge
+  e o canônico tem `fator_ativo: true`, aplica o canônico recomputado — nunca o bloco stale, e
+  nunca a média das razões brutas `real / estimado_media` — e declara a divergência na saída. Se o
+  canônico tem `fator_ativo: false` — menos de 3 entradas elegíveis, bata ou divirja o bloco
+  gravado —, não há fator nenhum para aplicar: a origem da calibração é `nenhum — canônico sem
+  fator ativo`, e `fator_correcao_aplicado` é `null`, mesmo que o bloco gravado divergente
+  dissesse `fator_ativo: true`. Sem `HISTORICO.md` não existe bloco `calibracao` nenhum para
+  comparar — a `Divergência encontrada` não é "confere" nem "diverge", é `não se aplica —
+  HISTORICO.md ausente`, e a origem da calibração é obrigatoriamente `nenhum — canônico sem fator
+  ativo` (os dois campos ficam consistentes: sem nada gravado, não há o que divergir, e também não
+  há fator). A F3.5 **nunca** escreve nem migra o `HISTORICO.md`: só a F6 regrava `calibracao` no
+  fechamento.
 
 ### `FECHAMENTO.md` → `kind: fechamento`
 
@@ -526,6 +826,180 @@ Regras duras deste kind:
 - Este kind não tem `atualizado_em`: o fechamento é um registro de um instante, não um
   arquivo de estado que evolui. `fechado_em` é a sua data.
 
+### `00-PLANEJAMENTO.md` → `kind: planejamento`
+
+**Kind exclusivo da `sprintx`** — a `sprintx` é a dona dele, e ele não é compartilhado com a
+runx. É o **estado durável do planejamento**: em que ponto do laço F3 ↔ F5 a feature está,
+quantas vezes a F5 reprovou o plano e qual é o teto de reprovações que o caller declarou.
+Nasce na F1, a partir de `assets/TEMPLATE-PLANEJAMENTO.md`, e é gravado **só** por
+`scripts/planejamento.sh` (caminho relativo à raiz da skill) — nunca à mão, em fase nenhuma.
+
+```yaml
+---
+expx_schema: 1
+expx_tool: sprintx
+kind: planejamento
+trabalho_id: exportacao-csv-relatorios
+max_reprovacoes_f5: 3
+max_replanejamentos_f6: 1
+orcamento_declarado_por: buildx
+autorizacao_tardia_f6_por: usuario
+autorizacao_tardia_f6_em: 2026-10-12
+autorizacao_tardia_f6_origem: orcamento_f6_nao_declarado
+estado: replanejar
+reprovacoes: 2
+replanejamentos_f6: 1
+bloqueios_replanejamento_f6: []
+tasks_congeladas: []
+assinatura_congeladas: null
+parciais_replanejamento_f6: []
+atualizado_em: 2026-08-29
+historico:
+  - rodada: 1
+    veredito: nao
+    altas: 6
+    medias: 2
+    baixas: 5
+    auditado_em: 2026-08-28
+  - rodada: 2
+    veredito: nao
+    altas: 3
+    medias: 3
+    baixas: 1
+    auditado_em: 2026-08-29
+---
+```
+
+**É artefato de método, e só isso.** `00-PLANEJAMENTO.md` não é task, não é produto, não é
+entrega e não é desvio. Vive na pasta da feature, junto dos outros artefatos de método, e é
+tratado como eles por quem versiona e classifica (`docs/sprintx/features/<slug>/`).
+
+Regras duras deste kind:
+
+- `max_reprovacoes_f5` é `null` (sem teto) ou um inteiro `>= 1`: a quantidade máxima de
+  **vereditos NÃO** permitidos. Zero, negativo, texto ou qualquer outra forma é **erro de
+  contrato**, e o script recusa.
+- `orcamento_declarado_por` identifica quem declarou o teto (`buildx`, por exemplo). É `null`
+  se e somente se `max_reprovacoes_f5` e `max_replanejamentos_f6` forem ambos `null`: teto sem
+  dono, ou dono sem teto, é erro de contrato. A `sprintx` sozinha **nunca inventa orçamento** —
+  ela grava `null`/`null`.
+- `estado` segue o enum `estado` (planejamento). É `null` da F1 até o fim da F2; a partir daí,
+  é sempre um dos nove valores. Nenhum outro estado existe.
+- `reprovacoes` é um inteiro `>= 0` e é sempre igual à quantidade de rodadas `nao` do
+  `historico`.
+- `historico` é **append-only**: uma entrada por veredito da F5, na ordem, com `rodada`
+  (1, 2, 3…), `veredito` (`sim` \| `nao`), as contagens `altas`, `medias` e `baixas` da tabela de
+  `00-AUDITORIA.md` e `auditado_em`. Rodada anterior nunca é reescrita nem removida. Sem
+  rodada, `historico: []`.
+- `aprovado` só existe com a última rodada `sim`; `orcamento_esgotado` só existe com
+  `reprovacoes >= max_reprovacoes_f5`. Arquivo que contradiz isso é contrato inválido e nada é
+  decidido em cima dele.
+
+**O eixo da F6 — replanejamento da execução.** Quando a F6 registra `defeito_de_plano`, o plano
+volta ao planejamento por um estado próprio, `replanejar_execucao`, com orçamento próprio. Ele
+não é o `replanejar` da F5 e não mexe no orçamento dela.
+
+- `max_replanejamentos_f6` é `null` ou um inteiro `>= 1`: quantas rodadas de replanejamento da
+  execução o caller permite. **Mesmo dono** do orçamento da F5 (`orcamento_declarado_por`), passado
+  pelo mesmo caminho — o quarto argumento de `planejamento.sh criar`. `null` é "não declarado": a
+  `sprintx` sozinha não inventa orçamento, e **sem orçamento o replanejamento da execução não abre**.
+  Diferente do `null` da F5 (sem teto), mas pela mesma razão: nos dois eixos `null` preserva o
+  comportamento de antes do contrato — laço até SIM na F5, nenhum caminho de volta na F6.
+- `replanejamentos_f6` é um inteiro `>= 0`, nunca acima do teto, e `0` enquanto o teto for `null`.
+  É consumido quando uma rodada **nova** é aceita; retomar a mesma rodada não consome de novo.
+- `bloqueios_replanejamento_f6` lista, em ordem crescente de id, os B-NN `defeito_de_plano` abertos
+  que abriram a rodada ativa. Lista preenchida = rodada ativa; `[]` = nenhuma. É o que torna a
+  rodada retomável sem memória da sessão.
+- `tasks_congeladas` e `assinatura_congeladas` congelam, durante a rodada, as tasks `concluida`:
+  os ids e a assinatura (`cksum`) do item de cada uma no frontmatter do `tasks.md` e do seu bloco
+  na prosa. `[]`/`null` sem rodada ativa. Todo portão da rodada (`avanca f3`, `f4`, `f5` e o
+  fechamento) recalcula e recusa com código `4` qualquer diferença.
+- `parciais_replanejamento_f6` é o **trabalho parcial preservado** da rodada ativa (DS-156): o que a
+  task bloqueada deixou na árvore e que se atribui inequivocamente a ela — tipicamente o teste que
+  ela escreveu primeiro, pela ordem TDD da F6, antes de barrar num arquivo da irmã. `[]` sem rodada
+  ativa, ou numa rodada que entrou com a árvore limpa de produto; senão, um item por caminho, em
+  ordem de byte do caminho:
+
+  ```yaml
+  parciais_replanejamento_f6:
+    - path: "tests/menu/perfil.test.ts"
+      task: T-04.03
+      estado: novo
+      hash: 3b18e512dba79e4c8300dd08aeb37f8e728b8dad
+  ```
+
+  `path` é relativo à raiz da `sprintx`, sempre entre aspas; `task` é a task bloqueada que o declara;
+  `estado` é o estado Git do caminho — `novo` (não rastreado), `modificado` ou `removido`, nunca
+  staged —; `hash` é o id do blob do conteúdo exato em disco (`git hash-object --no-filters`), ou
+  `null` para `removido`. **Um caminho só é preservável** se estiver declarado em `arquivos` da task
+  bloqueada e de **nenhuma** outra task do plano (irmã, concluída ou compartilhado), não estiver
+  staged, tiver um desses três estados num arquivo regular e não for `.env` nem casar com os padrões
+  do hook `segredo`. Qualquer outra sujeira de produto fora dos artefatos de método — que incluem o
+  rastro (`docs/eventos/`), telemetria local — recusa a entrada (`fronteira_insegura`). O script
+  nunca toca nesses arquivos: nada de commit parcial, `stash`, `reset` ou descarte.
+  **Todo portão da rodada** (`replanejar-execucao` de retomada, `avanca f3`, `f4`, `f5` e o
+  fechamento) confere que a árvore continua exatamente assim — os mesmos caminhos sujos de produto,
+  no mesmo estado e com o mesmo hash, nenhum a mais — e que o plano de agora ainda dá cada caminho à
+  mesma task, e só a ela. Árvore diferente: código `2`, `parcial_divergente`; nenhum dos caminhos na
+  árvore: código `2`, `parcial_perdido` — a worktree da execução se perdeu, e o conteúdo parcial não
+  se reconstrói do estado versionado. `fase` diagnostica o mesmo (`fase=PARAR`,
+  `trabalho_parcial=perdido|divergente`), sem gravar. Plano que tira o caminho da task: código `4`.
+  Nenhum dos três grava nada. Ao fechar a rodada a lista volta a `[]` e o trabalho parcial fica na
+  árvore, com a task reaberta: o E1 dela o leva. Chave **aditiva** do eixo F6: ausente num arquivo
+  gravado antes dela vale `[]`; num planejamento legado (sem o eixo) não existe.
+- `replanejar_execucao` só existe com rodada ativa e a última rodada da F5 `sim`; os estados do laço
+  que a rodada percorre (`aguardando_f4`, `aguardando_f5`, `replanejar`, `orcamento_esgotado`)
+  aceitam a lista preenchida. `replanejamento_execucao_esgotado` só existe sem rodada ativa e com
+  `replanejamentos_f6 >= max_replanejamentos_f6`. `aprovado` com a lista ainda preenchida é um
+  fechamento de rodada gravado e não terminado: `fase` responde `CHECKPOINT` e só `checkpoint`
+  completa.
+- **Recusa operacional durável.** Quando há `defeito_de_plano` aberto e a rodada não pode abrir por
+  um motivo **operacional**, `replanejar-execucao` grava o estado terminal
+  `replanejamento_execucao_recusado` com a chave `recusa_replanejamento_f6: <motivo>` e faz o
+  checkpoint — a mesma disciplina do `replanejamento_execucao_esgotado`. O motivo é um de
+  `classes_mistas` (há aberto de outra classe ou legado junto do `defeito_de_plano`),
+  `orcamento_f6_legado` (arquivo sem o eixo F6), `orcamento_f6_nao_declarado`
+  (`max_replanejamentos_f6: null`) ou `planejamento_legado` (feature sem `00-PLANEJAMENTO.md`: o
+  arquivo nasce na recusa, pela migração da tabela antiga, com as cinco chaves do eixo e
+  `max_replanejamentos_f6: null` — nenhum orçamento inventado). A recusa não abre rodada, não
+  consome `replanejamentos_f6`, não reabre nem cria task. `recusa_replanejamento_f6` existe **se e
+  somente se** o estado é `replanejamento_execucao_recusado`, fica logo depois de `estado`, e é
+  coerente com o eixo gravado: `orcamento_f6_legado` só sem as cinco chaves;
+  `orcamento_f6_nao_declarado` e `planejamento_legado` só com `max_replanejamentos_f6: null`. O
+  terminal exige a última rodada da F5 `sim` e nenhuma rodada da F6 ativa. É a fonte da retomada: o
+  motivo é lido do arquivo commitado, nunca do rastro nem da árvore de trabalho. Chamar
+  `replanejar-execucao` de novo devolve o mesmo terminal e o mesmo motivo sem gravar, commitar ou
+  registrar nada. **Erro de contrato nunca vira esta recusa**: `estado` (fora da F6),
+  `sem_bloqueio_aberto`, `sem_defeito_de_plano`, `fronteira_insegura`, `parcial_divergente`,
+  `parcial_perdido`, registro ou schema inválido e task concluída alterada continuam sem gravar
+  nada, com o código de sempre.
+- **Autorização tardia da F6 (DS-175).** `replanejamento_execucao_recusado` com motivo `orcamento_f6_nao_declarado` é o único terminal recuperável por
+  `planejamento.sh autorizar-replanejamento-execucao <slug> <max_replanejamentos_f6>
+  <autorizado_por>`. As três chaves tardias existem juntas ou nenhuma existe:
+  `autorizacao_tardia_f6_por`, `autorizacao_tardia_f6_em` e
+  `autorizacao_tardia_f6_origem`. A origem só pode ser `orcamento_f6_nao_declarado`; a data segue
+  o formato das demais datas; as três são append-only, nunca coexistem com
+  `recusa_replanejamento_f6` e só são válidas com eixo F6 presente, teto positivo e
+  `replanejamentos_f6 >= 1`. A autoridade canônica tardia é `autorizacao_tardia_f6_por`: ela é a
+  autoridade exclusiva do eixo F6 nesta exceção explícita. `orcamento_declarado_por` continua
+  pertencendo ao orçamento da F5 e o comando o preserva inclusive quando é `null`; por isso um
+  teto F6 positivo com esse campo `null` só é válido com a tupla tardia completa. Leitores sem
+  essas chaves continuam válidos sem migração. A autorização abre atomicamente a rodada 1, pelas mesmas
+  provas de bloqueios, task, fronteira, congelamento e parciais; `classes_mistas`, legados,
+  orçamento consumido/esgotado e qualquer outro motivo continuam terminais.
+- No `historico`, uma rodada depois de um `sim` só existe quando um replanejamento da execução a
+  abriu: no máximo uma sequência assim por unidade de `replanejamentos_f6`.
+- **Legado.** `00-PLANEJAMENTO.md` gravado antes deste eixo não tem as cinco chaves: continua
+  válido, é lido como `orcamento_f6=legado` e **nunca ganha orçamento** — nem na leitura, nem numa
+  regravação, nem num `criar` de retomada (pedir teto da F6 a um arquivo legado é erro de contrato,
+  código `4`). As cinco chaves existem todas ou nenhuma. Arquivo novo, inclusive o de migração da
+  tabela antiga, nasce com as cinco.
+
+**`kind: planejamento` e o painel.** O painel do `expxdev` pode ignorar este kind até ganhar
+suporte a ele. Isso **não afeta** a execução da `sprintx`: nenhuma lógica da skill depende de o
+painel reconhecer o kind — a máquina de estados lê o arquivo pelo script, localmente, sem
+`expxdev` instalado.
+
 ### Arquivos SEM frontmatter
 
 Não recebem frontmatter, porque o painel não os lê individualmente:
@@ -535,6 +1009,30 @@ Não recebem frontmatter, porque o painel não os lê individualmente:
 - `00-AUDITORIA.md`.
 
 Não acrescente frontmatter a eles: um `kind` fora deste contrato é uma violação, não uma extensão.
+
+## Como localizar o `CONVENCOES.md` — regra única
+
+O `CONVENCOES.md` é insumo **externo**: quem o escreve é a `stackx` (ou a `buildx`, no B2). A
+`sprintx` só lê. Todo ponto da skill que consulta convenções — a base da F1 (branch base e
+comando de instalação), a F2, o `modulo_afetado` da F3 e da F4, a F6 e o hook
+`tdd-teste-antes` — localiza o arquivo assim, e esta é a única descrição da regra.
+
+Procure, a partir da raiz do repositório (a do worktree, quando houver), **nesta ordem**:
+
+1. `CONVENCOES.md` — na raiz: override explícito do próprio projeto;
+2. `docs/stack/CONVENCOES.md` — **caminho canônico** da `stackx` e da `buildx`;
+3. `docs/stackx/CONVENCOES.md` — compatibilidade com o layout antigo;
+4. `.expx/CONVENCOES.md` — fallback legado.
+
+- **O primeiro que existir vence, e só ele é lido.** Dois ou mais presentes: os demais são
+  ignorados. Nunca mescle o conteúdo, nunca escolha por data de modificação, por tamanho ou
+  por "o mais novo" — a mesma árvore resolve sempre para o mesmo arquivo.
+- **Nenhum existir** é o caso normal de projeto sem `stackx`, nunca erro: cada consumidor
+  segue o seu próprio fallback (o `modulo_afetado` cai para a estrutura de pastas; o hook
+  `tdd-teste-antes` fica inativo; a branch base e a instalação seguem a ordem de
+  `references/01-ingestao.md`).
+- **A `sprintx` nunca cria, edita nem reescreve `CONVENCOES.md`**, em nenhum dos quatro
+  caminhos e em nenhuma fase. Convenção errada vira achado ou decisão registrada, não edição.
 
 ## Regra de migração — pastas que já existem
 
@@ -547,6 +1045,8 @@ Ao abrir uma pasta de trabalho que já existe e cujos arquivos NÃO têm frontma
    lista) e siga — nunca invente, nunca pergunte, nunca pare. A chave sempre existe.
 4. Migrar o frontmatter NÃO autoriza reescrever a prosa: a prosa existente é preservada
    como está.
+5. **Exceção: `classe` de bloqueio nunca é inferida da prosa.** Na migração, B-NN antigo fica
+   sem a chave `classe` — legado, não `null` e não um valor adivinhado (DS-139).
 
 ## Verificação antes de gravar
 
@@ -562,4 +1062,5 @@ Antes de dar por gravado qualquer arquivo de estado:
 - [ ] Em `kind: estimativa`, `min` e `max` sao diferentes (numero unico e proibido) e nenhum valor e data de calendario.
 - [ ] Em `kind: orquestrador`, as tres chaves de indexacao (`modulo_afetado`, `arquivos_alterados`, `palavras_chave`) existem — vazias sao `[]`, nunca ausentes — e nao tem acento nem maiuscula.
 - [ ] Em `kind: fechamento`, `arquivos_alterados` nao tem repeticao e bate com o `ORQUESTRADOR.md`.
+- [ ] Em `kind: bloqueios`, todo B-NN novo tem `classe` do enum e `scripts/bloqueios.sh validar <slug>` responde `valido=sim`.
 - [ ] Nenhum caminho absoluto em nenhum valor.

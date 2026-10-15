@@ -1,23 +1,35 @@
 #!/usr/bin/env bash
 # git-perigoso — PreToolUse em Bash. NASCE EM BLOQUEIO.
 #
+# Caminho e id com o namespace da skill (DS-158): `.claude/hooks/sprintx/git-perigoso.sh`,
+# modo em `.expx/hooks.json` sob `sprintx/git-perigoso`. A mergex publica um hook de mesmo
+# nome, com regras proprias, em `comum/`: nenhum dos dois sobrescreve o outro, em qualquer
+# ordem de instalacao, e o modo de um nunca desliga o outro.
+#
 # Barra operacao de versionamento destrutiva e irreversivel durante uma
 # execucao autonoma. A F6 roda sem supervisao: um `push --force` ali apaga
 # trabalho de outra pessoa sem ninguem ver acontecer.
 #
 # Hook de SEGURANCA: falha fechada.
+#
+# Custo (DS-157): o runner cancela o hook que estoura o timeout e deixa o comando
+# RODAR — timeout e falha aberta. O caminho comum (comando inocuo) nao cria nenhum
+# processo: o payload e lido e decodificado pelo bash. O hook e a primeira barreira;
+# a posterior, fail-closed, e o E1 da mergex.
 set -uo pipefail
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./rastro.sh
-. "$DIR/rastro.sh"
+case "${BASH_SOURCE[0]}" in */*) DIR="${BASH_SOURCE[0]%/*}" ;; *) DIR=. ;; esac
+# shellcheck source=../comum/rastro.sh
+. "$DIR/../comum/rastro.sh"
 
-ENTRADA="$(cat)"
-CWD="$(rastro_json_get "$ENTRADA" cwd)"
+rastro_le_entrada_em ENTRADA
+rastro_json_campo_em CWD "$ENTRADA" cwd
 [ -n "$CWD" ] || CWD="$PWD"
-RAIZ="$(rastro_raiz "$CWD")"
+# Caminho do payload (no Windows, C:\dir com caixa de drive variavel) sempre pelo helper.
+rastro_caminho_em CWD "$CWD"
+rastro_raiz_em RAIZ "$CWD"
 
-CMD="$(rastro_tool_input_get "$ENTRADA" command)"
+rastro_json_campo_em CMD "$ENTRADA" command
 [ -n "$CMD" ] || exit 0
 
 MOTIVO=""
@@ -40,7 +52,8 @@ esac
 
 # Hook de seguranca: o padrao e bloqueio e ausencia de configuracao NAO rebaixa.
 # So um "desligado" explicito desliga.
-[ "$(rastro_modo "$RAIZ" git-perigoso seguranca)" = "desligado" ] && exit 0
+rastro_modo_em MODO "$RAIZ" sprintx/git-perigoso seguranca
+[ "$MODO" = "desligado" ] && exit 0
 
 rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "git perigoso: $MOTIVO" '[]'
 rastro_bloqueia "sprintx/git-perigoso: comando barrado — $MOTIVO. Durante a execucao autonoma nenhuma operacao de versionamento irreversivel roda sem decisao humana. Se isso e mesmo necessario, pare, registre em 00-BLOQUEIOS.md e deixe para o usuario decidir."

@@ -4,8 +4,10 @@ Você está na F4. Seu objetivo é gerar `docs/sprintx/features/<slug>/ORQUESTRA
 
 ## Pré-requisitos verificáveis
 
-- `docs/sprintx/features/<slug>/sprint-01/` existe com `sprint.md`, `fases.md` e `tasks.md`.
+- `docs/sprintx/features/<slug>/sprint-01/` existe com uma sprint válida em **um dos dois formatos** do contrato: condensado (`tasks.md` com `kind: plano`) ou três arquivos (`sprint.md`, `fases.md` e `tasks.md`). A regra única de resolução está em `references/00-schema.md`, "Como resolver o formato de uma sprint" — leia-a antes de concluir que falta arquivo. Uma sprint condensada **não é plano incompleto**.
 - Se não existe, a F3 não aconteceu: diga "Falta a F3 (plano). Vou executá-la primeiro." e execute `references/03-plano.md`.
+
+**Num replanejamento da execução** (`replanejamento_execucao=ativo` na saída de `scripts/planejamento.sh fase <slug>`), a F4 atualiza o mapa para o plano replanejado: a rota, o paralelismo e o caminho crítico passam a cobrir o trabalho restante e as tasks novas. As tasks concluídas continuam no mapa como concluídas — não voltam à rota, não são renumeradas.
 
 ## Passo único — Gerar ORQUESTRADOR.md
 
@@ -13,12 +15,19 @@ Use `assets/TEMPLATE-ORQUESTRADOR.md` (caminho relativo à raiz da skill). O arq
 
 1. **Objetivo** — o que esta feature entrega, em NO MÁXIMO 5 linhas.
 2. **Mapa e ordem de leitura** — todos os arquivos de `docs/sprintx/features/<slug>/` e em que ordem um executor deve lê-los (este arquivo primeiro; depois `00-DECISOES.md`; depois `base/00-INDICE.md`; depois cada `sprint-NN/` na ordem).
-3. **Rota de execução** — a sequência de sprints e fases, marcando explicitamente: o que roda em paralelo com o quê, e qual é o caminho crítico (a cadeia de dependências que define a duração total). Derive tudo de `fases.md` e dos `depende_de` das tasks — não invente paralelismo que o plano não declarou.
+3. **Rota de execução** — a sequência de sprints e fases, marcando explicitamente: o que roda em paralelo com o quê, e qual é o caminho crítico (a cadeia de dependências que define a duração total). Derive tudo das fases da sprint — `fases.md` nos três arquivos, a chave `fases` do `tasks.md` no condensado — e dos `depende_de` das tasks — não invente paralelismo que o plano não declarou.
 4. **Ferramentas** — MCPs e SDKs necessários; comandos exatos de teste, lint e typecheck do projeto; onde ficam os segredos (nome da variável e local — NUNCA o valor).
 5. **Agentes** — os três papéis: *implementador* (escreve teste e código da task), *revisor de testes* (confere que o teste falharia com implementação errada), *auditor de aceite* (confere o critério de aceite antes de marcar concluída). Explique como um agente único assume os três papéis em sequência dentro de cada task quando não há múltiplos agentes disponíveis.
 6. **Regras de autonomia** — copie as regras de execução: não perguntar, não pedir autorização; teste antes do código; dúvida nova → `00-BLOQUEIOS.md`, pular, seguir para a próxima paralelizável; critério de aceite não atendido = não avança; status atualizado em `tasks.md` a cada task.
 7. **Definição de pronto global** — o que precisa ser verdade para a feature inteira estar entregue (derive da definição de pronto do usuário em `00-DECISOES.md` + critérios de saída das sprints).
 8. **Como retomar uma sessão interrompida** — instrução literal: ler este arquivo, ler os `status` em cada `tasks.md`, ler `00-BLOQUEIOS.md`, e continuar da primeira task `pendente` ou `em_andamento` cujas dependências estão `concluida`.
+
+**Antes de escrever, enumere as sprints e resolva o formato de cada uma.** Percorra todos os
+`sprint-NN/` do trabalho e, para cada sprint, aplique a regra única de `references/00-schema.md`
+("Como resolver o formato de uma sprint"). Rota, paralelismo e caminho crítico saem dos **mesmos
+dados** nos dois formatos — só muda o arquivo onde eles moram. No mapa de leitura (seção 2),
+liste os arquivos que a sprint **de fato tem**: uma sprint condensada aparece com um `tasks.md`
+só, e isso está certo.
 
 Regras de escrita:
 
@@ -37,7 +46,8 @@ frontmatter `kind: orquestrador` do contrato expx-schema v1, descrito em
 - `concluido_em` é `null` até a feature inteira estar entregue.
 - `modulo_afetado` e `palavras_chave` recebem os valores que a F3 derivou no Passo 2.1 de
   `references/03-plano.md`. Se a F3 não os deixou prontos, derive-os aqui pelo mesmo critério
-  daquele passo (camadas do `CONVENCOES.md` quando existir; estrutura de pastas quando não),
+  daquele passo (camadas do `CONVENCOES.md` quando existir, localizado pela regra única de
+  `references/00-schema.md`; estrutura de pastas quando não),
   a partir dos `arquivos` das tasks.
 - `arquivos_alterados` nasce `[]` na F4 — nenhuma task foi concluída ainda. Quem o preenche é
   a F6, ao fechar a última task. A chave existe desde já, vazia, nunca ausente.
@@ -50,12 +60,23 @@ frontmatter `kind: orquestrador` do contrato expx-schema v1, descrito em
 - [ ] Nenhum segredo com valor; nenhum caminho absoluto.
 - [ ] `ORQUESTRADOR.md` tem frontmatter `kind: orquestrador` válido conforme `references/00-schema.md`, com `caminho_critico` igual ao da seção 3.
 - [ ] `modulo_afetado` e `palavras_chave` preenchidos (minúscula, sem acento) e `arquivos_alterados: []` presente.
+- [ ] `scripts/planejamento.sh avanca <slug> f4` rodou: estado `aguardando_f5` e checkpoint com código `0`.
 
 ## Quando o critério não é atendido
 
 Complete a seção faltante antes de encerrar. Se uma informação de Ferramentas não existe no repositório (ex.: não há comando de lint), escreva "NÃO EXISTE NO PROJETO" na linha — não invente comando.
 
 ## Ao terminar
+
+Registre o fim da fase antes de anunciar:
+
+```bash
+bash <raiz-da-skill>/scripts/planejamento.sh avanca <slug> f4
+```
+
+O estado passa a `aguardando_f5` e o checkpoint roda (regra única em
+`references/02-descoberta.md`, "Checkpoint do planejamento"). Código diferente de `0`: **pare** e
+relate.
 
 Anuncie: "F4 concluída. `docs/sprintx/features/<slug>/ORQUESTRADOR.md` gerado. Próxima fase: F5 AUDITORIA." Siga para a F5 lendo `references/05-auditoria.md`.
 

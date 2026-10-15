@@ -7,8 +7,35 @@ Você está na F3. Seu objetivo é gerar a árvore de sprints/fases/tasks. Nesta
 - `docs/sprintx/features/<slug>/00-DECISOES.md` existe.
 - **Nenhum PENDENTE bloqueante** em `00-DECISOES.md`. Se houver, PARE: liste os PENDENTEs, diga o que cada um trava e pergunte só o necessário para resolvê-los (isso é resolução de pendência da F2, não uma nova entrevista). Só gere o plano com todos os bloqueantes resolvidos.
 - Se `00-DECISOES.md` não existe, a F2 não aconteceu: diga "Falta a F2 (descoberta). Vou executá-la primeiro." e execute `references/02-descoberta.md`.
+- O estado do planejamento é `aguardando_f3`, `replanejar` ou `replanejar_execucao` (`scripts/planejamento.sh fase <slug>` responde `F3`). Com `orcamento_esgotado`, `replanejamento_execucao_esgotado` ou `replanejamento_execucao_recusado` **não há F3**: o estado é terminal e nada continua automaticamente.
 
-Se este é um retorno da F5 (auditoria com achado ALTA), leia `00-AUDITORIA.md` antes de regerar: cada achado ALTA e MÉDIA deve ser endereçado na nova versão do plano.
+`replanejamento_execucao_recusado` continua terminal até uma chamada humana explícita. Somente
+quando o motivo durável for exatamente `orcamento_f6_nao_declarado`, a autoridade humana pode
+executar:
+
+```bash
+bash <raiz-da-skill>/scripts/planejamento.sh autorizar-replanejamento-execucao <slug> <max_replanejamentos_f6> <autorizado_por>
+```
+
+A autorização tardia abre a rodada 1 e devolve o planejamento para F3 em uma única transição; ela
+não apaga a recusa histórica nem reabre qualquer outro terminal. Depois de `aplicada`, siga esta
+seção como retorno da F6. Com `checkpoint_pendente`, execute `checkpoint <slug>` e repita o comando;
+com `retomada`, siga a fase indicada sem consumir outra rodada.
+
+Se este é um retorno da F5 (estado `replanejar`), leia `00-AUDITORIA.md` antes de regerar: cada achado ALTA e MÉDIA deve ser endereçado na nova versão do plano — pela classe, não pelo exemplo (Passo 1.1).
+
+### Retorno da F6 — replanejamento da execução
+
+Estado `replanejar_execucao` — ou, numa volta da F5 dentro da mesma rodada, `replanejar` com `replanejamento_execucao=ativo` na saída de `fase`. A F6 achou um defeito no plano aprovado e parou. **Não é um plano novo**: é o plano aprovado, corrigido no mínimo necessário. Não volte à F1 nem à F2, não refaça descoberta, não reescreva o que já foi validado.
+
+1. Leia os B-NN da rodada — `bloqueios_replanejamento_f6` no `00-PLANEJAMENTO.md` — em `00-BLOQUEIOS.md`: cada um nomeia o campo do plano que tem de mudar (`arquivos`, `depende_de`, teste declarado, tasks de uma fase). Numa volta da F5, leia também `00-AUDITORIA.md`, como em qualquer `replanejar`.
+2. **Tasks `concluida` estão congeladas** (`tasks_congeladas`). Não apague, não renumere, não mova, não reabra, não mude o status, os `arquivos`, os testes, o `criterio_aceite` nem a prosa de nenhuma delas — e não marque como concluída uma task que não foi executada. Os commits delas continuam valendo. `avanca` recusa (código `4`) qualquer diferença nelas, em todo portão da rodada.
+3. Corrija **só o escopo não concluído**: a task bloqueada, tasks pendentes, tasks novas, dependências do trabalho restante, `arquivos` de uma task não concluída, critérios futuros. Um arquivo que uma task concluída criou ou alterou pode entrar em `arquivos` de uma task futura — no piloto, `tests/ui/cabecalho-topo.test.tsx`, em `cria` da T-03.01 concluída, entra em `altera` da T-04.03. Isso **não** descongela a T-03.01.
+4. A task bloqueada continua `bloqueada` no plano replanejado: quem a devolve a `pendente` é o fechamento da rodada, depois da aprovação. Não resolva o B-NN: `scripts/bloqueios.sh resolver` recusa `defeito_de_plano` até a F5 aprovar.
+5. **O trabalho parcial preservado fica com a task bloqueada** (`parciais_replanejamento_f6`, na saída de `fase`). Cada caminho da lista continua declarado em `arquivos` da mesma task, e de nenhuma outra: não o mova para uma irmã, não o atribua a uma task concluída, não o declare também em outra task, não o tire do plano. O que o replanejamento pode fazer é acrescentar à task bloqueada o arquivo que faltava (o `X` da irmã, no caso típico). `avanca` recusa (código `4`) um plano que tire o trabalho parcial preservado da sua task; e recusa (código `2`) a rodada se a árvore não tem mais esse trabalho exatamente como foi preservado — a F3 não edita produto.
+6. Se a correção só for possível reescrevendo trabalho concluído, **não reescreva a história**: pare e relate — a decisão é de quem declarou o orçamento.
+
+Termine a fase como sempre: `avanca <slug> f3`, F4 e F5. O orçamento da F5 continua de onde estava.
 
 ## Passo 0 — Consultar o histórico dos arquivos (quando houver `memox`)
 
@@ -46,6 +73,30 @@ Com a base (`base/`) e as decisões (`00-DECISOES.md`) na mão, desenhe Sprints 
 **Paralelismo declarado:** para CADA task, declare `paralelizavel` e `depende_de`; para CADA fase, declare com qual outra fase pode rodar em paralelo (ou "nenhuma"). A execução nunca decidirá isso — se você não declarar, é sequencial.
 
 **Sem decisão humana em execução:** se ao planejar você encontrar algo que exigiria decisão humana durante a execução, transforme em decisão AGORA: pergunte ao usuário na hora, registre a resposta como nova linha D-NN em `00-DECISOES.md` e só então continue o plano. Esta é a única pergunta permitida na F3.
+
+## Passo 1.1 — Replanejar corrige a classe do defeito, não o exemplo
+
+Num retorno da F5, cada achado de `00-AUDITORIA.md` traz o item da auditoria que o gerou
+(`[item N]`) e, quando veio do `revisor-testes`, o tipo do teste fraco (`[fraco:<tipo>]`, ver
+`references/05-auditoria.md`). A implementação errada citada no achado é **um exemplo** do
+defeito, não o defeito inteiro.
+
+Corrija a **classe** do defeito em todo o escopo que ele atinge:
+
+- Identifique a cláusula que o achado cita (`criterio_aceite`, `D-NN`, fato da base, contrato de
+  origem) e todos os casos que essa mesma cláusula governa na task — e nas outras tasks que a
+  citam.
+- Se um teste só verifica que um item está presente e o achado mostra que ele poderia estar no
+  grupo errado, e a mesma regra de agrupamento vale para vários itens, **não** acrescente uma
+  asserção só para o item citado: declare a verificação para todos os itens que a regra cobre.
+- Quando a cláusula é matricial (item × grupo, perfil × permissão, entrada × saída), declare o
+  teste como **tabela/matriz** que percorre todas as combinações que a cláusula define.
+- **Não invente generalização além da cláusula.** A classe é delimitada pelo que a cláusula
+  afirma; comportamento que nenhuma cláusula define não entra no teste por conta própria — se
+  faltar regra, isso é decisão (D-NN), não teste.
+
+Um `[fraco:criterio]` pede cláusula antes de pedir teste: sem regra autoritativa, não há o que o
+teste prove. Resolva-o no `criterio_aceite` ou numa decisão D-NN, e só então no teste.
 
 ## Passo 2 — Escrever os arquivos
 
@@ -127,8 +178,10 @@ afetados e registre-os no `ORQUESTRADOR.md` — no campo `modulo_afetado` do fro
 
 **Como derivar o módulo de um arquivo, nesta ordem:**
 
-1. **Com `CONVENCOES.md` no projeto** (procure, nesta ordem, em `CONVENCOES.md`,
-   `docs/stackx/CONVENCOES.md` e `.expx/CONVENCOES.md`, na raiz do repositório): use as
+1. **Com `CONVENCOES.md` no projeto** (localizado pela regra única de
+   `references/00-schema.md`, "Como localizar o `CONVENCOES.md`": `CONVENCOES.md` →
+   `docs/stack/CONVENCOES.md` → `docs/stackx/CONVENCOES.md` → `.expx/CONVENCOES.md`, o
+   primeiro que existir, sem mesclar): use as
    **camadas que ele declara**. O módulo é o nome da camada à qual o arquivo pertence segundo
    as convenções do projeto — é a resposta certa porque é a que o projeto já usa para se
    descrever.
@@ -188,12 +241,14 @@ Antes de declarar a F3 concluída, confira você mesmo:
 - [ ] Nenhuma task tem pior caso plausível maior que quatro vezes o melhor caso plausível (senão, quebre-a agora — a F3.5 se recusaria a estimá-la).
 - [ ] `modulo_afetado` e `palavras_chave` estão derivados (Passo 2.1), em minúscula e sem acento, prontos para o `ORQUESTRADOR.md` — ou já gravados nele, se ele existir.
 - [ ] `tasks_total` foi gravado em `.expx/estado.json` com o número de tasks do plano (Passo 2.2), ou `.expx/` não existe no projeto.
-- [ ] Cada `fases.md` tem o bloco Mermaid do grafo de tasks conforme `references/09-diagrama.md` — ou a contradição que impediu a geração foi corrigida no plano. Este item não bloqueia a fase: o diagrama é derivado.
+- [ ] Cada `fases.md` tem o bloco Mermaid do grafo de tasks conforme `references/09-diagrama.md` — só as sprints em três arquivos têm `fases.md`, e uma sprint condensada não tem diagrama nem precisa de um — ou a contradição que impediu a geração foi corrigida no plano. Este item não bloqueia a fase: o diagrama é derivado.
 
 ## Critério de saída da fase
 
 - [ ] `sprint-01/` (e demais sprints) existem: sprint de fase única com `tasks.md` (`kind: plano`); as demais com `sprint.md`, `fases.md` e `tasks.md` completos.
 - [ ] Checklist do Passo 3 toda atendida.
+- [ ] Num retorno da F5, cada achado foi corrigido pela classe do defeito (Passo 1.1), não só pelo exemplo citado.
+- [ ] `scripts/planejamento.sh avanca <slug> f3` rodou: estado `aguardando_f4` e checkpoint com código `0`.
 
 ## Quando o critério não é atendido
 
@@ -212,6 +267,16 @@ Esse teste é irmão da regra de granularidade (se os dois testes não cabem em 
 **Não estime aqui.** Não escreva horas, faixas, prazos nem datas em `sprint.md`, `fases.md` ou `tasks.md`. Nenhum campo do contrato da task carrega esforço, e o plano não é o lugar de número de esforço. A estimativa vive exclusivamente em `docs/sprintx/features/<slug>/00-ESTIMATIVA.md`, gravado pela F3.5.
 
 ## Ao terminar
+
+Registre o fim da fase **antes** de anunciar e antes de qualquer F3.5 ou F4:
+
+```bash
+bash <raiz-da-skill>/scripts/planejamento.sh avanca <slug> f3
+```
+
+O estado passa a `aguardando_f4` e o checkpoint roda (regra única em
+`references/02-descoberta.md`, "Checkpoint do planejamento"). Código diferente de `0`: **pare**
+e relate — não siga para a F4 com o plano fora do histórico.
 
 Anuncie: "F3 concluída. Plano em `docs/sprintx/features/<slug>/sprint-*/` (N sprints, M tasks)." Siga para a F4 lendo `references/04-orquestrador.md`.
 

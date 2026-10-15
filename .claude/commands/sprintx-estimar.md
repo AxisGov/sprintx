@@ -7,7 +7,7 @@ Invoque a skill `sprintx` e execute a F3.5 ESTIMATIVA seguindo `references/07-es
 
 Feature: $ARGUMENTS (se vazio, use a feature em andamento).
 
-A F3.5 é a fase opcional do método e roda **sobre um plano já existente**. Antes de executar, confirme no disco que `docs/sprintx/features/<slug>/sprint-01/` existe com `sprint.md`, `fases.md` e `tasks.md`. Se não existir, o plano não existe: diga "Falta a F3 (plano). Não dá para estimar antes de existir task." e execute `references/03-plano.md` primeiro — estimar antes de existir task é chute com aparência de método. Se faltar fase anterior a essa, aponte qual falta e execute a pendente, conforme a máquina de estados do SKILL.md.
+A F3.5 é a fase opcional do método e roda **sobre um plano já existente**. Antes de executar, confirme no disco que `docs/sprintx/features/<slug>/sprint-01/` existe com uma sprint válida em um dos dois formatos do contrato — condensado (`tasks.md` com `kind: plano`) ou três arquivos (`sprint.md`, `fases.md`, `tasks.md`), regra única em `references/00-schema.md`. Se não existir, o plano não existe: diga "Falta a F3 (plano). Não dá para estimar antes de existir task." e execute `references/03-plano.md` primeiro — estimar antes de existir task é chute com aparência de método. Se faltar fase anterior a essa, aponte qual falta e execute a pendente, conforme a máquina de estados do SKILL.md.
 
 Rodar esta fase não altera o plano, não é pré-requisito de nada e não bloqueia a F4: um plano sem `00-ESTIMATIVA.md` segue para a F4 normalmente. Ela pode ser rodada sobre um plano já auditado sem invalidar a auditoria.
 

@@ -16,7 +16,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RAIZ="$(rastro_raiz "$PWD")"
 CFG="$RAIZ/.expx/hooks.json"
 
-HOOKS="segredo git-perigoso escopo-da-task task-so-fecha-verde sem-placeholder-no-plano tdd-teste-antes task-reivindicada arvore-limpa-antes-da-suite"
+HOOKS="segredo sprintx/git-perigoso escopo-da-task task-so-fecha-verde sem-placeholder-no-plano tdd-teste-antes task-reivindicada arvore-limpa-antes-da-suite"
 
 # ------------------------------------------------------------- subcomandos
 if [ "${1:-}" = "promover" ] || [ "${1:-}" = "rebaixar" ]; then
@@ -52,8 +52,10 @@ printf '%-26s %-10s %s\n' "--------------------------" "----------" "---------"
 for h in $HOOKS; do
   modo="$(rastro_modo "$RAIZ" "$h")"
   arq=""
+  # Id com namespace (`sprintx/git-perigoso`, DS-158) ja e o caminho relativo a hooks/.
   [ -f "$RAIZ/.claude/hooks/comum/$h.sh" ]   && arq="comum/$h.sh"
   [ -f "$RAIZ/.claude/hooks/sprintx/$h.sh" ] && arq="sprintx/$h.sh"
+  case "$h" in */*) [ -f "$RAIZ/.claude/hooks/$h.sh" ] && arq="$h.sh" ;; esac
   [ -n "$arq" ] || arq="AUSENTE"
   printf '%-26s %-10s %s\n' "$h" "$modo" "$arq"
 done

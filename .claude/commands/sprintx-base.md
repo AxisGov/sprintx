@@ -4,6 +4,7 @@ argument-hint: [nome-da-feature]
 ---
 
 Invoque a skill `sprintx` e execute a F1 INGESTÃO seguindo `references/01-ingestao.md`.
+Esse reference também é a autoridade para registrar e validar predecessores Superpowers efetivamente consumidos.
 
 Feature: $ARGUMENTS (se vazio, use a feature em andamento; se não houver, derive o slug do que o usuário descreveu).
 

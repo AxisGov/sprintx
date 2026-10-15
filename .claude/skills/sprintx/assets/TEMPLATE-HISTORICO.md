@@ -16,6 +16,7 @@ entradas:
     estimado_media: {{numero ou null}}
     real: {{numero}}
     desvio: {{numero ou null}}
+    duracao_observada: {{numero ou null}}
     registrado_em: {{AAAA-MM-DD}}
 calibracao:
   - tipo_task: {{tipo}}
@@ -34,30 +35,66 @@ Uma linha por task concluída, com o esforço real medido. É a única base de c
 
 Unidade: hora de trabalho focado. O real é o esforço efetivamente gasto na task — escrever os dois testes, implementar, rodar a suíte e verificar o critério de aceite. Não inclui reunião, revisão, deploy nem ida e volta com o cliente: esses são "não incluído" na estimativa e precisam continuar fora aqui, senão a calibração fica corrompida.
 
+A **duração observada** é outra coisa: o tempo de parede entre `task_iniciada` e `task_concluida` no rastro, obtido sem ninguém anotar nada. Ela entra ao lado do real, nunca no lugar dele, e não entra no desvio nem na calibração — tempo de parede não é esforço, e uma task aberta por seis horas pode ter tido vinte minutos de trabalho e um almoço no meio.
+
 ## Entradas
 
-| Trabalho | Task | Tipo | Área | Sinais | Estimado (min–max) | Média est. | Real | Desvio |
-|---|---|---|---|---|---|---|---|---|
-| {{slug}} | T-{{NN}}.{{MM}} | {{tipo_task}} | {{area}} | {{sinais}} | {{min}}–{{max}} h | {{media}} h | {{real}} h | {{desvio}} |
+| Trabalho | Task | Tipo | Área | Sinais | Estimado (min–max) | Média est. | Real | Desvio | Duração observada |
+|---|---|---|---|---|---|---|---|---|---|
+| {{slug}} | T-{{NN}}.{{MM}} | {{tipo_task}} | {{area}} | {{sinais}} | {{min}}–{{max}} h | {{media}} h | {{real}} h | {{desvio}} | {{duracao_observada em h, ou — quando null}} |
 
 {{Trabalho que rodou sem a F3.5 entra assim: estimado_min, estimado_max, estimado_media e desvio em `null`, com o real preenchido. O real ainda alimenta a comparabilidade por tipo e área.}}
 
+{{Sem o par `task_iniciada`/`task_concluida` no rastro, `duracao_observada` fica em `null` — o campo é opcional, e entrada antiga sem a chave continua válida. Entrada sem duração observada não perde nada: a calibração nunca a lê.}}
+
+> **Célula sem valor.** Quando o campo é `null` no YAML, a célula correspondente da tabela leva `—`, nunca `null` e nunca `null h`: a unidade só acompanha número. É a regra universal 7 aplicada à ausência — o YAML diz `null`, a prosa mostra que não há valor, e as duas continuam dizendo a mesma coisa.
+
 ## Calibração por tipo de task
 
-`desvio_medio` é a média dos desvios das entradas encerradas daquele tipo. `1,0` é o alvo; `1,4` significa que aquele tipo de task leva, em média, 40% a mais que o estimado.
+`desvio_medio` é a média dos desvios **persistidos** das entradas elegíveis daquele tipo — a coluna `Desvio` da tabela acima, nunca a média das razões brutas. `1,00` é o alvo; `1,40` significa que aquele tipo de task leva, em média, 40% a mais que o estimado.
+
+> **Bloco derivado e regravável (DS-165).** `entradas:` acima é append-only, mas este bloco `calibracao` não é: a cada fechamento, a F6 recalcula e **substitui** o bloco inteiro a partir das entradas elegíveis vigentes. A F3.5 (`references/07-estimativa.md`) nunca escreve nem migra o `HISTORICO.md` — ela só lê, confere o que está gravado aqui contra o canônico recomputado das entradas, e declara a divergência quando houver.
+
+> **Entrada calibrável.** Elegível é a entrada encerrada cujo `desvio` persistido é número (DS-164). Entrada que rodou sem a F3.5 encerra com `real` e com `desvio` em `null`, e nesta tabela ela não aparece de nenhuma forma: `entradas` conta somente as entradas daquele tipo com `desvio` numérico (não nulo), `desvio_medio` é a média somente dessas entradas elegíveis, e o `Fator ativo?` olha somente para elas.
+>
+> Entrada com `desvio: null` fica fora da contagem e nunca como zero: dois desvios `1.20` e `1.30`, com duas entradas nulas do mesmo tipo ao lado, dão `entradas: 2` com `desvio_medio: 1.25` — jamais `entradas: 4` com `desvio_medio: 0.63`, que é o que sairia de somar as nulas como se valessem zero.
+>
+> Ela **continua no histórico**: segue em `entradas:` e na tabela de entradas acima, com o `real` anotado e `—` nas células sem valor, e segue alimentando a comparabilidade por tipo e área. O que ela não faz é contar aqui — nem no contador, nem na média, nem no limiar do fator.
+>
+> Com **1 ou 2 entradas elegíveis** o item daquele tipo existe na `calibracao`, com o contador preenchido e `fator_ativo: false`: é a linha que o próximo fechamento incrementa, e apagá-la perderia a contagem. `calibracao: []` é o estado de **nenhuma entrada elegível** em tipo nenhum — ver **Calibração vazia** abaixo.
 
 | Tipo de task | Entradas | Desvio médio | Fator ativo? |
 |---|---|---|---|
-| {{tipo_task}} | {{n}} | {{desvio}} | {{sim, aplicado como fator ×{{desvio}} | não — menos de 3 entradas}} |
+| {{tipo_task}} | {{n}} | {{desvio}} | {{sim, aplicado como fator ×{{desvio}} \| não — menos de 3 entradas elegíveis}} |
 
-**Regra do fator.** O desvio de um tipo só vira fator de correção nas estimativas seguintes a partir de **3 entradas encerradas** daquele tipo — abaixo disso é ruído. Quando aplicado, o fator é **sempre declarado na saída da estimativa**, nunca embutido em silêncio.
+> **Calibração vazia.** `calibracao: []` no YAML — nenhuma entrada elegível em tipo nenhum ainda, o caso normal do primeiro trabalho do projeto e de todo trabalho que rodou sem a F3.5 — renderiza esta tabela com cabeçalho e separador e **sem nenhuma linha de dados**. Há exatamente uma linha de dados por item de `calibracao`, e o primeiro campo dela é sempre um valor do enum `tipo_task`: linha de dados sem item correspondente no frontmatter é proibida. Nunca fabrique uma linha para a tabela não ficar vazia, e nunca use `—`, `n/a`, célula vazia ou qualquer outra sentinela como se fosse linha — a regra da **Célula sem valor** acima vale para célula de uma linha real, nunca para a linha inteira, e `| — | — | — | — |` anuncia um `tipo_task` que não existe no enum, o que se lê como tabela corrompida e não como ausência de calibração. Tabela só com cabeçalho e separador é a forma correta, e fiel ao YAML, de dizer que ainda não há calibração.
+
+**Regra do fator.** O desvio de um tipo só vira fator de correção nas estimativas seguintes a partir de **3 entradas elegíveis** daquele tipo — abaixo disso é ruído. Quando aplicado, o fator é **sempre declarado na saída da estimativa**, nunca embutido em silêncio.
 
 ## Como se calcula o desvio
 
 ```
-desvio_task = real / media_task_estimada          # media_task = (o + 4m + p) / 6
-desvio_medio_do_tipo = media dos desvio_task daquele tipo
+desvio_calibracao_task  = arredonda( real / media_task_estimada )   # media_task = (o + 4m + p) / 6
+desvio_medio_do_tipo    = arredonda( media dos desvio_calibracao_task PERSISTIDOS daquele tipo )
+arredonda(x)            = duas casas decimais, meio para cima (half-up)
 ```
+
+> **`desvio_calibracao_task` é razão, adimensional.** É quanto o `real` excedeu o `estimado_media` da task — nunca o `desvio_padrao_task` da `references/07-estimativa.md`, que é o desvio-padrão PERT de uma estimativa, medido em **horas**. As duas grandezas não são intercambiáveis, e nenhum dos dois símbolos vira chave em disco: o que se persiste aqui continua sendo `desvio` e `desvio_medio` (DS-162).
+
+> **Precisão e desempate.** São **duas casas decimais**, com desempate **half-up**: terceira casa exatamente `5`, a segunda sobe. A razão `1,125` vira `1,13`, nunca `1,12`. As duas casas são **fixas**, não "até duas": a razão `1,2` grava-se `1.20` no YAML e escreve-se `1,20` na prosa. O YAML usa ponto, a prosa em pt-BR usa vírgula, e as duas carregam as mesmas duas casas (regra universal 7); só a sintaxe de fórmula do bloco acima fica fora disso. Número com uma casa, ou com três, é número fora do contrato (DS-160).
+>
+> **O arredondamento tem estágio.** Cada `desvio` é arredondado **antes** de ser persistido, e é o valor persistido que entra na média — a média das razões brutas é outro número. A média é então arredondada de novo pela mesma regra. Sem a ordem fixa, dois executores honestos gravam `1,16` e `1,15` do mesmo histórico.
+
+**Exemplo completo.** Quatro entradas elegíveis de `integracao_externa`:
+
+| `estimado_media` | `real` | razão | `desvio` persistido |
+|---|---|---|---|
+| 4.0 | 4.5 | 1,125 | `1.13` — empate exato, half-up sobe |
+| 4.0 | 4.5 | 1,125 | `1.13` |
+| 3.0 | 3.5 | 1,1666… | `1.17` |
+| 1.0 | 1.2 | 1,2 | `1.20` — duas casas fixas, nunca `1.2` |
+
+A média dos quatro persistidos é `(1,13 + 1,13 + 1,17 + 1,20) / 4 = 1,1575`, que arredonda para **`desvio_medio: 1.16`**. Com `entradas: 4`, `fator_ativo: true`. Se a média saísse das razões brutas, ou se o empate descesse, o número gravado seria `1,15` — e as estimativas seguintes publicariam outra faixa.
 
 ## Como esta tabela é alimentada
 
