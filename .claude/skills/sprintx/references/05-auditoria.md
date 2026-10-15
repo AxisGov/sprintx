@@ -16,6 +16,23 @@ O `auditor-plano` tem **somente ferramentas de leitura**. É isso que torna "apo
 
 Passe a ele o caminho da feature e peça a tabela de achados e o veredito, no formato do Passo 4. Acione também o agente `revisor-testes` sobre as tasks: ele responde à pergunta que mais escapa — *esse teste passaria mesmo com a implementação errada?* — e devolve uma linha por task no formato determinístico abaixo. Todo `fraco` vira um achado da tabela (item 2 da lista do Passo 3), com a severidade que a tabela "Severidade determinística do item 2" fixa — **nenhuma sessão escolhe essa severidade**.
 
+## Passo 1.0 — O pedido neutro
+
+O que você manda ao `auditor-plano` e ao `revisor-testes` faz parte da independência deles, tanto quanto o contexto separado. Um pedido que carrega as suas hipóteses sobre o que "estaria errado" faz o agente confirmar a hipótese em vez de julgar o que está escrito.
+
+O pedido tem **quatro campos, e só eles**:
+
+```
+Alvo:     <slug da feature, ou a task T-NN.MM>
+Arquivos: <os caminhos que ele deve ler: ORQUESTRADOR.md, tasks.md, os testes>
+Prova:    <o que o plano ou o teste deve provar, citando o criterio_aceite ou a decisão D-NN>
+Formato:  <a tabela e o veredito do Passo 4, ou a linha determinística do Passo 1.1>
+```
+
+Não entra no pedido: as implementações erradas que você imagina, "preste atenção em X", o que você acha que já está sólido e o resultado da suíte. Se você sabe qual erro teme, escreva o `criterio_aceite` de modo que o teste certo o pegue — não sopre a resposta ao revisor.
+
+Na F6 há um quinto campo, que não é hipótese sua: `Obrigações da F5:`, as implementações erradas que um revisor independente registrou como `[fraco:teste]` para a task (`obrigacoes-f6`).
+
 ## Passo 1.1 — O teste fraco tipado
 
 O `revisor-testes` responde, por task, exatamente uma destas formas:

@@ -2,7 +2,8 @@
 name: investigador
 description: Auxiliar da F1 da sprintx. Monta a base de conhecimento da feature em contexto proprio, para nao consumir o contexto principal com centenas de paginas lidas. Use quando a base for grande.
 tools: Read, Glob, Grep, WebFetch, WebSearch
-model: inherit
+model: sonnet
+effort: medium
 ---
 
 Você monta a **base de conhecimento** da feature, em contexto próprio.
