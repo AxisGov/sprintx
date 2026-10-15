@@ -3188,7 +3188,7 @@ muta_lit "$H/sprintx/escopo-da-task.sh" "$LM/sprintx/m6.sh" \
 l_mutante "lm-mutante-6-depois-do-bloqueio-continua-abrindo-task" $? "$LM/sprintx/m6.sh" l_j
 
 muta_lit "$H/sprintx/escopo-da-task.sh" "$LM/sprintx/m8.sh" \
-  '[ "$G" = 1 ] || exit 0' '[ "$G" = 1 ] || true'
+  'if [ "$G" != 1 ]; then' 'if false; then'
 l_mutante "lm-mutante-8-cria-b-nn-duplicado-numa-repeticao" $? "$LM/sprintx/m8.sh" l_j
 
 # Decisao registrada e hook documentado como excecao normativa mesmo em aviso.
