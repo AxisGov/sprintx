@@ -41,7 +41,7 @@ Para cada task, fase e sprint:
 7. **Task que exigiria decisão humana** — "confirmar com o usuário", "decidir depois", "a definir" dentro de uma task. Nenhuma task pode depender de decisão humana em tempo de execução.
 8. **Pré-requisito externo não declarado** — segredo, conta, permissão, serviço ou dado que a execução vai precisar e que nenhum arquivo declara.
 9. **Base ignorada** — limite, cota, erro conhecido ou risco registrado em `base/` que o plano não trata; ou contradição entre plano e base sem uma decisão D-NN que a justifique.
-10. **Granularidade** — se os dois testes de uma task não cabem em uma frase cada, a task está grande demais. Também é grande demais a task cuja mudança estimada passa de 300 linhas alteradas (F3 do `expx-fatiamento`) ou que acrescenta conteúdo a arquivo acima de 4.000 linhas ou 150 KB (F4); e é grande demais o trabalho cujas tasks, somadas, passam de 400 linhas ou 20 arquivos (F2: o trabalho vira um PR só).
+10. **Granularidade** — se os dois testes de uma task não cabem em uma frase cada, a task está grande demais. Também é grande demais a task cuja mudança estimada passa de 300 linhas alteradas (F3 do `expx-fatiamento`) ou que acrescenta conteúdo a arquivo acima de 4.000 linhas ou 150 KB além da tolerância de 2 KB e 20 linhas que a F4 dá ao trabalho inteiro (uma linha de tabela cabe; uma seção nova, não); e é grande demais o trabalho cujas tasks, somadas, passam de 400 linhas ou 20 arquivos (F2: o trabalho vira um PR só).
 
 ## O que entregar
 

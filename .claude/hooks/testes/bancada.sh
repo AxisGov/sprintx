@@ -3759,6 +3759,26 @@ EOF
   n_hook "$NF_DIR/fora" "$1" src/novo.ts eu@sessao
   [ "$N_RC" -eq 2 ] && n_tem task_fora_do_plano_corrente
 }
+n_lnk() { # todo plano e link: nao le, mas avisa que a edicao nao foi conferida
+  local d="$NF_DIR/lnk" p
+  n_fx "$d" alfa-antiga hist
+  mkdir -p "$d/fora"
+  for p in corrente alfa-antiga; do
+    mv "$d/docs/sprintx/features/$p/sprint-01/tasks.md" "$d/fora/$p.md"
+    ln -s "$d/fora/$p.md" "$d/docs/sprintx/features/$p/sprint-01/tasks.md" || return 1
+  done
+  n_hook "$d" "$1" src/novo.ts eu@sessao
+  [ "$N_RC" -eq 0 ] && n_tem "NAO foi conferida" && n_tem "(link)"
+}
+n_lnkdir() { # plano numa pasta por link: tambem nao le, e avisa
+  local d="$NF_DIR/lnkdir"
+  n_fx "$d" alfa-antiga hist
+  mkdir -p "$d/fora"
+  mv "$d/docs/sprintx/features" "$d/fora/features"
+  ln -s "$d/fora/features" "$d/docs/sprintx/features" || return 1
+  n_hook "$d" "$1" src/novo.ts eu@sessao
+  [ "$N_RC" -eq 0 ] && n_tem "NAO foi conferida" && n_tem "(pasta por link)"
+}
 
 NHOOK="$H/sprintx/escopo-da-task.sh"
 bash -n "$NHOOK"; afirma "n0-hook-sintaxe" $? "bash -n"
@@ -3785,7 +3805,9 @@ for par in \
   n_u:nu-terceira-feature-historica-nao-muda-nada \
   n_div:ndiv-trabalho-divergente-fail-closed \
   n_amb:namb-dois-layouts-do-mesmo-trabalho-fail-closed \
-  n_fora:nfora-task-fora-do-plano-corrente-fail-closed; do
+  n_fora:nfora-task-fora-do-plano-corrente-fail-closed \
+  n_lnk:nlnk-plano-por-link-avisa-que-nao-conferiu \
+  n_lnkdir:nlnkdir-plano-em-pasta-por-link-avisa-que-nao-conferiu; do
   "${par%%:*}" "$NHOOK"; afirma "${par#*:}" $? "${par%%:*}"
 done
 

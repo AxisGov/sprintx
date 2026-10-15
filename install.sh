@@ -107,8 +107,10 @@ copy_hooks_claude() {
     dest="$root/.claude/agents/${a##*/}"
     # Destino que e link simbolico NAO e escrito: o `cp` seguiria o link e
     # sobrescreveria o arquivo de destino dele, que pode estar fora do projeto.
-    if [ -L "$dest" ]; then
-      say "agente   ${a##*/} NAO instalado: $dest e um link simbolico; remova o link e rode de novo"
+    # Vale tambem para as pastas: `.claude/agents` ou `.claude` como link levaria
+    # a copia para onde ele aponta.
+    if [ -L "$dest" ] || [ -L "${dest%/*}" ] || [ -L "$root/.claude" ]; then
+      say "agente   ${a##*/} NAO instalado: $dest ou a pasta dele e um link simbolico; remova o link e rode de novo"
       continue
     fi
     # Hard link tambem: o `cp` reescreveria o conteudo compartilhado com o outro
