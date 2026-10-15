@@ -48,9 +48,14 @@ REL="${ALVO#"$RAIZ"/}"
 # ja estao ignorados pelo versionador.
 case "$REL" in
   .env|.env.*|*/.env|*/.env.*)
-    if [ -f "$RAIZ/.gitignore" ]; then
+    # `git check-ignore` e a autoridade: uma linha `.env` no .gitignore NAO ignora
+    # `.env.example`, que e versionado e precisa ser varrido.
+    if git -C "$RAIZ" check-ignore -q -- "$REL" 2>/dev/null; then exit 0; fi
+    # sem repositorio (ou sem git): so a linha EXATA do .gitignore vale
+    if ! git -C "$RAIZ" rev-parse --git-dir >/dev/null 2>&1 && [ -f "$RAIZ/.gitignore" ]; then
       while IFS= read -r l || [ -n "$l" ]; do
-        case "$l" in .env*) exit 0 ;; esac
+        l="${l%$'\r'}"; l="${l#/}"
+        if [ "$l" = "${REL##*/}" ] || [ "$l" = "$REL" ]; then exit 0; fi
       done < "$RAIZ/.gitignore"
     fi
     ;;
