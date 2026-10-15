@@ -365,7 +365,7 @@ cmd_registrar() {
   t="$TMP_BASE/atuais.tsv"; : > "$t"; criado="$(date +%Y-%m-%d)"
   if [ -e "$MANIFESTO" ] || [ -L "$MANIFESTO" ]; then
     valida_manifesto
-    cp "$P_TSV_FINAL" "$t"
+    cp "$P_TSV_FINAL" "$t" || falha "$E_CONTRATO" "nao foi possivel copiar o manifesto atual: nenhum predecessor foi alterado"
     criado="$P_CRIADO"
   fi
   while IFS="	" read -r I_CAM I_ORI I_PAP I_COM I_BLO; do
