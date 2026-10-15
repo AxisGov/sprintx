@@ -111,10 +111,17 @@ copy_hooks_claude() {
       say "agente   ${a##*/} NAO instalado: $dest e um link simbolico; remova o link e rode de novo"
       continue
     fi
+    # Hard link tambem: o `cp` reescreveria o conteudo compartilhado com o outro
+    # nome, que pode estar fora do projeto. `find -links +1` vale em GNU e BSD.
+    if [ -f "$dest" ] && [ -n "$(find "$dest" -links +1 2>/dev/null)" ]; then
+      say "agente   ${a##*/} NAO instalado: $dest tem outro nome (hard link); copie-o para um arquivo proprio e rode de novo"
+      continue
+    fi
     if [ -f "$dest" ] && ! cmp -s "$a" "$dest"; then
-      # nome unico: dois backups no mesmo segundo nao se sobrescrevem
+      # nome unico: dois backups no mesmo segundo nao se sobrescrevem, e um link
+      # quebrado com o nome do backup tambem conta como ocupado (`-e` nao o ve)
       bak="$dest.bak-$(date +%Y%m%d%H%M%S)"; n=0
-      while [ -e "$bak" ]; do n=$((n + 1)); bak="$dest.bak-$(date +%Y%m%d%H%M%S)-$n"; done
+      while [ -e "$bak" ] || [ -L "$bak" ]; do n=$((n + 1)); bak="$dest.bak-$(date +%Y%m%d%H%M%S)-$n"; done
       run "cp '$dest' '$bak'"
       say "agente   ${a##*/} existia diferente: copia de seguranca em ${bak##*/}"
     fi
