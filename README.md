@@ -144,7 +144,7 @@ Hooks e agentes **não criam regra nova** — eles garantem regras que já exist
 | `sem-placeholder-no-plano` | após escrever o plano | aviso | Nenhum `{{marcador}}` de template sobrando |
 | `tdd-teste-antes` | após escrever código | aviso | Teste antes da implementação |
 | `segredo` | antes de escrever | **bloqueio** | Segredo não vai para arquivo versionado |
-| `sprintx/git-perigoso` | antes de rodar Bash | **bloqueio** | Nada irreversível durante a execução autônoma |
+| `sprintx/git-perigoso` | antes de rodar Bash | **bloqueio** | Barra os comandos `git` destrutivos que reconhece (push forçado, `reset --hard`, `clean`, `checkout .`, `branch -D`, `rebase`…). Não é sandbox: outros comandos destrutivos (`rm -rf`) não passam por ele |
 
 **Todo hook de método nasce em `aviso`.** Hook que dá falso positivo é desinstalado, e junto com ele vão os que funcionavam — então a promoção a `bloqueio` só acontece depois de evidência de uso real:
 
