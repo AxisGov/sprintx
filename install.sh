@@ -95,9 +95,11 @@ EOF
 copy_hooks_claude() {
   local root="$1" cfg="$1/.claude/settings.json"
   run "mkdir -p '$root/.claude'"
-  run "rm -rf '$root/.claude/agents'"
+  # `.claude/agents` e compartilhada: tem agentes do projeto e de outras skills.
+  # So os arquivos que ESTA skill publica sao trocados; nada mais e apagado.
+  run "mkdir -p '$root/.claude/agents'"
   copy_hooks_tree "$root"
-  run "cp -R '$AGENTS_SRC' '$root/.claude/agents'"
+  run "cp '$AGENTS_SRC'/*.md '$root/.claude/agents/'"
   say "hooks    -> $root/.claude/hooks/ (sprintx/ e os arquivos da sprintx em comum/)"
   say "agentes  -> $root/.claude/agents/"
 
