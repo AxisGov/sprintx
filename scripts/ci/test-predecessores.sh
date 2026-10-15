@@ -324,24 +324,47 @@ grupo_schema() {
   schema_invalido 'recusa papel fora do enum' papel
   schema_invalido 'recusa item antes da lista predecessores' item-antes-lista
 
+# Edicao de arquivo portatil (GNU e BSD/macOS): `sed -i` e os `a\`/`i\` de uma
+# linha so existem no GNU. awk + arquivo temporario roda igual nos dois.
+#   edita depois|antes <trecho literal> <texto> <arquivo>   (em toda linha que contem o trecho)
+#   edita troca <regex> <novo> <arquivo>
+edita() {
+  local modo="$1" pad="$2" txt="$3" arq="$4" tmp
+  tmp="$(mktemp)" || return 1
+  MODO="$modo" PAD="$pad" TXT="$txt" awk '
+    ENVIRON["MODO"] == "troca" { l = $0; sub(ENVIRON["PAD"], ENVIRON["TXT"], l); print l; next }
+    ENVIRON["MODO"] == "antes" && index($0, ENVIRON["PAD"]) { print ENVIRON["TXT"] }
+    { print }
+    ENVIRON["MODO"] == "depois" && index($0, ENVIRON["PAD"]) { print ENVIRON["TXT"] }
+  ' "$arq" > "$tmp" && cat "$tmp" > "$arq"
+  rm -f "$tmp"
+}
+# um item de predecessor, com a indentacao de item de lista (`- caminho:`) ou de campo
+item_pred() { # <caminho> <origem> <papel> <commit> <blob>
+  printf '  - caminho: %s\n    origem: %s\n    papel: %s\n    commit_sha: %s\n    blob_oid: %s' "$1" "$2" "$3" "$4" "$5"
+}
+campos_pred() { # <caminho> <origem> <papel> <commit> <blob>
+  printf '    caminho: %s\n    origem: %s\n    papel: %s\n    commit_sha: %s\n    blob_oid: %s' "$1" "$2" "$3" "$4" "$5"
+}
+
   nova_fixture; manifesto_valido "$SPEC" especificacao "$FX_SPEC_COMMIT" "$FX_SPEC_BLOB"
-  sed -i '/predecessores:/a\    origem: superpowers' "$MANIFESTO"
+  edita depois 'predecessores:' '    origem: superpowers' "$MANIFESTO"
   caso_falha 'recusa campo de item fora de item aberto' pred --validar ft-pre
 
   nova_fixture; manifesto_valido "$SPEC" especificacao "$FX_SPEC_COMMIT" "$FX_SPEC_BLOB"
-  sed -i "/criado_em:/a\\  - caminho: $PLAN\n    origem: superpowers\n    papel: plano\n    commit_sha: $FX_PLAN_COMMIT\n    blob_oid: $FX_PLAN_BLOB" "$MANIFESTO"
+  edita depois 'criado_em:' "$(item_pred "$PLAN" superpowers plano "$FX_PLAN_COMMIT" "$FX_PLAN_BLOB")" "$MANIFESTO"
   caso_falha 'recusa reabrir itens depois de campo top-level' pred --validar ft-pre
 
   nova_fixture; manifesto_valido "$SPEC" especificacao "$FX_SPEC_COMMIT" "$FX_SPEC_BLOB"
-  sed -i "/trabalho_id:/a trabalho_id: ft-pre" "$MANIFESTO"
+  edita depois 'trabalho_id:' 'trabalho_id: ft-pre' "$MANIFESTO"
   caso_falha 'recusa chave repetida' pred --validar ft-pre
 
   nova_fixture; manifesto_valido "$SPEC" especificacao "$FX_SPEC_COMMIT" "$FX_SPEC_BLOB"
-  sed -i "/blob_oid:/a\\    caminho: $SPEC\n    origem: superpowers\n    papel: especificacao\n    commit_sha: $FX_SPEC_COMMIT\n    blob_oid: $FX_SPEC_BLOB" "$MANIFESTO"
+  edita depois 'blob_oid:' "$(campos_pred "$SPEC" superpowers especificacao "$FX_SPEC_COMMIT" "$FX_SPEC_BLOB")" "$MANIFESTO"
   caso_falha 'recusa caminho duplicado' pred --validar ft-pre
 
   nova_fixture; manifesto_valido "$SPEC" especificacao "$FX_SPEC_COMMIT" "$FX_SPEC_BLOB"
-  sed -i "/criado_em:/i\\  - caminho: $PLAN\n    origem: invalida\n    papel: plano\n    commit_sha: $FX_PLAN_COMMIT\n    blob_oid: $FX_PLAN_BLOB" "$MANIFESTO"
+  edita antes 'criado_em:' "$(item_pred "$PLAN" invalida plano "$FX_PLAN_COMMIT" "$FX_PLAN_BLOB")" "$MANIFESTO"
   caso_falha 'um item invalido reprova o conjunto inteiro' pred --validar ft-pre
 
   schema_invalido 'recusa scalar malformado' scalar
@@ -370,7 +393,7 @@ grupo_schema() {
   local bin_corrida="$K/bin-validar-corrida-$fx_n" real_cp
   mkdir -p "$fora_corrida" "$bin_corrida"
   cp "$MANIFESTO" "$fora_corrida/00-PREDECESSORES.md"
-  sed -i 's/^kind: predecessores/kind: externo/' "$fora_corrida/00-PREDECESSORES.md"
+  edita troca '^kind: predecessores' 'kind: externo' "$fora_corrida/00-PREDECESSORES.md"
   real_cp="$(command -v cp)"
   cat > "$bin_corrida/cp" <<EOF
 #!/bin/sh
@@ -462,7 +485,7 @@ grupo_checkpoint() {
   local plano before_plano before_stage before_rastro saida rc depois_plano depois_stage depois_rastro
   feature_para_checkpoint
   manifesto_valido "$SPEC" especificacao "$FX_SPEC_COMMIT" "$FX_SPEC_BLOB"
-  sed -i 's/origem: superpowers/origem: invalida/' "$MANIFESTO"
+  edita troca 'origem: superpowers' 'origem: invalida' "$MANIFESTO"
   plano="$FX/docs/sprintx/features/ft-pre/00-PLANEJAMENTO.md"
   before_plano="$(cksum < "$plano")"; before_stage="$(git -C "$FX" diff --cached --name-status)"
   if [ -f "$FX/docs/eventos/ft-pre.jsonl" ]; then before_rastro="$(cksum < "$FX/docs/eventos/ft-pre.jsonl")"; else before_rastro=ausente; fi
