@@ -82,7 +82,10 @@ ILEGIVEIS=()
 for f in "$RAIZ"/docs/tasks.md "$RAIZ"/docs/*/tasks.md "$RAIZ"/docs/*/*/tasks.md \
          "$RAIZ"/docs/*/*/*/tasks.md "$RAIZ"/docs/*/*/*/*/tasks.md \
          "$RAIZ"/docs/sprintx/features/*/*/*/tasks.md; do
-  [ -f "$f" ] && [ ! -L "$f" ] || continue
+  # Plano por link nao se le (pode apontar para fora do projeto), mas entra no
+  # aviso: pular em silencio deixaria a edicao passar sem conferencia nenhuma.
+  if [ -L "$f" ]; then ILEGIVEIS+=("${f#"$RAIZ"/} (link)"); continue; fi
+  [ -f "$f" ] || continue
   if [ -r "$f" ]; then PLANOS+=("$f"); else ILEGIVEIS+=("${f#"$RAIZ"/}"); fi
 done
 shopt -u nullglob dotglob
