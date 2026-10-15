@@ -54,8 +54,12 @@ case "$REL" in
     # sem repositorio (ou sem git): so a linha EXATA do .gitignore vale
     if ! git -C "$RAIZ" rev-parse --git-dir >/dev/null 2>&1 && [ -f "$RAIZ/.gitignore" ]; then
       while IFS= read -r l || [ -n "$l" ]; do
-        l="${l%$'\r'}"; l="${l#/}"
-        if [ "$l" = "${REL##*/}" ] || [ "$l" = "$REL" ]; then exit 0; fi
+        l="${l%$'\r'}"
+        # `/x` e ancorada na raiz: vale so para o caminho inteiro; `x` vale em qualquer pasta
+        case "$l" in
+          /*) [ "${l#/}" = "$REL" ] && exit 0 ;;
+          *) if [ "$l" = "${REL##*/}" ] || [ "$l" = "$REL" ]; then exit 0; fi ;;
+        esac
       done < "$RAIZ/.gitignore"
     fi
     ;;
