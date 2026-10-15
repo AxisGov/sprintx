@@ -82,6 +82,14 @@ for f in "$RAIZ"/docs/tasks.md "$RAIZ"/docs/*/tasks.md "$RAIZ"/docs/*/*/tasks.md
 done
 shopt -u nullglob dotglob
 [ "${#PLANOS[@]}" -gt 0 ] || exit 0
+# Plano que existe mas nao se le: o awk leria nada e diria `G 0`, liberando em
+# silencio. Falha aberta, mas avisada (o mesmo aviso de quando a decisao nao chega).
+for f in "${PLANOS[@]}"; do
+  if [ ! -r "$f" ]; then
+    rastro_aviso_ao_modelo PreToolUse "sprintx/escopo-da-task: o plano ${f#"$RAIZ"/} nao pode ser lido; a edicao de $REL NAO foi conferida contra a task."
+    exit 0
+  fi
+done
 
 rastro_sessao_em MINHA_SESSAO
 
