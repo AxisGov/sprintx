@@ -51,16 +51,23 @@ case "$REL" in
     # `git check-ignore` e a autoridade: uma linha `.env` no .gitignore NAO ignora
     # `.env.example`, que e versionado e precisa ser varrido.
     if git -C "$RAIZ" check-ignore -q -- "$REL" 2>/dev/null; then exit 0; fi
-    # sem repositorio (ou sem git): so a linha EXATA do .gitignore vale
+    # sem repositorio (ou sem git): so a linha EXATA do .gitignore vale, e, como no
+    # git, a ULTIMA regra que casa decide — `!x` depois de `x` desfaz o ignore
     if ! git -C "$RAIZ" rev-parse --git-dir >/dev/null 2>&1 && [ -f "$RAIZ/.gitignore" ]; then
+      IGN=0
       while IFS= read -r l || [ -n "$l" ]; do
         l="${l%$'\r'}"
+        case "$l" in ''|'#'*) continue ;; esac
+        neg=0; case "$l" in '!'*) neg=1; l="${l#!}" ;; esac
         # `/x` e ancorada na raiz: vale so para o caminho inteiro; `x` vale em qualquer pasta
+        casa=0
         case "$l" in
-          /*) [ "${l#/}" = "$REL" ] && exit 0 ;;
-          *) if [ "$l" = "${REL##*/}" ] || [ "$l" = "$REL" ]; then exit 0; fi ;;
+          /*) [ "${l#/}" = "$REL" ] && casa=1 ;;
+          *) if [ "$l" = "${REL##*/}" ] || [ "$l" = "$REL" ]; then casa=1; fi ;;
         esac
+        [ "$casa" = 1 ] && IGN=$((1 - neg))
       done < "$RAIZ/.gitignore"
+      [ "$IGN" = 1 ] && exit 0
     fi
     ;;
 esac
