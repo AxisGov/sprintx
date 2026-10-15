@@ -161,6 +161,12 @@ Os agentes de veredito têm **somente leitura**, o que transforma "aponta, não 
 | `revisor-testes` | F5 e F6 | Esse teste passaria com a implementação errada? |
 | `investigador` | F1 (opcional) | Monta a base em contexto próprio |
 
+Cada agente fixa o modelo e o esforço no próprio frontmatter, em vez de herdar de quem chama:
+`auditor-plano` e `revisor-testes` em `opus`/`high`, `investigador` em `sonnet`/`medium`. É o piso do método:
+um veredito dado por um modelo mais fraco que o do autor não verifica nada. Quem precisa de outro custo
+sobrepõe no projeto, em `.expx/agentes.json` (instalação pelo `expx`; o `install.sh` manual instala o piso).
+Isto vale para o Claude Code; os agentes de `.opencode/agent/` não declaram modelo nem esforço e ficam fora desta política.
+
 Hooks e skill gravam um rastro append-only em `docs/eventos/<slug>.jsonl` (ignorado pelo versionador). Dele sai a linha do tempo do trabalho, quem fez o quê — e a **duração real por task sem ninguém anotar nada**, que alimenta a calibração da estimativa. Com um cuidado: tempo de parede não é esforço, então o valor entra como `duracao_observada`, nunca como `real`, e a calibração usa mediana.
 
 ---
