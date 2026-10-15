@@ -118,11 +118,16 @@ copy_hooks_claude() {
       continue
     fi
     if [ -f "$dest" ] && ! cmp -s "$a" "$dest"; then
-      # nome unico: dois backups no mesmo segundo nao se sobrescrevem, e um link
-      # quebrado com o nome do backup tambem conta como ocupado (`-e` nao o ve)
-      bak="$dest.bak-$(date +%Y%m%d%H%M%S)"; n=0
-      while [ -e "$bak" ] || [ -L "$bak" ]; do n=$((n + 1)); bak="$dest.bak-$(date +%Y%m%d%H%M%S)-$n"; done
-      run "cp '$dest' '$bak'"
+      # O nome do backup e RESERVADO pelo mktemp, que cria o arquivo de forma
+      # exclusiva (O_EXCL, em GNU e BSD): dois instaladores ao mesmo tempo, dois
+      # backups no mesmo segundo ou um link quebrado com o nome nunca levam ao
+      # mesmo arquivo. Uma checagem `-e` antes do `cp` nao reserva nada.
+      if [ "$DRY" = 1 ]; then
+        bak="$dest.bak-$(date +%Y%m%d%H%M%S)-XXXXXX"
+      else
+        bak="$(mktemp "$dest.bak-$(date +%Y%m%d%H%M%S)-XXXXXX")"
+      fi
+      run "cp -p '$dest' '$bak'"
       say "agente   ${a##*/} existia diferente: copia de seguranca em ${bak##*/}"
     fi
     run "cp '$a' '$dest'"
