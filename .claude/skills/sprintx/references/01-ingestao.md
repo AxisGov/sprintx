@@ -27,13 +27,18 @@ Onde esta fase diz `CONVENCOES.md`, o arquivo é localizado pela regra única de
 `references/00-schema.md` ("Como localizar o `CONVENCOES.md`"), que reconhece o caminho
 canônico `docs/stack/CONVENCOES.md`.
 
-1. **Nome da branch e base**: `feature/<slug>`. Base, nesta ordem: `CONVENCOES.md` (seção de
-   versionamento, se marcada e não `PROPOSTA`) → `git symbolic-ref refs/remotes/origin/HEAD`
-   → a branch atual, se `main`/`master`/`develop` ou equivalente detectada.
+1. **Nome da branch e base**: `feature/<slug>`. Base, nesta ordem: a **base informada pelo
+   caller** (a `buildx` encadeia uma feature na branch da predecessora ainda não integrada:
+   `base: feature/<predecessora>`; confira com `git rev-parse --verify` e, se não existir, pare
+   e diga — nunca troque por outra base em silêncio) → `CONVENCOES.md` (seção de versionamento,
+   se marcada e não `PROPOSTA`) → `git symbolic-ref refs/remotes/origin/HEAD` → a branch atual,
+   se `main`/`master`/`develop` ou equivalente detectada.
 2. **Criar ou retomar**: `git worktree list` já lista essa branch → retome nele. Senão:
    `git worktree add -b feature/<slug> ../<repo>--<slug> <base>`, onde `<repo>` é o nome do
    diretório do checkout principal. Branch já existente sem worktree: `git worktree add
-   ../<repo>--<slug> feature/<slug>`.
+   ../<repo>--<slug> feature/<slug>`. Com base informada pelo caller, grave-a na própria branch
+   — `git config branch.feature/<slug>.expxBase <base>` —, que vale para todos os worktrees e
+   sobrevive à sessão: é dali que a F6 a repassa ao E0 da `mergex` (`references/06-execucao.md`).
 3. **Herdar do checkout principal** — só o que existir lá, nunca lendo o conteúdo:
    `.expx/hooks.json` (+ `estado.json` do objeto padrão de `references/09-estado.md`),
    `.claude/settings.json` (sem ele os hooks não rodam no worktree), `.env`, `.env.local`,
