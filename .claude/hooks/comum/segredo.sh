@@ -64,10 +64,11 @@ case "$REL" in
         # O glob do bash deixa `*` atravessar `/`, o do git nao: so casa com o mesmo numero
         # de `/` no padrao e no caminho (na duvida nao isenta, e o segredo e barrado).
         # `**` atravessa pastas no git, como o glob do bash: sem conferir barras, e `**/x`
-        # casa tambem `x` na raiz. So quando o resto do padrao nao tem outro curinga — um
-        # `*` solto ali atravessaria `/` e isentaria mais do que o git.
-        casa=0; p="${l#/}"; bp="${p//[!\/]/}"; resto="${p//\*\*/}"
-        if [[ $p == *'**'* && $resto != *[\*\?\[]* ]]; then
+        # casa tambem `x` na raiz. So quando todo `**` e um segmento inteiro (no git,
+        # `x**` e um `*` comum) e o resto do padrao nao tem outro curinga — um `*` solto
+        # ali atravessaria `/` e isentaria mais do que o git.
+        casa=0; p="${l#/}"; bp="${p//[!\/]/}"; resto="${p//\*\*/}"; seg="/$p/"; seg="${seg//\/\*\*\//\/}"
+        if [[ $p == *'**'* && $resto != *[\*\?\[]* && $seg != *'**'* ]]; then
           if [[ $REL == $p ]] || { [[ $p == '**/'* ]] && [[ $REL == ${p#'**/'} ]]; }; then casa=1; fi
         elif [[ $REL == $p ]] && [ "${REL//[!\/]/}" = "$bp" ]; then casa=1
         elif [ "$p" = "$l" ] && [ -z "$bp" ] && [[ ${REL##*/} == $p ]]; then casa=1; fi

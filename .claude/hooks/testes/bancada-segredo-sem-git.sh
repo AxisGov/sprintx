@@ -27,6 +27,8 @@ seg-semgit-negacao|.env.local|.env.*\n!.env.local|2
 seg-semgit-duplo-aninhado|a/b/.env|**/.env|0
 seg-semgit-duplo-na-raiz|.env|**/.env|0
 seg-semgit-duplo-com-curinga-nao-isenta|a/b/x.env|**/*.env|2
+seg-semgit-duplo-no-meio|config/a/b/.env|config/**/.env|0
+seg-semgit-duplo-colado-nao-isenta|xa/b/.env|x**/.env|2
 EOF
   [ -z "$T_FALHA" ]
 }
