@@ -3779,6 +3779,29 @@ n_lnkdir() { # plano numa pasta por link: tambem nao le, e avisa
   n_hook "$d" "$1" src/novo.ts eu@sessao
   [ "$N_RC" -eq 0 ] && n_tem "NAO foi conferida" && n_tem "(pasta por link)"
 }
+n_lnkirma() { # sprint do trabalho corrente por link, com irma dona do arquivo: fail-closed
+  local d="$NF_DIR/lnkirma"
+  n_fx "$d" alfa-antiga hist
+  n_plano "$d/fora/s2.md" corrente 02 <<EOF
+$(n_task T-02.01 pendente src/da-irma.ts)
+EOF
+  mkdir -p "$d/docs/sprintx/features/corrente/sprint-02"
+  ln -s "$d/fora/s2.md" "$d/docs/sprintx/features/corrente/sprint-02/tasks.md" || return 1
+  n_hook "$d" "$1" src/da-irma.ts eu@sessao
+  [ "$N_RC" -eq 2 ] && n_tem plano_corrente_ilegivel && n_tem "(link)" || return 1
+  n_hook "$d" "$1" src/novo.ts eu@sessao; n_silencio
+}
+n_lnkoutra() { # plano por link de OUTRA feature nao muda o caso geral: segue aviso
+  local d="$NF_DIR/lnkoutra"
+  n_fx "$d" alfa-antiga hist
+  n_plano "$d/fora/s2.md" alfa-antiga 02 <<EOF
+$(n_task T-02.01 pendente src/da-outra.ts)
+EOF
+  mkdir -p "$d/docs/sprintx/features/alfa-antiga/sprint-02"
+  ln -s "$d/fora/s2.md" "$d/docs/sprintx/features/alfa-antiga/sprint-02/tasks.md" || return 1
+  n_hook "$d" "$1" src/da-outra.ts eu@sessao
+  [ "$N_RC" -eq 0 ] && n_tem "nao esta na lista" && ! n_tem plano_corrente_ilegivel
+}
 
 NHOOK="$H/sprintx/escopo-da-task.sh"
 bash -n "$NHOOK"; afirma "n0-hook-sintaxe" $? "bash -n"
@@ -3807,7 +3830,9 @@ for par in \
   n_amb:namb-dois-layouts-do-mesmo-trabalho-fail-closed \
   n_fora:nfora-task-fora-do-plano-corrente-fail-closed \
   n_lnk:nlnk-plano-por-link-avisa-que-nao-conferiu \
-  n_lnkdir:nlnkdir-plano-em-pasta-por-link-avisa-que-nao-conferiu; do
+  n_lnkdir:nlnkdir-plano-em-pasta-por-link-avisa-que-nao-conferiu \
+  n_lnkirma:nlnkirma-sprint-corrente-por-link-fail-closed \
+  n_lnkoutra:nlnkoutra-link-de-outra-feature-segue-aviso; do
   "${par%%:*}" "$NHOOK"; afirma "${par#*:}" $? "${par%%:*}"
 done
 
