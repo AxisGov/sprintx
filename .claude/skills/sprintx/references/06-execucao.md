@@ -42,6 +42,12 @@ checkpoints de planejamento da `feature/<slug>` (`references/02-descoberta.md`),
 exatamente onde deveriam estar. Ele registra a branch no `ORQUESTRADOR.md` e cria
 `docs/entregas/<slug>/ENTREGA.md`.
 
+**Base encadeada.** Se a F1 abriu a feature sobre uma base informada pelo caller, ela está em
+`git config branch.feature/<slug>.expxBase` (`references/01-ingestao.md`). Repasse-a ao E0 como
+**base informada pelo chamador**: é ela que vai para a `branch_base` do `ENTREGA.md`, e é contra
+ela que o E7 mede e abre o PR — empilhado na PR da predecessora, mostrando só o diff desta
+feature. Sem a chave, o E0 determina a base pela ordem dele, como sempre.
+
 Se **não** houver branch para este trabalho (execução sem git, "sem worktree" explícito, ou
 fluxo que não passou pela F1), o E0 cria `feature/<slug>` a partir da base — e aí a árvore
 precisa estar limpa. Se a `mergex` avisar que há alteração não commitada pendente nesse caso,
