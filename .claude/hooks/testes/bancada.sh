@@ -3779,6 +3779,7 @@ n_lnkdir() { # plano numa pasta por link: tambem nao le, e avisa
   n_hook "$d" "$1" src/novo.ts eu@sessao
   [ "$N_RC" -eq 0 ] && n_tem "NAO foi conferida" && n_tem "(pasta por link)"
 }
+. "$H/testes/bancada-escopo-links.sh"
 
 NHOOK="$H/sprintx/escopo-da-task.sh"
 bash -n "$NHOOK"; afirma "n0-hook-sintaxe" $? "bash -n"
@@ -3807,7 +3808,10 @@ for par in \
   n_amb:namb-dois-layouts-do-mesmo-trabalho-fail-closed \
   n_fora:nfora-task-fora-do-plano-corrente-fail-closed \
   n_lnk:nlnk-plano-por-link-avisa-que-nao-conferiu \
-  n_lnkdir:nlnkdir-plano-em-pasta-por-link-avisa-que-nao-conferiu; do
+  n_lnkdir:nlnkdir-plano-em-pasta-por-link-avisa-que-nao-conferiu \
+  n_lnkirma:nlnkirma-sprint-corrente-por-link-fail-closed \
+  n_lnkoutra:nlnkoutra-link-de-outra-feature-segue-aviso \
+  n_lnkfundo:nlnkfundo-link-fora-do-alcance-do-resolvedor-nao-fecha; do
   "${par%%:*}" "$NHOOK"; afirma "${par#*:}" $? "${par%%:*}"
 done
 
@@ -4974,6 +4978,9 @@ EOF
   done
 fi
 [ -z "$T_ABS" ]; afirma "t2-rastro-sem-caminho-absoluto-do-windows" $? "arquivos relativos a raiz${T_ABS:+ — ABSOLUTO EM:$T_ABS}"
+
+. "$H/testes/bancada-segredo-sem-git.sh"
+t_semgit "$H"; afirma "t3-segredo-sem-git-casa-o-gitignore-como-o-git" $? "12 casos seg-semgit-*${T_FALHA:+ — FORA:$T_FALHA}"
 
 # Estrutural. A auditoria: estes sao os hooks que leem pathname do payload, e a variavel de cada
 # um. Cada par passa por rastro_caminho_em ANTES de qualquer uso que nao seja a propria leitura

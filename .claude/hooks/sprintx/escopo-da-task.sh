@@ -342,6 +342,22 @@ if [ "$DECL" = irma ]; then
   rastro_bloqueia "$MSG_IRMA"
 fi
 
+# Parte do plano DESTE trabalho nao se leu (link, pasta por link, sem permissao): o
+# arquivo pode ser de uma irma declarada la, e o caso geral abaixo o deixaria passar
+# com aviso. Sem como conferir o dono, falha fechada (DS-154). Plano ilegivel de outra
+# feature nao entra: nao participa da decisao. O alcance e o do resolvedor (do_trabalho):
+# ate 2 niveis abaixo de docs/sprintx/features/<slug>/ ou docs/<slug>/.
+for f in ${ILEGIVEIS[@]+"${ILEGIVEIS[@]}"}; do
+  c="${f%% (*}"
+  case "$c" in
+    "docs/sprintx/features/$TRABALHO/"*) r="${c#"docs/sprintx/features/$TRABALHO/"}" ;;
+    "docs/$TRABALHO/"*) r="${c#"docs/$TRABALHO/"}" ;;
+    *) continue ;;
+  esac
+  b="${r//[!\/]/}"; [ "${#b}" -le 2 ] || continue
+  _para_por_contrato plano_corrente_ilegivel "parte do plano do trabalho $TRABALHO nao pode ser lida ($f); o arquivo $REL, fora da task corrente $CURRENT_ID, pode ser de uma task irma declarada la. Torne o plano legivel antes de editar este arquivo."
+done
+
 # --------------------------------------------------------------- violacao
 # Caso geral de sempre: arquivo fora do escopo da task corrente e fora de
 # qualquer outra task da feature. Preserva o comportamento antigo — aviso
