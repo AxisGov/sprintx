@@ -5000,6 +5000,30 @@ EOF
 fi
 [ -z "$T_ABS" ]; afirma "t2-rastro-sem-caminho-absoluto-do-windows" $? "arquivos relativos a raiz${T_ABS:+ — ABSOLUTO EM:$T_ABS}"
 
+# Sem repositorio, o segredo le o .gitignore como o git: glob (`.env.*` isenta `.env.local`),
+# ancora (`/x` so na raiz), `*` sem atravessar `/`, e a ultima regra que casa decide.
+# Cada caso: nome|alvo|linhas do .gitignore (\n)|rc esperado.
+t_semgit() { # t_semgit <raiz-hooks> — falhas em T_FALHA
+  local d="$T_DIR/semgit/r" n a g e r
+  T_FALHA=""
+  while IFS='|' read -r n a g e; do
+    rm -rf "$d"; mkdir -p "$d/src"; printf "$g\n" > "$d/.gitignore"
+    t_json PreToolUse Write "$d" "$d/$a" "$(t_conteudo aws)" \
+      | (cd "$d" && GIT_CEILING_DIRECTORIES="$T_DIR/semgit" bash "$1/comum/segredo.sh") >/dev/null 2>&1; r=$?
+    [ "$r" = "$e" ] || T_FALHA="$T_FALHA $n=$r(esperado $e)"
+  done <<EOF
+seg-semgit-glob-isenta|.env.local|.env.*|0
+seg-semgit-glob-em-pasta|src/.env.local|.env.*|0
+seg-semgit-literal|.env|.env|0
+seg-semgit-example-varrido|.env.example|.env|2
+seg-semgit-ancorada|src/.env|/.env|2
+seg-semgit-glob-nao-cruza-barra|src/.env|/*.env|2
+seg-semgit-negacao|.env.local|.env.*\n!.env.local|2
+EOF
+  [ -z "$T_FALHA" ]
+}
+t_semgit "$H"; afirma "t3-segredo-sem-git-casa-o-gitignore-como-o-git" $? "7 casos seg-semgit-*${T_FALHA:+ — FORA:$T_FALHA}"
+
 # Estrutural. A auditoria: estes sao os hooks que leem pathname do payload, e a variavel de cada
 # um. Cada par passa por rastro_caminho_em ANTES de qualquer uso que nao seja a propria leitura
 # ou o teste de vazio; nenhum hook fora da lista le `cwd`/`file_path`; e nenhum hook reimplementa

@@ -51,20 +51,21 @@ case "$REL" in
     # `git check-ignore` e a autoridade: uma linha `.env` no .gitignore NAO ignora
     # `.env.example`, que e versionado e precisa ser varrido.
     if git -C "$RAIZ" check-ignore -q -- "$REL" 2>/dev/null; then exit 0; fi
-    # sem repositorio (ou sem git): so a linha EXATA do .gitignore vale, e, como no
-    # git, a ULTIMA regra que casa decide — `!x` depois de `x` desfaz o ignore
+    # sem repositorio (ou sem git): a regra do .gitignore casa como no git — glob
+    # (`.env.*` cobre `.env.local`), e, como no git, a ULTIMA regra que casa decide:
+    # `!x` depois de `x` desfaz o ignore
     if ! git -C "$RAIZ" rev-parse --git-dir >/dev/null 2>&1 && [ -f "$RAIZ/.gitignore" ]; then
       IGN=0
       while IFS= read -r l || [ -n "$l" ]; do
         l="${l%$'\r'}"
         case "$l" in ''|'#'*) continue ;; esac
         neg=0; case "$l" in '!'*) neg=1; l="${l#!}" ;; esac
-        # `/x` e ancorada na raiz: vale so para o caminho inteiro; `x` vale em qualquer pasta
-        casa=0
-        case "$l" in
-          /*) [ "${l#/}" = "$REL" ] && casa=1 ;;
-          *) if [ "$l" = "${REL##*/}" ] || [ "$l" = "$REL" ]; then casa=1; fi ;;
-        esac
+        # `/x` e ancorada na raiz: vale so para o caminho inteiro; `x` vale em qualquer pasta.
+        # O glob do bash deixa `*` atravessar `/`, o do git nao: so casa com o mesmo numero
+        # de `/` no padrao e no caminho (na duvida nao isenta, e o segredo e barrado).
+        casa=0; p="${l#/}"; bp="${p//[!\/]/}"
+        if [[ $REL == $p ]] && [ "${REL//[!\/]/}" = "$bp" ]; then casa=1
+        elif [ "$p" = "$l" ] && [ -z "$bp" ] && [[ ${REL##*/} == $p ]]; then casa=1; fi
         [ "$casa" = 1 ] && IGN=$((1 - neg))
       done < "$RAIZ/.gitignore"
       [ "$IGN" = 1 ] && exit 0
