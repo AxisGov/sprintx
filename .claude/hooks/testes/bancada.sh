@@ -3810,7 +3810,8 @@ for par in \
   n_lnk:nlnk-plano-por-link-avisa-que-nao-conferiu \
   n_lnkdir:nlnkdir-plano-em-pasta-por-link-avisa-que-nao-conferiu \
   n_lnkirma:nlnkirma-sprint-corrente-por-link-fail-closed \
-  n_lnkoutra:nlnkoutra-link-de-outra-feature-segue-aviso; do
+  n_lnkoutra:nlnkoutra-link-de-outra-feature-segue-aviso \
+  n_lnkfundo:nlnkfundo-link-fora-do-alcance-do-resolvedor-nao-fecha; do
   "${par%%:*}" "$NHOOK"; afirma "${par#*:}" $? "${par%%:*}"
 done
 
