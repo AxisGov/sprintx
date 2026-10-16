@@ -4980,7 +4980,7 @@ fi
 [ -z "$T_ABS" ]; afirma "t2-rastro-sem-caminho-absoluto-do-windows" $? "arquivos relativos a raiz${T_ABS:+ — ABSOLUTO EM:$T_ABS}"
 
 . "$H/testes/bancada-segredo-sem-git.sh"
-t_semgit "$H"; afirma "t3-segredo-sem-git-casa-o-gitignore-como-o-git" $? "13 casos seg-semgit-*${T_FALHA:+ — FORA:$T_FALHA}"
+t_semgit "$H"; afirma "t3-segredo-sem-git-casa-o-gitignore-como-o-git" $? "15 casos seg-semgit-*${T_FALHA:+ — FORA:$T_FALHA}"
 
 # Estrutural. A auditoria: estes sao os hooks que leem pathname do payload, e a variavel de cada
 # um. Cada par passa por rastro_caminho_em ANTES de qualquer uso que nao seja a propria leitura
