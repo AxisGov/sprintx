@@ -24,6 +24,9 @@ seg-semgit-example-varrido|.env.example|.env|2
 seg-semgit-ancorada|src/.env|/.env|2
 seg-semgit-glob-nao-cruza-barra|src/.env|/*.env|2
 seg-semgit-negacao|.env.local|.env.*\n!.env.local|2
+seg-semgit-duplo-aninhado|a/b/.env|**/.env|0
+seg-semgit-duplo-na-raiz|.env|**/.env|0
+seg-semgit-duplo-com-curinga-nao-isenta|a/b/x.env|**/*.env|2
 EOF
   [ -z "$T_FALHA" ]
 }

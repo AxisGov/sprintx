@@ -63,8 +63,13 @@ case "$REL" in
         # `/x` e ancorada na raiz: vale so para o caminho inteiro; `x` vale em qualquer pasta.
         # O glob do bash deixa `*` atravessar `/`, o do git nao: so casa com o mesmo numero
         # de `/` no padrao e no caminho (na duvida nao isenta, e o segredo e barrado).
-        casa=0; p="${l#/}"; bp="${p//[!\/]/}"
-        if [[ $REL == $p ]] && [ "${REL//[!\/]/}" = "$bp" ]; then casa=1
+        # `**` atravessa pastas no git, como o glob do bash: sem conferir barras, e `**/x`
+        # casa tambem `x` na raiz. So quando o resto do padrao nao tem outro curinga — um
+        # `*` solto ali atravessaria `/` e isentaria mais do que o git.
+        casa=0; p="${l#/}"; bp="${p//[!\/]/}"; resto="${p//\*\*/}"
+        if [[ $p == *'**'* && $resto != *[\*\?\[]* ]]; then
+          if [[ $REL == $p ]] || { [[ $p == '**/'* ]] && [[ $REL == ${p#'**/'} ]]; }; then casa=1; fi
+        elif [[ $REL == $p ]] && [ "${REL//[!\/]/}" = "$bp" ]; then casa=1
         elif [ "$p" = "$l" ] && [ -z "$bp" ] && [[ ${REL##*/} == $p ]]; then casa=1; fi
         [ "$casa" = 1 ] && IGN=$((1 - neg))
       done < "$RAIZ/.gitignore"
