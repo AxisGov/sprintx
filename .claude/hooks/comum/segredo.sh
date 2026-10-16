@@ -69,8 +69,10 @@ case "$REL" in
         # ali atravessaria `/` e isentaria mais do que o git.
         casa=0; p="${l#/}"; bp="${p//[!\/]/}"; resto="${p//\*\*/}"; seg="/$p/"; seg="${seg//\/\*\*\//\/}"
         if [[ $p == *'**'* && $resto != *[\*\?\[]* && $seg != *'**'* ]]; then
-          # `seg` e o padrao com cada `**` valendo zero pastas: `a/**/b` casa `a/b`, `**/x` casa `x`
-          if [[ $REL == $p ]] || [ "/$REL/" = "$seg" ]; then casa=1; fi
+          # `seg` e o padrao com cada `**` valendo zero pastas: `a/**/b` casa `a/b`, `**/x` casa `x`.
+          # O `**` no FIM nao vale zero: `a/**` e tudo DENTRO de `a`, nunca o proprio `a` —
+          # contar zero ali isentaria `.env` por `.env/**`, e o segredo deixaria de ser varrido.
+          if [[ $REL == $p ]] || { [[ $p != *'/**' ]] && [ "/$REL/" = "$seg" ]; }; then casa=1; fi
         elif [[ $REL == $p ]] && [ "${REL//[!\/]/}" = "$bp" ]; then casa=1
         elif [ "$p" = "$l" ] && [ -z "$bp" ] && [[ ${REL##*/} == $p ]]; then casa=1; fi
         [ "$casa" = 1 ] && IGN=$((1 - neg))
