@@ -3779,29 +3779,7 @@ n_lnkdir() { # plano numa pasta por link: tambem nao le, e avisa
   n_hook "$d" "$1" src/novo.ts eu@sessao
   [ "$N_RC" -eq 0 ] && n_tem "NAO foi conferida" && n_tem "(pasta por link)"
 }
-n_lnkirma() { # sprint do trabalho corrente por link, com irma dona do arquivo: fail-closed
-  local d="$NF_DIR/lnkirma"
-  n_fx "$d" alfa-antiga hist
-  n_plano "$d/fora/s2.md" corrente 02 <<EOF
-$(n_task T-02.01 pendente src/da-irma.ts)
-EOF
-  mkdir -p "$d/docs/sprintx/features/corrente/sprint-02"
-  ln -s "$d/fora/s2.md" "$d/docs/sprintx/features/corrente/sprint-02/tasks.md" || return 1
-  n_hook "$d" "$1" src/da-irma.ts eu@sessao
-  [ "$N_RC" -eq 2 ] && n_tem plano_corrente_ilegivel && n_tem "(link)" || return 1
-  n_hook "$d" "$1" src/novo.ts eu@sessao; n_silencio
-}
-n_lnkoutra() { # plano por link de OUTRA feature nao muda o caso geral: segue aviso
-  local d="$NF_DIR/lnkoutra"
-  n_fx "$d" alfa-antiga hist
-  n_plano "$d/fora/s2.md" alfa-antiga 02 <<EOF
-$(n_task T-02.01 pendente src/da-outra.ts)
-EOF
-  mkdir -p "$d/docs/sprintx/features/alfa-antiga/sprint-02"
-  ln -s "$d/fora/s2.md" "$d/docs/sprintx/features/alfa-antiga/sprint-02/tasks.md" || return 1
-  n_hook "$d" "$1" src/da-outra.ts eu@sessao
-  [ "$N_RC" -eq 0 ] && n_tem "nao esta na lista" && ! n_tem plano_corrente_ilegivel
-}
+. "$H/testes/bancada-escopo-links.sh"
 
 NHOOK="$H/sprintx/escopo-da-task.sh"
 bash -n "$NHOOK"; afirma "n0-hook-sintaxe" $? "bash -n"
@@ -5000,28 +4978,7 @@ EOF
 fi
 [ -z "$T_ABS" ]; afirma "t2-rastro-sem-caminho-absoluto-do-windows" $? "arquivos relativos a raiz${T_ABS:+ — ABSOLUTO EM:$T_ABS}"
 
-# Sem repositorio, o segredo le o .gitignore como o git: glob (`.env.*` isenta `.env.local`),
-# ancora (`/x` so na raiz), `*` sem atravessar `/`, e a ultima regra que casa decide.
-# Cada caso: nome|alvo|linhas do .gitignore (\n)|rc esperado.
-t_semgit() { # t_semgit <raiz-hooks> — falhas em T_FALHA
-  local d="$T_DIR/semgit/r" n a g e r
-  T_FALHA=""
-  while IFS='|' read -r n a g e; do
-    rm -rf "$d"; mkdir -p "$d/src"; printf "$g\n" > "$d/.gitignore"
-    t_json PreToolUse Write "$d" "$d/$a" "$(t_conteudo aws)" \
-      | (cd "$d" && GIT_CEILING_DIRECTORIES="$T_DIR/semgit" bash "$1/comum/segredo.sh") >/dev/null 2>&1; r=$?
-    [ "$r" = "$e" ] || T_FALHA="$T_FALHA $n=$r(esperado $e)"
-  done <<EOF
-seg-semgit-glob-isenta|.env.local|.env.*|0
-seg-semgit-glob-em-pasta|src/.env.local|.env.*|0
-seg-semgit-literal|.env|.env|0
-seg-semgit-example-varrido|.env.example|.env|2
-seg-semgit-ancorada|src/.env|/.env|2
-seg-semgit-glob-nao-cruza-barra|src/.env|/*.env|2
-seg-semgit-negacao|.env.local|.env.*\n!.env.local|2
-EOF
-  [ -z "$T_FALHA" ]
-}
+. "$H/testes/bancada-segredo-sem-git.sh"
 t_semgit "$H"; afirma "t3-segredo-sem-git-casa-o-gitignore-como-o-git" $? "7 casos seg-semgit-*${T_FALHA:+ — FORA:$T_FALHA}"
 
 # Estrutural. A auditoria: estes sao os hooks que leem pathname do payload, e a variavel de cada
