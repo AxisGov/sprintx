@@ -80,5 +80,14 @@ t_base_encadeada() { # t_base_encadeada <01-ingestao.md> — falhas em BX_FALHA
   # 5. A predecessora foi reescrita (sem o nascimento na historia): para.
   bx_git checkout -q main && bx_git branch -f feature/pred main && bx_commit feature/pred p1-novo
   bx_f1 reescrita feature/pred && BX_FALHA="$BX_FALHA base-reescrita-aceita"
+  # 8. Tag com o mesmo nome da base (e da feature), fora da linha dela: a ref sem qualificar
+  #    escolhe a tag. A branch nasce da ponta da branch base, e a retomada a aceita.
+  local t; t="$(git -C "$BX_R" -c user.email=b@b -c user.name=b commit-tree "feature/pred^{tree}" -m tag)" \
+    && bx_git tag feature/pred "$t" && bx_git tag feature/tag "$t" || BX_FALHA="$BX_FALHA fixture-tag"
+  bx_f1 tag feature/pred || BX_FALHA="$BX_FALHA tag-criacao-recusada"
+  [ "$(git -C "$BX_R" rev-parse refs/heads/feature/tag)" = "$(git -C "$BX_R" rev-parse refs/heads/feature/pred)" ] \
+    && [ "$(git -C "$BX_R" config branch.feature/tag.expxBaseNascimento)" = "$(git -C "$BX_R" rev-parse refs/heads/feature/pred)" ] \
+    || BX_FALHA="$BX_FALHA tag-escolhida-no-lugar-da-base"
+  bx_f1 tag feature/pred || BX_FALHA="$BX_FALHA tag-retomada-recusada"
   [ -z "$BX_FALHA" ]
 }

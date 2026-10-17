@@ -42,17 +42,19 @@ canônico `docs/stack/CONVENCOES.md`.
    Junto vai o nascimento (`expxBaseNascimento`), o commit da base de onde a branch saiu. Com
    base informada, crie a branch nova e grave as duas chaves só por este bloco, da raiz do
    repositório — ele resolve a base uma vez e cria a branch por esse SHA, então a base que
-   avança no meio não descasa o nascimento da branch:
+   avança no meio não descasa o nascimento da branch. Base e feature entram por ref qualificada
+   (`refs/heads/`, senão `refs/remotes/`): uma tag com o mesmo nome não desvia o commit:
 
    ```sh
-   f=feature/<slug>; b=<base>; n=
-   if ! git rev-parse -q --verify "refs/heads/$f" >/dev/null; then
-     n=$(git rev-parse --verify "$b^{commit}") && git worktree add -b "$f" ../<repo>--<slug> "$n"
+   f=feature/<slug>; b=<base>; n=; h="refs/heads/$f"
+   case $b in refs/*) r=$b ;; *) r="refs/heads/$b"; git show-ref -q --verify "$r" || r="refs/remotes/$b" ;; esac
+   if ! git rev-parse -q --verify "$h" >/dev/null; then
+     n=$(git rev-parse --verify "$r^{commit}") && git worktree add -b "$f" ../<repo>--<slug> "$n"
    else
      [ "$(git config "branch.$f.expxBase")" = "$b" ] && n=$(git config "branch.$f.expxBaseNascimento")
-     { [ -n "$n" ] && git merge-base --is-ancestor "$n" "$f" && git merge-base --is-ancestor "$n" "$b"; } \
-       || { git merge-base --is-ancestor "$b" "$f" && n=$(git reflog show --format=%H "refs/heads/$f" | tail -n 1) \
-            && [ -n "$n" ] && git merge-base --is-ancestor "$n" "$b"; }
+     { [ -n "$n" ] && git merge-base --is-ancestor "$n" "$h" && git merge-base --is-ancestor "$n" "$r"; } \
+       || { git merge-base --is-ancestor "$r" "$h" && n=$(git reflog show --format=%H "$h" | tail -n 1) \
+            && [ -n "$n" ] && git merge-base --is-ancestor "$n" "$r"; }
    fi && git config "branch.$f.expxBase" "$b" && git config "branch.$f.expxBaseNascimento" "$n"
    ```
 
