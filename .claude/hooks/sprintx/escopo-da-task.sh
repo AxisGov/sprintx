@@ -271,8 +271,12 @@ fi
 # arquivo esta nela (CURRENT vence, mesmo que tambem esteja numa irma — regra de
 # conjuntos) — ou a task nao tem `arquivos` legivel e nao da para julgar dono (falha
 # aberta, como sempre). Permitido em qualquer modo, inclusive `desligado`: nada a ler.
+# `arquivos` vazio com parte do plano DESTE trabalho ilegivel nao sai aqui: a irma
+# declarada la pode ser a dona, e o fail-closed mais abaixo decide (DS-154).
 if [ "$N_MINHAS" = 1 ] && [ "$COERENCIA" = ok ] && [ "$PLANO" = ok ]; then
-  case "$DECL" in corrente|vazio) exit 0 ;; esac
+  if [ "$DECL" != vazio ] || ! _ilegivel_do_trabalho; then
+    case "$DECL" in corrente|vazio) exit 0 ;; esac
+  fi
 fi
 
 # Daqui para baixo a edicao nao e da task corrente: o modo decide.
@@ -376,7 +380,7 @@ fi
 # com aviso. Sem como conferir o dono, falha fechada (DS-154). Plano ilegivel de outra
 # feature nao entra: nao participa da decisao (_ilegivel_do_trabalho).
 if _ilegivel_do_trabalho; then
-  _para_por_contrato plano_corrente_ilegivel "parte do plano do trabalho $TRABALHO nao pode ser lida ($IL_TRAB); o arquivo $REL, fora da task corrente $CURRENT_ID, pode ser de uma task irma declarada la. Torne o plano legivel antes de editar este arquivo."
+  _para_por_contrato plano_corrente_ilegivel "parte do plano do trabalho $TRABALHO nao pode ser lida ($IL_TRAB); o arquivo $REL, que a task corrente $CURRENT_ID nao declara, pode ser de uma task irma declarada la. Torne o plano legivel antes de editar este arquivo."
 fi
 
 # --------------------------------------------------------------- violacao
