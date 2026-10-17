@@ -4988,6 +4988,8 @@ fi
 
 . "$H/testes/bancada-segredo-sem-git.sh"
 t_semgit "$H"; afirma "t3-segredo-sem-git-casa-o-gitignore-como-o-git" $? "16 casos seg-semgit-*${T_FALHA:+ — FORA:$T_FALHA}"
+. "$H/testes/bancada-segredo-limite.sh"
+t_seglimite "$H" "$PL"; afirma "t3b-segredo-prefixo-de-chave-com-limite-a-esquerda" $? "hook e planejamento.sh${T_FALHA:+ — FORA:$T_FALHA}"
 
 # Estrutural. A auditoria: estes sao os hooks que leem pathname do payload, e a variavel de cada
 # um. Cada par passa por rastro_caminho_em ANTES de qualquer uso que nao seja a propria leitura

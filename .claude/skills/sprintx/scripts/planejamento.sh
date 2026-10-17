@@ -541,12 +541,12 @@ task_do_bloqueio() { le_bloqueios; campo_bloqueio "$1" 2; }
 # Os padroes de comum/segredo.sh, na mesma ordem — a bancada confere que as duas listas sao
 # iguais. A skill roda sem os hooks instalados: a lista e copiada, nao importada.
 SEGREDO_PADROES='-----BEGIN ([A-Z ]+ )?PRIVATE KEY-----
-AKIA[0-9A-Z]{16}
-sk-[A-Za-z0-9]{20,}
-sk-ant-[A-Za-z0-9_-]{20,}
-gh[pousr]_[A-Za-z0-9]{30,}
-xox[baprs]-[A-Za-z0-9-]{10,}
-AIza[0-9A-Za-z_-]{35}
+(^|[^A-Za-z0-9_-])AKIA[0-9A-Z]{16}
+(^|[^A-Za-z0-9_-])sk-[A-Za-z0-9]{20,}
+(^|[^A-Za-z0-9_-])sk-ant-[A-Za-z0-9_-]{20,}
+(^|[^A-Za-z0-9_-])gh[pousr]_[A-Za-z0-9]{30,}
+(^|[^A-Za-z0-9_-])xox[baprs]-[A-Za-z0-9-]{10,}
+(^|[^A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}
 ://[A-Za-z0-9_.-]+:[^@/[:space:]]{8,}@'
 
 # sujos_produto — S_SUJOS: `XY TAB caminho` por path sujo (editado, novo ou staged) fora dos
