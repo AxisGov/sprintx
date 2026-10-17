@@ -541,7 +541,7 @@ task_do_bloqueio() { le_bloqueios; campo_bloqueio "$1" 2; }
 # Os padroes de comum/segredo.sh, na mesma ordem — a bancada confere que as duas listas sao
 # iguais. A skill roda sem os hooks instalados: a lista e copiada, nao importada.
 SEGREDO_PADROES='-----BEGIN ([A-Z ]+ )?PRIVATE KEY-----
-(^|[^A-Za-z0-9_-])AKIA[0-9A-Z]{16}
+(^|[^A-Za-z0-9_])A[KS]IA[0-9A-Z]{16}($|[^A-Za-z0-9_])
 (^|[^A-Za-z0-9_-])sk-((proj|svcacct|admin)-[A-Za-z0-9_-]{20,}|[A-Za-z0-9]{20,})
 (^|[^A-Za-z0-9_-])sk-ant-[A-Za-z0-9_-]{20,}
 (^|[^A-Za-z0-9_-])gh[pousr]_[A-Za-z0-9]{30,}

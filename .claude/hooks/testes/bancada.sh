@@ -3818,6 +3818,7 @@ for par in \
   n_lnkhist:nlnkhist-so-o-plano-corrente-por-link-fecha-sem-porteiro \
   n_lnkirma:nlnkirma-sprint-corrente-por-link-fail-closed \
   n_lnkoutra:nlnkoutra-link-de-outra-feature-segue-aviso \
+  n_lnkvazio:nlnkvazio-task-sem-arquivos-com-sprint-por-link-fecha \
   n_lnkfundo:nlnkfundo-link-fora-do-alcance-do-resolvedor-nao-fecha; do
   "${par%%:*}" "$NHOOK"; afirma "${par#*:}" $? "${par%%:*}"
 done
@@ -4569,8 +4570,8 @@ QMU="$(q_copia m3)"; muta_lit "$QMU/hooks/comum/rastro.sh" "$QMU/r.m" 'rastro_le
   && mv "$QMU/r.m" "$QMU/hooks/comum/rastro.sh"
 q_mutante "qm-mutante-3-timeout-maior-sem-otimizacao" $? q_criticos "$QMU/hooks" "$QMU/settings.json" "$QMU/plugin/sprintx.ts" "$QGP"
 # 4. O atalho do caminho comum muda a semantica C2: arquivo so de irma passa como da corrente.
-QMU="$(q_copia m4)"; muta_lit "$QMU/hooks/sprintx/escopo-da-task.sh" "$QMU/e.m" '  case "$DECL" in corrente|vazio) exit 0 ;; esac' \
-  '  case "$DECL" in corrente|vazio|irma) exit 0 ;; esac' && mv "$QMU/e.m" "$QMU/hooks/sprintx/escopo-da-task.sh"
+QMU="$(q_copia m4)"; muta_lit "$QMU/hooks/sprintx/escopo-da-task.sh" "$QMU/e.m" '    case "$DECL" in corrente|vazio) exit 0 ;; esac' \
+  '    case "$DECL" in corrente|vazio|irma) exit 0 ;; esac' && mv "$QMU/e.m" "$QMU/hooks/sprintx/escopo-da-task.sh"
 q_mutante "qm-mutante-4-escopo-muda-semantica-irma-corrente" $? l_c "$QMU/hooks/sprintx/escopo-da-task.sh"
 # 5. A prosa volta a declarar ownership (a leitura de antes).
 QMU="$(q_copia m5)"; muta_lit "$QMU/hooks/sprintx/escopo-da-task.sh" "$QMU/e.m" '  FNR > 1 && FM && $0 == "---" { FORA = 1; AT = "" }' \

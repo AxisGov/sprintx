@@ -4,15 +4,18 @@
 # dentro da bancada.sh: usa os auxiliares dela (t_json, T_DIR). Mora aqui porque a bancada.sh
 # passa do limite de tamanho do expx-fatiamento (F4) e nao cresce.
 #
-# O prefixo de chave (sk-, AKIA, gh?_, xox?-, AIza) so vale no comeco da linha ou depois de
+# O prefixo de chave (sk-, gh?_, xox?-, AIza) so vale no comeco da linha ou depois de
 # caractere fora de [A-Za-z0-9_-]: dentro de um identificador ("ta" + "sk-...") nao e chave.
+# AKIA (e ASIA, a chave temporaria da AWS) tem limite proprio, fora de [A-Za-z0-9_]: logo
+# depois de hifen ("id-" + "AKIA...") e chave; dentro de identificador ("x" ou "_" + "AKIA...") nao e.
+# A chave da AWS tem tamanho fixo: seguida de [A-Za-z0-9_] ("AKIA..." + "Q") e identificador.
 # Cada caso roda no hook (comum/segredo.sh) e na copia da lista em planejamento.sh, casada
 # por grep -E como la. As chaves sao sinteticas e montadas por concatenacao.
 # Cada caso: nome|conteudo (printf %b)|rc esperado do hook.
 
 t_seglimite() { # t_seglimite <raiz-hooks> <planejamento.sh> — falhas em T_FALHA
   local d="$T_DIR/seglimite/r" n c e r g pad padroes=()
-  local sk="sk""-ABCDEFGHIJ0123456789abcd" ant="sk""-ant-ABCDEFGHIJ0123456789ab" akia="AKIA""ABCDEFGHIJKLMNOP"
+  local sk="sk""-ABCDEFGHIJ0123456789abcd" ant="sk""-ant-ABCDEFGHIJ0123456789ab" akia="AKIA""ABCDEFGHIJKLMNOP" asia="ASIA""ABCDEFGHIJKLMNOP"
   local gh="ghp""_ABCDEFGHIJ0123456789abcdefghij12" xox="xox""b-1234567890ab" aiza="AIza""ABCDEFGHIJ0123456789abcdefghij12345"
   local proj="sk""-proj-AbCdEf_GhIjKl-0123456789MnOpQr"
   T_FALHA=""
@@ -34,7 +37,19 @@ dentro-ghp|abc$gh|0
 dentro-xox|my$xox|0
 dentro-aiza|foo$aiza|0
 dentro-sublinhado-sk|_$sk|0
-dentro-hifen-akia|chave-$akia|0
+hifen-akia|id-$akia|2
+dentro-sublinhado-akia|_$akia|0
+dentro-hifen-sk|chave-$sk|0
+inicio-asia|$asia|2
+hifen-asia|id-$asia|2
+dentro-asia|x$asia|0
+cauda-akia|${akia}Q|0
+cauda-asia|${asia}9z|0
+cauda-sublinhado-akia|${akia}_x|0
+fim-espaco-akia|$akia fim|2
+fim-aspas-simples-akia|k='$akia'|2
+fim-virgula-akia|[$akia,1]|2
+fim-aspas-duplas-asia|k="$asia"|2
 inicio-sk|$sk|2
 inicio-segunda-linha-akia|x = 1\n$akia|2
 espaco-akia|Bearer $akia|2

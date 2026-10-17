@@ -50,3 +50,19 @@ EOF
   n_hook "$d" "$1" src/da-irma.ts eu@sessao
   [ "$N_RC" -eq 0 ] && ! n_tem plano_corrente_ilegivel
 }
+n_lnkvazio() { # task corrente sem `arquivos` e sprint do trabalho por link: fecha; sem o link, segue
+  local d="$NF_DIR/lnkvazio"
+  n_fx "$d" alfa-antiga hist
+  n_replano "$d" corrente <<EOF
+$(n_task T-01.01 em_andamento "")
+EOF
+  n_plano "$d/fora/s2.md" corrente 02 <<EOF
+$(n_task T-02.01 pendente src/da-irma.ts)
+EOF
+  mkdir -p "$d/docs/sprintx/features/corrente/sprint-02"
+  ln -s "$d/fora/s2.md" "$d/docs/sprintx/features/corrente/sprint-02/tasks.md" || return 1
+  n_hook "$d" "$1" src/da-irma.ts eu@sessao
+  [ "$N_RC" -eq 2 ] && n_tem plano_corrente_ilegivel && n_tem "(link)" || return 1
+  rm "$d/docs/sprintx/features/corrente/sprint-02/tasks.md"
+  n_hook "$d" "$1" src/da-irma.ts eu@sessao; n_silencio
+}
