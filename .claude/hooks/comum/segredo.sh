@@ -89,18 +89,21 @@ esac
 # prefixos de provedor e chave privada, que quase nao dao falso positivo.
 # Casados pelo bash (ERE, como o grep -E de antes), na ordem: o primeiro nomeia o achado.
 # Nenhuma classe atravessa quebra de linha, entao casar o texto inteiro e casar linha a linha.
+# O prefixo de chave so vale no comeco do texto ou depois de caractere fora de [A-Za-z0-9_-]
+# (a quebra de linha e um deles): "ta" + "sk-..." e identificador, nao chave. ERE nao tem
+# limite de palavra portavel nem lookbehind: dai o grupo explicito, como no sem-segredo da mergex.
 ACHADO=""
 while IFS='|' read -r nome padrao; do
   [ -n "$padrao" ] || continue
   if [[ $CONTEUDO =~ $padrao ]]; then ACHADO="$nome"; break; fi
 done <<'PADROES'
 chave privada PEM|-----BEGIN ([A-Z ]+ )?PRIVATE KEY-----
-token da AWS|AKIA[0-9A-Z]{16}
-chave da OpenAI|sk-[A-Za-z0-9]{20,}
-chave da Anthropic|sk-ant-[A-Za-z0-9_-]{20,}
-token do GitHub|gh[pousr]_[A-Za-z0-9]{30,}
-token do Slack|xox[baprs]-[A-Za-z0-9-]{10,}
-chave do Google|AIza[0-9A-Za-z_-]{35}
+token da AWS|(^|[^A-Za-z0-9_-])AKIA[0-9A-Z]{16}
+chave da OpenAI|(^|[^A-Za-z0-9_-])sk-((proj|svcacct|admin)-[A-Za-z0-9_-]{20,}|[A-Za-z0-9]{20,})
+chave da Anthropic|(^|[^A-Za-z0-9_-])sk-ant-[A-Za-z0-9_-]{20,}
+token do GitHub|(^|[^A-Za-z0-9_-])gh[pousr]_[A-Za-z0-9]{30,}
+token do Slack|(^|[^A-Za-z0-9_-])xox[baprs]-[A-Za-z0-9-]{10,}
+chave do Google|(^|[^A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}
 credencial em URL|://[A-Za-z0-9_.-]+:[^@/[:space:]]{8,}@
 PADROES
 

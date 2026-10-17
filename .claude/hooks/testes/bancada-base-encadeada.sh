@@ -61,6 +61,22 @@ t_base_encadeada() { # t_base_encadeada <01-ingestao.md> — falhas em BX_FALHA
   # 4. Nascimento gravado para OUTRA base (main) nao vale para a predecessora: para.
   bx_f1 trocada main || BX_FALHA="$BX_FALHA criacao-trocada"
   bx_f1 trocada feature/pred && BX_FALHA="$BX_FALHA nascimento-de-outra-base-aceito"
+  # 6. Sem nascimento, nasceu de X (derivada da base, com commit proprio) e contem a ponta
+  #    atual da base: o PR levaria o commit de X. Para, sem gravar a chave.
+  bx_git branch feature/x feature/pred && bx_commit feature/x x1 && bx_git branch feature/dex feature/x \
+    && bx_commit feature/dex d1 || BX_FALHA="$BX_FALHA fixture-dex"
+  bx_f1 dex feature/pred && BX_FALHA="$BX_FALHA derivada-de-outra-branch-aceita"
+  [ -z "$(git -C "$BX_R" config branch.feature/dex.expxBase)" ] || BX_FALHA="$BX_FALHA derivada-gravou-chave"
+  # 7. A feature recebeu "update branch" (merge da base): aceita, com e sem nascimento gravado;
+  #    sem ele, o nascimento gravado e o ponto de onde a branch saiu, nao a ponta atual.
+  bx_commit feature/pred p3 && git -C "$WORKDIR/base-encadeada/r--avanca" -c user.email=b@b -c user.name=b \
+    merge -q --no-ff -m upd feature/pred >/dev/null 2>&1 || BX_FALHA="$BX_FALHA fixture-update-na-feature"
+  bx_f1 avanca feature/pred || BX_FALHA="$BX_FALHA update-na-feature-recusado"
+  bx_git branch feature/leg feature/pred && bx_commit feature/leg l1 && bx_commit feature/pred p4 \
+    && bx_git checkout -q feature/leg && bx_git merge -q --no-ff -m upd feature/pred || BX_FALHA="$BX_FALHA fixture-leg"
+  bx_f1 leg feature/pred || BX_FALHA="$BX_FALHA legado-com-update-recusado"
+  [ "$(git -C "$BX_R" config branch.feature/leg.expxBaseNascimento)" = "$(git -C "$BX_R" rev-parse feature/pred~1)" ] \
+    || BX_FALHA="$BX_FALHA legado-nascimento-nao-e-o-ponto-de-saida"
   # 5. A predecessora foi reescrita (sem o nascimento na historia): para.
   bx_git checkout -q main && bx_git branch -f feature/pred main && bx_commit feature/pred p1-novo
   bx_f1 reescrita feature/pred && BX_FALHA="$BX_FALHA base-reescrita-aceita"

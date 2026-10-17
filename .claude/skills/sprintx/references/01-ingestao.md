@@ -51,15 +51,20 @@ canônico `docs/stack/CONVENCOES.md`.
    else
      [ "$(git config "branch.$f.expxBase")" = "$b" ] && n=$(git config "branch.$f.expxBaseNascimento")
      { [ -n "$n" ] && git merge-base --is-ancestor "$n" "$f" && git merge-base --is-ancestor "$n" "$b"; } \
-       || { n=$(git rev-parse --verify "$b^{commit}") && git merge-base --is-ancestor "$n" "$f"; }
+       || { git merge-base --is-ancestor "$b" "$f" && n=$(git reflog show --format=%H "refs/heads/$f" | tail -n 1) \
+            && [ -n "$n" ] && git merge-base --is-ancestor "$n" "$b"; }
    fi && git config "branch.$f.expxBase" "$b" && git config "branch.$f.expxBaseNascimento" "$n"
    ```
 
    A pergunta é se a branch nasceu da linha da base, não se contém a ponta atual: a base que
-   avançou depois (commit novo ou "update branch" da predecessora) mantém o nascimento na
-   história e é aceita. O nascimento só vale para a mesma base; sem ele, a branch precisa conter
-   a ponta atual. Bloco com rc ≠ 0: ela nasceu de outro lugar (ou a base foi reescrita) e um PR
-   contra essa base levaria o diff errado — pare e diga, sem gravar a chave.
+   avançou depois (commit novo ou "update branch" da predecessora ou da própria feature) mantém
+   o nascimento na história e é aceita. O nascimento só vale para a mesma base; sem ele, a
+   branch precisa conter a ponta atual E o ponto de onde saiu — a entrada mais antiga do reflog
+   dela — precisa estar na base: conter a ponta não separa a branch que saiu da base da que
+   saiu de outra branch derivada dela, cujos commits iriam no PR. Esse ponto é o nascimento
+   gravado. Sem reflog local (branch trazida de outro clone), não há prova. Bloco com rc ≠ 0:
+   ela nasceu de outro lugar (ou a base foi reescrita) e um PR contra essa base levaria o diff
+   errado — pare e diga, sem gravar a chave.
 3. **Herdar do checkout principal** — só o que existir lá, nunca lendo o conteúdo:
    `.expx/hooks.json` (+ `estado.json` do objeto padrão de `references/09-estado.md`),
    `.claude/settings.json` (sem ele os hooks não rodam no worktree), `.env`, `.env.local`,
