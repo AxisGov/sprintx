@@ -93,15 +93,16 @@ esac
 # (a quebra de linha e um deles): "ta" + "sk-..." e identificador, nao chave. ERE nao tem
 # limite de palavra portavel nem lookbehind: dai o grupo explicito, como no sem-segredo da mergex.
 # AKIA (e ASIA, a chave temporaria do STS) tem limite proprio, fora de [A-Za-z0-9_]: o hifen nao
-# faz parte da chave da AWS, entao
-# "id-" + "AKIA..." e chave; nos demais o hifen fica de fora porque compoe o prefixo (sk-, xox?-).
+# faz parte da chave da AWS, entao "id-" + "AKIA..." e chave; nos demais o hifen fica de fora
+# porque compoe o prefixo (sk-, xox?-). A chave da AWS tem tamanho fixo, entao tem limite tambem
+# a direita: "AKIA..." seguida de [A-Za-z0-9_] e identificador mais longo, nao chave.
 ACHADO=""
 while IFS='|' read -r nome padrao; do
   [ -n "$padrao" ] || continue
   if [[ $CONTEUDO =~ $padrao ]]; then ACHADO="$nome"; break; fi
 done <<'PADROES'
 chave privada PEM|-----BEGIN ([A-Z ]+ )?PRIVATE KEY-----
-token da AWS|(^|[^A-Za-z0-9_])A[KS]IA[0-9A-Z]{16}
+token da AWS|(^|[^A-Za-z0-9_])A[KS]IA[0-9A-Z]{16}($|[^A-Za-z0-9_])
 chave da OpenAI|(^|[^A-Za-z0-9_-])sk-((proj|svcacct|admin)-[A-Za-z0-9_-]{20,}|[A-Za-z0-9]{20,})
 chave da Anthropic|(^|[^A-Za-z0-9_-])sk-ant-[A-Za-z0-9_-]{20,}
 token do GitHub|(^|[^A-Za-z0-9_-])gh[pousr]_[A-Za-z0-9]{30,}

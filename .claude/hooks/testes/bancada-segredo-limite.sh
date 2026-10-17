@@ -8,6 +8,7 @@
 # caractere fora de [A-Za-z0-9_-]: dentro de um identificador ("ta" + "sk-...") nao e chave.
 # AKIA (e ASIA, a chave temporaria da AWS) tem limite proprio, fora de [A-Za-z0-9_]: logo
 # depois de hifen ("id-" + "AKIA...") e chave; dentro de identificador ("x" ou "_" + "AKIA...") nao e.
+# A chave da AWS tem tamanho fixo: seguida de [A-Za-z0-9_] ("AKIA..." + "Q") e identificador.
 # Cada caso roda no hook (comum/segredo.sh) e na copia da lista em planejamento.sh, casada
 # por grep -E como la. As chaves sao sinteticas e montadas por concatenacao.
 # Cada caso: nome|conteudo (printf %b)|rc esperado do hook.
@@ -42,6 +43,13 @@ dentro-hifen-sk|chave-$sk|0
 inicio-asia|$asia|2
 hifen-asia|id-$asia|2
 dentro-asia|x$asia|0
+cauda-akia|${akia}Q|0
+cauda-asia|${asia}9z|0
+cauda-sublinhado-akia|${akia}_x|0
+fim-espaco-akia|$akia fim|2
+fim-aspas-simples-akia|k='$akia'|2
+fim-virgula-akia|[$akia,1]|2
+fim-aspas-duplas-asia|k="$asia"|2
 inicio-sk|$sk|2
 inicio-segunda-linha-akia|x = 1\n$akia|2
 espaco-akia|Bearer $akia|2
