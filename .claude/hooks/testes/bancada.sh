@@ -372,6 +372,8 @@ tem "$ING" 'não crie nada e não acrescente a regra do'; afirma "a6-sem-expx-se
 tem "$ING" 'Sem Git** não existe `info/exclude`'; afirma "a7-sem-git-nao-falha" $? "caminho sem git explicito"
 tem "$ING" 'git rev-parse --git-path info/exclude'; afirma "a-contrato-usa-git-path" $? "caminho resolvido pelo git"
 tem "$ING" 'git check-ignore'; afirma "a-contrato-checa-antes" $? "check-ignore antes de escrever"
+. "$H/testes/bancada-base-encadeada.sh"
+t_base_encadeada "$ING"; afirma "a-f1-base-pela-linha-da-base" $? "bloco do item 2 em git real${BX_FALHA:+ — FORA:$BX_FALHA}"
 
 echo "== B. HISTORICO.md: artefato global de metodo, versionado =="
 # 9. a F6 continua exigindo o arquivo.
