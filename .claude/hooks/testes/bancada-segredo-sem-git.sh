@@ -12,7 +12,7 @@ t_semgit() { # t_semgit <raiz-hooks> — falhas em T_FALHA
   local d="$T_DIR/semgit/r" n a g e r
   T_FALHA=""
   while IFS='|' read -r n a g e; do
-    rm -rf "$d"; mkdir -p "$d/src"; printf "$g\n" > "$d/.gitignore"
+    rm -rf "$d"; mkdir -p "$d/src"; printf '%b\n' "$g" > "$d/.gitignore"
     t_json PreToolUse Write "$d" "$d/$a" "$(t_conteudo aws)" \
       | (cd "$d" && GIT_CEILING_DIRECTORIES="$T_DIR/semgit" bash "$1/comum/segredo.sh") >/dev/null 2>&1; r=$?
     [ "$r" = "$e" ] || T_FALHA="$T_FALHA $n=$r(esperado $e)"
@@ -32,6 +32,7 @@ seg-semgit-duplo-colado-nao-isenta|xa/b/.env|x**/.env|2
 seg-semgit-duplo-zero-pastas|config/.env|config/**/.env|0
 seg-semgit-duplo-no-fim-nao-isenta-a-pasta|.env|.env/**|2
 seg-semgit-duplo-no-fim-isenta-dentro|cfg/.env|cfg/**|0
+seg-semgit-percent-no-padrao-e-literal|.env.%d|.env.%d|0
 EOF
   [ -z "$T_FALHA" ]
 }
