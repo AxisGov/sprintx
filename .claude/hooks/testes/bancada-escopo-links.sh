@@ -28,6 +28,17 @@ EOF
   n_hook "$d" "$1" src/da-outra.ts eu@sessao
   [ "$N_RC" -eq 0 ] && n_tem "nao esta na lista" && ! n_tem plano_corrente_ilegivel
 }
+n_lnkhist() { # so o plano corrente por link, a historica legivel e sem em_andamento: fecha
+  local d="$NF_DIR/lnkhist"
+  n_fx "$d" alfa-antiga hist
+  mkdir -p "$d/fora"
+  mv "$d/docs/sprintx/features/corrente/sprint-01/tasks.md" "$d/fora/c.md"
+  ln -s "$d/fora/c.md" "$d/docs/sprintx/features/corrente/sprint-01/tasks.md" || return 1
+  n_hook "$d" "$1" src/novo.ts eu@sessao
+  [ "$N_RC" -eq 2 ] && n_tem plano_corrente_ilegivel && ! n_tem plano_corrente_ausente || return 1
+  n_hook "$d" "$1" src/novo.ts outra@sessao
+  [ "$N_RC" -eq 0 ] && n_tem "NAO foi conferida"
+}
 n_lnkfundo() { # link fundo demais para o resolvedor (3 niveis sob o trabalho): nao fecha
   local d="$NF_DIR/lnkfundo"
   n_fx "$d" alfa-antiga hist

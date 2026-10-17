@@ -3759,7 +3759,7 @@ EOF
   n_hook "$NF_DIR/fora" "$1" src/novo.ts eu@sessao
   [ "$N_RC" -eq 2 ] && n_tem task_fora_do_plano_corrente
 }
-n_lnk() { # todo plano e link: nao le, mas avisa que a edicao nao foi conferida
+n_lnk() { # todo plano e link: sem reivindicacao avisa que nao conferiu; com ela, fecha (DS-154)
   local d="$NF_DIR/lnk" p
   n_fx "$d" alfa-antiga hist
   mkdir -p "$d/fora"
@@ -3767,17 +3767,21 @@ n_lnk() { # todo plano e link: nao le, mas avisa que a edicao nao foi conferida
     mv "$d/docs/sprintx/features/$p/sprint-01/tasks.md" "$d/fora/$p.md"
     ln -s "$d/fora/$p.md" "$d/docs/sprintx/features/$p/sprint-01/tasks.md" || return 1
   done
+  n_hook "$d" "$1" src/novo.ts outra@sessao
+  [ "$N_RC" -eq 0 ] && n_tem "NAO foi conferida" && n_tem "(link)" || return 1
   n_hook "$d" "$1" src/novo.ts eu@sessao
-  [ "$N_RC" -eq 0 ] && n_tem "NAO foi conferida" && n_tem "(link)"
+  [ "$N_RC" -eq 2 ] && n_tem plano_corrente_ilegivel && n_tem "(link)"
 }
-n_lnkdir() { # plano numa pasta por link: tambem nao le, e avisa
+n_lnkdir() { # plano numa pasta por link: tambem nao le; avisa, ou fecha se a sessao reivindicou
   local d="$NF_DIR/lnkdir"
   n_fx "$d" alfa-antiga hist
   mkdir -p "$d/fora"
   mv "$d/docs/sprintx/features" "$d/fora/features"
   ln -s "$d/fora/features" "$d/docs/sprintx/features" || return 1
+  n_hook "$d" "$1" src/novo.ts outra@sessao
+  [ "$N_RC" -eq 0 ] && n_tem "NAO foi conferida" && n_tem "(pasta por link)" || return 1
   n_hook "$d" "$1" src/novo.ts eu@sessao
-  [ "$N_RC" -eq 0 ] && n_tem "NAO foi conferida" && n_tem "(pasta por link)"
+  [ "$N_RC" -eq 2 ] && n_tem plano_corrente_ilegivel && n_tem "(pasta por link)"
 }
 . "$H/testes/bancada-escopo-links.sh"
 
@@ -3807,8 +3811,9 @@ for par in \
   n_div:ndiv-trabalho-divergente-fail-closed \
   n_amb:namb-dois-layouts-do-mesmo-trabalho-fail-closed \
   n_fora:nfora-task-fora-do-plano-corrente-fail-closed \
-  n_lnk:nlnk-plano-por-link-avisa-que-nao-conferiu \
-  n_lnkdir:nlnkdir-plano-em-pasta-por-link-avisa-que-nao-conferiu \
+  n_lnk:nlnk-plano-por-link-avisa-ou-fecha-pela-reivindicacao \
+  n_lnkdir:nlnkdir-plano-em-pasta-por-link-avisa-ou-fecha-pela-reivindicacao \
+  n_lnkhist:nlnkhist-so-o-plano-corrente-por-link-fecha-sem-porteiro \
   n_lnkirma:nlnkirma-sprint-corrente-por-link-fail-closed \
   n_lnkoutra:nlnkoutra-link-de-outra-feature-segue-aviso \
   n_lnkfundo:nlnkfundo-link-fora-do-alcance-do-resolvedor-nao-fecha; do
