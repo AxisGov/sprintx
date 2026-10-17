@@ -42,12 +42,18 @@ canônico `docs/stack/CONVENCOES.md`.
    Junto vai o nascimento (`expxBaseNascimento`), o commit da base de onde a branch saiu. Com
    base informada, crie a branch nova e grave as duas chaves só por este bloco, da raiz do
    repositório — ele resolve a base uma vez e cria a branch por esse SHA, então a base que
-   avança no meio não descasa o nascimento da branch. Base e feature entram por ref qualificada
-   (`refs/heads/`, senão `refs/remotes/`): uma tag com o mesmo nome não desvia o commit:
+   avança no meio não descasa o nascimento da branch. Base e feature entram por ref qualificada,
+   nunca por tag: a base sem prefixo é `refs/heads/<base>`; sem ela, `refs/remotes/<remoto>/<base>`
+   (o remoto do upstream da branch atual, ou `origin`) — o clone novo que só tem `origin/main` —;
+   `<remoto>/<base>` vira `refs/remotes/<remoto>/<base>`; `refs/...` fica como está:
 
    ```sh
    f=feature/<slug>; b=<base>; n=; h="refs/heads/$f"
-   case $b in refs/*) r=$b ;; *) r="refs/heads/$b"; git show-ref -q --verify "$r" || r="refs/remotes/$b" ;; esac
+   c=$(git symbolic-ref -q --short HEAD); m=$(git config "branch.$c.remote"); [ -n "$m" ] && [ "$m" != . ] || m=origin
+   case $b in
+     refs/*) r=$b ;;
+     *) for r in "refs/heads/$b" "refs/remotes/$m/$b" "refs/remotes/$b"; do git show-ref -q --verify "$r" && break; done ;;
+   esac
    if ! git rev-parse -q --verify "$h" >/dev/null; then
      n=$(git rev-parse --verify "$r^{commit}") && git worktree add -b "$f" ../<repo>--<slug> "$n"
    else

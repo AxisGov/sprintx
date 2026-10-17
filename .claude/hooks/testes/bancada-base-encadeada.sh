@@ -80,6 +80,20 @@ t_base_encadeada() { # t_base_encadeada <01-ingestao.md> — falhas em BX_FALHA
   # 5. A predecessora foi reescrita (sem o nascimento na historia): para.
   bx_git checkout -q main && bx_git branch -f feature/pred main && bx_commit feature/pred p1-novo
   bx_f1 reescrita feature/pred && BX_FALHA="$BX_FALHA base-reescrita-aceita"
+  # 9. Clone novo so com <remoto>/main (a branch local e outra): base=main resolve pelo remoto do
+  #    upstream (origin, ou outro nome), cria e retoma.
+  local o c rr="$BX_R"
+  for o in origin up; do
+    c="$WORKDIR/base-encadeada/clone-$o"; git clone -q -o "$o" -b feature/pred "$rr" "$c" >/dev/null 2>&1 \
+      || { BX_FALHA="$BX_FALHA fixture-clone-$o"; continue; }
+    BX_R="$c"; bx_f1 "clone-$o" main || BX_FALHA="$BX_FALHA clone-$o-criacao-recusada"
+    [ "$(git -C "$c" rev-parse -q --verify refs/heads/feature/clone-$o)" = "$(git -C "$c" rev-parse "refs/remotes/$o/main")" ] \
+      && [ "$(git -C "$c" config "branch.feature/clone-$o.expxBaseNascimento")" = "$(git -C "$c" rev-parse "refs/remotes/$o/main")" ] \
+      || BX_FALHA="$BX_FALHA clone-$o-nao-nasceu-de-$o/main"
+    bx_f1 "clone-$o" main || BX_FALHA="$BX_FALHA clone-$o-retomada-recusada"
+    bx_f1 "clone-$o-pref" "$o/main" || BX_FALHA="$BX_FALHA clone-$o-base-com-remoto-recusada"
+  done
+  BX_R="$rr"
   # 8. Tag com o mesmo nome da base (e da feature), fora da linha dela: a ref sem qualificar
   #    escolhe a tag. A branch nasce da ponta da branch base, e a retomada a aceita.
   local t; t="$(git -C "$BX_R" -c user.email=b@b -c user.name=b commit-tree "feature/pred^{tree}" -m tag)" \
