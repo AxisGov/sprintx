@@ -93,7 +93,10 @@ for f in "$RAIZ"/docs/tasks.md "$RAIZ"/docs/*/tasks.md "$RAIZ"/docs/*/*/tasks.md
   if [ -r "$f" ]; then PLANOS+=("$f"); else ILEGIVEIS+=("${f#"$RAIZ"/}"); fi
 done
 shopt -u nullglob dotglob
-if [ "${#PLANOS[@]}" -eq 0 ]; then
+# Sem plano legivel a sessao ainda pode ter reivindicacao no rastro: com plano ilegivel e
+# rastro, a decisao roda so sobre os eventos, para o plano ilegivel DO trabalho corrente
+# fechar (DS-154) em vez de sair aqui so com aviso.
+if [ "${#PLANOS[@]}" -eq 0 ] && { [ "${#ILEGIVEIS[@]}" -eq 0 ] || [ "${#EVENTOS[@]}" -eq 0 ]; }; then
   [ "${#ILEGIVEIS[@]}" -eq 0 ] || rastro_aviso_ao_modelo PreToolUse "sprintx/escopo-da-task: plano(s) ilegivel(is): ${ILEGIVEIS[*]}; a edicao de $REL NAO foi conferida contra a task."
   exit 0
 fi
@@ -201,7 +204,7 @@ SAIDA="$(SX_SES="$MINHA_SESSAO" SX_RAIZ="$RAIZ" SX_REL="$REL" LC_ALL=C awk "$_RA
     for (i = 2; i <= ni; i++) { x = IR[i]; for (j = i - 1; j >= 1 && IR[j] > x; j--) IR[j + 1] = IR[j]; IR[j + 1] = x }
     irmas = ""; for (i = 1; i <= ni; i++) irmas = irmas (i > 1 ? " " : "") IR[i]
     if (ni) { print "D irma"; print "I " irmas } else print "D nenhuma"
-  }' ${EVENTOS[@]+"${EVENTOS[@]}"} "${PLANOS[@]}" 2>/dev/null)"
+  }' ${EVENTOS[@]+"${EVENTOS[@]}"} ${PLANOS[@]+"${PLANOS[@]}"} 2>/dev/null)"
 
 G=0; N_MINHAS=0; TRABALHO=""; CURRENT_ID=""; COERENCIA=""; PLANO=""; DECL=""; IRMAS=""; LISTA=""
 RASTRO_TAMANHOS=""
@@ -229,13 +232,38 @@ if [[ $'\n'"$SAIDA" != *$'\n'"G "[01]* ]]; then
   exit 0
 fi
 
+# A primeira entrada de ILEGIVEIS que e plano DESTE trabalho, em IL_TRAB. O alcance e o do
+# resolvedor (do_trabalho): ate 2 niveis abaixo de docs/sprintx/features/<slug>/ ou docs/<slug>/.
+_ilegivel_do_trabalho() {
+  local f c r b; IL_TRAB=""
+  for f in ${ILEGIVEIS[@]+"${ILEGIVEIS[@]}"}; do
+    c="${f%% (*}"
+    case "$c" in
+      "docs/sprintx/features/$TRABALHO/"*) r="${c#"docs/sprintx/features/$TRABALHO/"}" ;;
+      "docs/$TRABALHO/"*) r="${c#"docs/$TRABALHO/"}" ;;
+      *) continue ;;
+    esac
+    b="${r//[!\/]/}"; [ "${#b}" -le 2 ] || continue
+    IL_TRAB="$f"; return 0
+  done
+  return 1
+}
+
 # Nenhuma task aberta em lugar nenhum da feature => a skill nao esta em
 # execucao (F6). Fora de execucao, o hook preserva o comportamento antigo:
 # nao opina. Com plano ilegivel, "nenhuma task aberta" pode ser so o plano que
-# nao se leu: o hook avisa em vez de calar.
+# nao se leu: o hook avisa em vez de calar. E se esta sessao reivindicou uma task
+# e o ilegivel e plano do trabalho dela, a F6 pode estar rodando justamente ali:
+# nao e "fora de execucao", e plano_corrente_ilegivel (DS-154), mais abaixo.
+SEM_PORTEIRO=""
 if [ "$G" != 1 ]; then
-  [ "${#ILEGIVEIS[@]}" -eq 0 ] || rastro_aviso_ao_modelo PreToolUse "sprintx/escopo-da-task: plano(s) ilegivel(is): ${ILEGIVEIS[*]}; a edicao de $REL NAO foi conferida contra a task."
-  exit 0
+  [ "${#ILEGIVEIS[@]}" -eq 0 ] && exit 0
+  if [ "$N_MINHAS" = 1 ] && [ "$COERENCIA" = ok ] && _ilegivel_do_trabalho; then
+    SEM_PORTEIRO=1
+  else
+    rastro_aviso_ao_modelo PreToolUse "sprintx/escopo-da-task: plano(s) ilegivel(is): ${ILEGIVEIS[*]}; a edicao de $REL NAO foi conferida contra a task."
+    exit 0
+  fi
 fi
 
 # ---------------------------------------------------- caminho comum: task corrente
@@ -313,6 +341,7 @@ _para_por_contrato() { # _para_por_contrato <condicao> <mensagem>
 # —, e nos dois o arquivo continua sendo sprint-NN/tasks.md (00-schema.md),
 # entao condensado e separado nao mudam o caminho. A ordem de byte dos
 # caminhos, e nao a do filesystem, decide qual tasks.md declara a task.
+[ -z "$SEM_PORTEIRO" ] || _para_por_contrato plano_corrente_ilegivel "nenhum plano legivel tem task em andamento e parte do plano do trabalho $TRABALHO nao pode ser lida ($IL_TRAB): a task $CURRENT_ID, reivindicada por esta sessao, pode estar la. Torne o plano legivel antes de editar $REL."
 case "$PLANO" in
   # Os dois layouts com o mesmo slug: nao da para amarrar plano a trabalho.
   ambiguo) _para_por_contrato plano_corrente_ambiguo "o trabalho $TRABALHO tem plano em docs/sprintx/features/$TRABALHO/ E em docs/$TRABALHO/. Deixe um so layout antes de executar; a maquina nao escolhe entre eles." ;;
@@ -345,18 +374,10 @@ fi
 # Parte do plano DESTE trabalho nao se leu (link, pasta por link, sem permissao): o
 # arquivo pode ser de uma irma declarada la, e o caso geral abaixo o deixaria passar
 # com aviso. Sem como conferir o dono, falha fechada (DS-154). Plano ilegivel de outra
-# feature nao entra: nao participa da decisao. O alcance e o do resolvedor (do_trabalho):
-# ate 2 niveis abaixo de docs/sprintx/features/<slug>/ ou docs/<slug>/.
-for f in ${ILEGIVEIS[@]+"${ILEGIVEIS[@]}"}; do
-  c="${f%% (*}"
-  case "$c" in
-    "docs/sprintx/features/$TRABALHO/"*) r="${c#"docs/sprintx/features/$TRABALHO/"}" ;;
-    "docs/$TRABALHO/"*) r="${c#"docs/$TRABALHO/"}" ;;
-    *) continue ;;
-  esac
-  b="${r//[!\/]/}"; [ "${#b}" -le 2 ] || continue
-  _para_por_contrato plano_corrente_ilegivel "parte do plano do trabalho $TRABALHO nao pode ser lida ($f); o arquivo $REL, fora da task corrente $CURRENT_ID, pode ser de uma task irma declarada la. Torne o plano legivel antes de editar este arquivo."
-done
+# feature nao entra: nao participa da decisao (_ilegivel_do_trabalho).
+if _ilegivel_do_trabalho; then
+  _para_por_contrato plano_corrente_ilegivel "parte do plano do trabalho $TRABALHO nao pode ser lida ($IL_TRAB); o arquivo $REL, fora da task corrente $CURRENT_ID, pode ser de uma task irma declarada la. Torne o plano legivel antes de editar este arquivo."
+fi
 
 # --------------------------------------------------------------- violacao
 # Caso geral de sempre: arquivo fora do escopo da task corrente e fora de
