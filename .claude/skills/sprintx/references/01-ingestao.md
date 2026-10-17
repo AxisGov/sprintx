@@ -45,13 +45,15 @@ canônico `docs/stack/CONVENCOES.md`.
    avança no meio não descasa o nascimento da branch. Base e feature entram por ref qualificada,
    nunca por tag: a base sem prefixo é `refs/heads/<base>`; sem ela, `refs/remotes/<remoto>/<base>`
    (o remoto do upstream da branch atual, ou `origin`) — o clone novo que só tem `origin/main` —;
-   `<remoto>/<base>` vira `refs/remotes/<remoto>/<base>`; `refs/...` fica como está:
+   `<remoto>/<base>` vira `refs/remotes/<remoto>/<base>`; `refs/heads/...` e `refs/remotes/...`
+   ficam como estão; outra ref qualificada (`refs/tags/...`) deixa `r` vazio, e o bloco para:
 
    ```sh
    f=feature/<slug>; b=<base>; n=; h="refs/heads/$f"
    c=$(git symbolic-ref -q --short HEAD); m=$(git config "branch.$c.remote"); [ -n "$m" ] && [ "$m" != . ] || m=origin
    case $b in
-     refs/*) r=$b ;;
+     refs/heads/*|refs/remotes/*) r=$b ;;
+     refs/*) r= ;;
      *) for r in "refs/heads/$b" "refs/remotes/$m/$b" "refs/remotes/$b"; do git show-ref -q --verify "$r" && break; done ;;
    esac
    if ! git rev-parse -q --verify "$h" >/dev/null; then

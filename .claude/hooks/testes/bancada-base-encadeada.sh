@@ -103,5 +103,8 @@ t_base_encadeada() { # t_base_encadeada <01-ingestao.md> — falhas em BX_FALHA
     && [ "$(git -C "$BX_R" config branch.feature/tag.expxBaseNascimento)" = "$(git -C "$BX_R" rev-parse refs/heads/feature/pred)" ] \
     || BX_FALHA="$BX_FALHA tag-escolhida-no-lugar-da-base"
   bx_f1 tag feature/pred || BX_FALHA="$BX_FALHA tag-retomada-recusada"
+  # A tag informada ja qualificada (refs/tags/...) tambem nao e base: para, sem criar a branch.
+  bx_f1 tagq refs/tags/feature/pred && BX_FALHA="$BX_FALHA base-tag-qualificada-aceita"
+  git -C "$BX_R" rev-parse -q --verify refs/heads/feature/tagq >/dev/null && BX_FALHA="$BX_FALHA base-tag-qualificada-criou-branch"
   [ -z "$BX_FALHA" ]
 }
