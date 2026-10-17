@@ -14,6 +14,7 @@ t_seglimite() { # t_seglimite <raiz-hooks> <planejamento.sh> — falhas em T_FAL
   local d="$T_DIR/seglimite/r" n c e r g pad padroes=()
   local sk="sk""-ABCDEFGHIJ0123456789abcd" ant="sk""-ant-ABCDEFGHIJ0123456789ab" akia="AKIA""ABCDEFGHIJKLMNOP"
   local gh="ghp""_ABCDEFGHIJ0123456789abcdefghij12" xox="xox""b-1234567890ab" aiza="AIza""ABCDEFGHIJ0123456789abcdefghij12345"
+  local proj="sk""-proj-AbCdEf_GhIjKl-0123456789MnOpQr"
   T_FALHA=""
   while IFS= read -r pad; do [ -n "$pad" ] && padroes+=(-e "$pad"); done <<EOF
 $(sed -n "/^SEGREDO_PADROES='/,/'\$/p" "$2" | sed "s/^SEGREDO_PADROES='//; s/'\$//")
@@ -42,6 +43,8 @@ aspas-simples-xox|k='$xox'|2
 aspas-duplas-aiza|k="$aiza"|2
 dois-pontos-ant|chave:$ant|2
 identificador-e-chave|ta$sk $sk|2
+projeto-openai|OPENAI_API_KEY=$proj|2
+dentro-projeto-openai|ta$proj|0
 EOF
   [ -z "$T_FALHA" ]
 }

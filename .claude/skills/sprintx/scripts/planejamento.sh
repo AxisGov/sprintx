@@ -542,7 +542,7 @@ task_do_bloqueio() { le_bloqueios; campo_bloqueio "$1" 2; }
 # iguais. A skill roda sem os hooks instalados: a lista e copiada, nao importada.
 SEGREDO_PADROES='-----BEGIN ([A-Z ]+ )?PRIVATE KEY-----
 (^|[^A-Za-z0-9_-])AKIA[0-9A-Z]{16}
-(^|[^A-Za-z0-9_-])sk-[A-Za-z0-9]{20,}
+(^|[^A-Za-z0-9_-])sk-((proj|svcacct|admin)-[A-Za-z0-9_-]{20,}|[A-Za-z0-9]{20,})
 (^|[^A-Za-z0-9_-])sk-ant-[A-Za-z0-9_-]{20,}
 (^|[^A-Za-z0-9_-])gh[pousr]_[A-Za-z0-9]{30,}
 (^|[^A-Za-z0-9_-])xox[baprs]-[A-Za-z0-9-]{10,}

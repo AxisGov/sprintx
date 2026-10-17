@@ -99,7 +99,7 @@ while IFS='|' read -r nome padrao; do
 done <<'PADROES'
 chave privada PEM|-----BEGIN ([A-Z ]+ )?PRIVATE KEY-----
 token da AWS|(^|[^A-Za-z0-9_-])AKIA[0-9A-Z]{16}
-chave da OpenAI|(^|[^A-Za-z0-9_-])sk-[A-Za-z0-9]{20,}
+chave da OpenAI|(^|[^A-Za-z0-9_-])sk-((proj|svcacct|admin)-[A-Za-z0-9_-]{20,}|[A-Za-z0-9]{20,})
 chave da Anthropic|(^|[^A-Za-z0-9_-])sk-ant-[A-Za-z0-9_-]{20,}
 token do GitHub|(^|[^A-Za-z0-9_-])gh[pousr]_[A-Za-z0-9]{30,}
 token do Slack|(^|[^A-Za-z0-9_-])xox[baprs]-[A-Za-z0-9-]{10,}
