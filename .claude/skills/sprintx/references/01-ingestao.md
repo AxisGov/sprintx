@@ -39,15 +39,20 @@ canônico `docs/stack/CONVENCOES.md`.
    ../<repo>--<slug> feature/<slug>`. Com base informada pelo caller, grave-a na própria branch
    — `git config branch.feature/<slug>.expxBase <base>` —, que vale para todos os worktrees e
    sobrevive à sessão: é dali que a F6 a repassa ao E0 da `mergex` (`references/06-execucao.md`).
-   Junto vai o nascimento (`expxBaseNascimento`), o commit da base de onde a branch saiu. Na
-   criação e na retomada, grave as duas chaves só por este bloco, da raiz do repositório:
+   Junto vai o nascimento (`expxBaseNascimento`), o commit da base de onde a branch saiu. Com
+   base informada, crie a branch nova e grave as duas chaves só por este bloco, da raiz do
+   repositório — ele resolve a base uma vez e cria a branch por esse SHA, então a base que
+   avança no meio não descasa o nascimento da branch:
 
    ```sh
    f=feature/<slug>; b=<base>; n=
-   [ "$(git config "branch.$f.expxBase")" = "$b" ] && n=$(git config "branch.$f.expxBaseNascimento")
-   { [ -n "$n" ] && git merge-base --is-ancestor "$n" "$f" && git merge-base --is-ancestor "$n" "$b"; } \
-     || { n=$(git rev-parse --verify "$b^{commit}") && git merge-base --is-ancestor "$n" "$f"; } \
-     && git config "branch.$f.expxBase" "$b" && git config "branch.$f.expxBaseNascimento" "$n"
+   if ! git rev-parse -q --verify "refs/heads/$f" >/dev/null; then
+     n=$(git rev-parse --verify "$b^{commit}") && git worktree add -b "$f" ../<repo>--<slug> "$n"
+   else
+     [ "$(git config "branch.$f.expxBase")" = "$b" ] && n=$(git config "branch.$f.expxBaseNascimento")
+     { [ -n "$n" ] && git merge-base --is-ancestor "$n" "$f" && git merge-base --is-ancestor "$n" "$b"; } \
+       || { n=$(git rev-parse --verify "$b^{commit}") && git merge-base --is-ancestor "$n" "$f"; }
+   fi && git config "branch.$f.expxBase" "$b" && git config "branch.$f.expxBaseNascimento" "$n"
    ```
 
    A pergunta é se a branch nasceu da linha da base, não se contém a ponta atual: a base que
