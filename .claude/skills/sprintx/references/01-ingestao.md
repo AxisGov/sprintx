@@ -43,9 +43,11 @@ canônico `docs/stack/CONVENCOES.md`.
    base informada, crie a branch nova e grave as duas chaves só por este bloco, da raiz do
    repositório — ele resolve a base uma vez e cria a branch por esse SHA, então a base que
    avança no meio não descasa o nascimento da branch. Base e feature entram por ref qualificada,
-   nunca por tag: a base sem prefixo é `refs/heads/<base>`; sem ela, `refs/remotes/<remoto>/<base>`
-   (o remoto do upstream da branch atual, ou `origin`) — o clone novo que só tem `origin/main` —;
-   `<remoto>/<base>` vira `refs/remotes/<remoto>/<base>`; `refs/heads/...` e `refs/remotes/...`
+   nunca por tag. A base sem prefixo resolve na primeira que existir, na ordem do próprio git
+   (branch local antes de remota): `refs/heads/<base>`, `refs/remotes/<remoto>/<base>` (o remoto
+   do upstream da branch atual, ou `origin` — o clone novo que só tem `origin/main`) e
+   `refs/remotes/<base>` (`origin/main` informado, sem branch local com esse nome; para não
+   depender disso, informe `refs/remotes/origin/main`); `refs/heads/...` e `refs/remotes/...`
    ficam como estão; outra ref qualificada (`refs/tags/...`) deixa `r` vazio, e o bloco para:
 
    ```sh
