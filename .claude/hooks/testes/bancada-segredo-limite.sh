@@ -4,8 +4,10 @@
 # dentro da bancada.sh: usa os auxiliares dela (t_json, T_DIR). Mora aqui porque a bancada.sh
 # passa do limite de tamanho do expx-fatiamento (F4) e nao cresce.
 #
-# O prefixo de chave (sk-, AKIA, gh?_, xox?-, AIza) so vale no comeco da linha ou depois de
+# O prefixo de chave (sk-, gh?_, xox?-, AIza) so vale no comeco da linha ou depois de
 # caractere fora de [A-Za-z0-9_-]: dentro de um identificador ("ta" + "sk-...") nao e chave.
+# AKIA tem limite proprio, fora de [A-Za-z0-9_]: logo depois de hifen ("id-" + "AKIA...") e
+# chave; dentro de identificador ("x" ou "_" + "AKIA...") nao e.
 # Cada caso roda no hook (comum/segredo.sh) e na copia da lista em planejamento.sh, casada
 # por grep -E como la. As chaves sao sinteticas e montadas por concatenacao.
 # Cada caso: nome|conteudo (printf %b)|rc esperado do hook.
@@ -34,7 +36,9 @@ dentro-ghp|abc$gh|0
 dentro-xox|my$xox|0
 dentro-aiza|foo$aiza|0
 dentro-sublinhado-sk|_$sk|0
-dentro-hifen-akia|chave-$akia|0
+hifen-akia|id-$akia|2
+dentro-sublinhado-akia|_$akia|0
+dentro-hifen-sk|chave-$sk|0
 inicio-sk|$sk|2
 inicio-segunda-linha-akia|x = 1\n$akia|2
 espaco-akia|Bearer $akia|2
