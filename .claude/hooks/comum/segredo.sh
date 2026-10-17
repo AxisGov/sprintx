@@ -68,6 +68,9 @@ case "$REL" in
         # `x**` e um `*` comum) e o resto do padrao nao tem outro curinga — um `*` solto
         # ali atravessaria `/` e isentaria mais do que o git.
         casa=0; p="${l#/}"; bp="${p//[!\/]/}"; resto="${p//\*\*/}"; seg="/$p/"; seg="${seg//\/\*\*\//\/}"
+        # O `$p` sem aspas a direita de `==` e deliberado: e o padrao do .gitignore, casado
+        # como glob (com aspas viraria comparacao literal e nada seria isento).
+        # shellcheck disable=SC2053
         if [[ $p == *'**'* && $resto != *[\*\?\[]* && $seg != *'**'* ]]; then
           # `seg` e o padrao com cada `**` valendo zero pastas: `a/**/b` casa `a/b`, `**/x` casa `x`.
           # O `**` no FIM nao vale zero: `a/**` e tudo DENTRO de `a`, nunca o proprio `a` —
