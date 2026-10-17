@@ -90,8 +90,9 @@ Regra: existe achado ALTA → `VEREDITO: NÃO`. Nenhum ALTA → `VEREDITO: SIM`.
 | `[item 2][fraco:criterio]` | ALTA |
 | `[item 2][fraco:teste]` | MÉDIA |
 | `[item 10]` tamanho acima de F2, F3 ou F4 | ALTA |
+| `[item 10]` F2 ou F3 acima num trabalho que é só movimento mecânico | MÉDIA |
 
-Tamanho acima do `expx-fatiamento` é ALTA porque a mergex recusa abrir um PR assim (E7, Passo 1.5): a execução terminaria sem entrega. `fraco:teste` é MÉDIA porque o comportamento certo já está numa cláusula autoritativa: não há decisão de produto a inventar, só um teste que ainda não a prova — e a F6 é obrigada a endurecê-lo antes de escrever produto.
+Tamanho acima do `expx-fatiamento` é ALTA porque a mergex recusa abrir um PR assim (E7, Passo 1.5): a execução terminaria sem entrega. A exceção é o movimento mecânico (F6 do `expx-fatiamento`): o trabalho que só divide ou renomeia arquivo, sem alterar conteúdo e sem nenhuma outra mudança, passa no E7 com `FATIA_EXCECAO=<motivo>` declarada pelo desenvolvedor, que rebaixa F2 e F3 a aviso; registre MÉDIA e diga que o PR depende dessa declaração. Com qualquer outra mudança no mesmo trabalho, ou com excesso de F4, segue ALTA: a exceção não cobre. `fraco:teste` é MÉDIA porque o comportamento certo já está numa cláusula autoritativa: não há decisão de produto a inventar, só um teste que ainda não a prova — e a F6 é obrigada a endurecê-lo antes de escrever produto.
 
 Nos outros itens, ALTA é o que faz a execução autônoma **falhar ou produzir a coisa errada sem ninguém perceber**: task sem teste, dependência circular, decisão humana embutida, pré-requisito ausente.
 
