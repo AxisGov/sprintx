@@ -216,12 +216,15 @@ al_muta "$AL_M" '      "$P_AUT6_POR" "$P_AUT6_EM" "$P_AUT6_ORIGEM"' '      "$P_P
 al_mutante "ds175-mutante-17" $? "$AL_M" l_aut_dono_e_clone
 
 # 18 — uma versao pendente e classificada antes de rejeitar argumentos diferentes.
+#      As duas trocas formam UM mutante: o status da geracao e capturado logo depois delas, antes
+#      da conferencia da matriz, para que um mutante aplicado so em parte nao chegue como gerado.
 AL_M="$(al_copia m18)"
 al_muta "$AL_M" '  [ "$max6" = "$P_MAX6" ] \' '  [ "$PERSIST" = pendente ] || [ "$max6" = "$P_MAX6" ] \' \
   && al_muta "$AL_M" '  [ "$por" = "$P_AUT6_POR" ] \' '  [ "$PERSIST" = pendente ] || [ "$por" = "$P_AUT6_POR" ] \'
+AL_RC18=$?
 [ "$(cksum < "$AL_M")" != "$AL_SIG10" ]
 afirma "ds175-matriz-10-18-distinta" $? "argumentos ignorados sempre e so durante pendencia sao mutacoes diferentes"
-al_mutante "ds175-mutante-18" $? "$AL_M" l5_checkpoint_e_retomada
+al_mutante "ds175-mutante-18" "$AL_RC18" "$AL_M" l5_checkpoint_e_retomada
 
 # 19 — pending/retomada saem antes de provar congeladas e parciais.
 AL_M="$(al_copia m19)"
