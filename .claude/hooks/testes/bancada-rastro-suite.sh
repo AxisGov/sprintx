@@ -1365,8 +1365,10 @@ AK_SK="$SK"
 # Dado os `desvio` persistidos de um tipo ("null" para a entrada sem desvio), o que o item de
 # `calibracao_por_tipo` tem de gravar em `fator`: `null` com menos de 3 elegiveis, ou a media das
 # elegiveis com duas casas half-up (DS-160/DS-164) — INCLUSIVE quando essa media e `1.00`.
+# `LC_ALL=C`: o separador decimal do `printf` nao depende do locale (awk que respeita LC_NUMERIC
+# escreveria `1,00` num locale de virgula).
 ak_fator() { # ak_fator <desvio|null> ...
-  awk -v lista="$*" '
+  LC_ALL=C awk -v lista="$*" '
     BEGIN {
       n = split(lista, v, / +/); soma = 0; e = 0
       for (i = 1; i <= n; i++) { if (v[i] == "null") continue; e++; soma += v[i] + 0 }
