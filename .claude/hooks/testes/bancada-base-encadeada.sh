@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
 # Caso da secao A da bancada (F1, base informada pelo caller), carregado por `.` de dentro
-# da bancada.sh: usa os auxiliares dela (afirma, WORKDIR). Mora aqui porque a bancada.sh
-# passa do limite de tamanho do expx-fatiamento (F4) e nao cresce.
+# da bancada.sh: usa os auxiliares dela (afirma, WORKDIR).
+# Fica fora dela pela regra de tamanho de arquivo: < 5.000 linhas e < 200 KB (emenda
+# AxisGov/expxdev docs/superpowers/specs/2026-10-19-limites-do-codeant-emenda.md).
 #
 # Roda, num repositorio real, o bloco `sh` que o item 2 de references/01-ingestao.md manda
 # a F1 executar para criar a branch e gravar a base (o unico bloco do arquivo que cita

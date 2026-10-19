@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
 # Caso da secao T da bancada (segredo.sh sem repositorio), carregado por `.` de dentro
-# da bancada.sh: usa os auxiliares dela (t_json, t_conteudo, T_DIR). Mora aqui porque a
-# bancada.sh passa do limite de tamanho do expx-fatiamento (F4) e nao cresce.
+# da bancada.sh: usa os auxiliares dela (t_json, t_conteudo, T_DIR).
+# Fica fora dela pela regra de tamanho de arquivo: < 5.000 linhas e < 200 KB (emenda
+# AxisGov/expxdev docs/superpowers/specs/2026-10-19-limites-do-codeant-emenda.md).
 #
 # Sem repositorio, o segredo le o .gitignore como o git: glob (`.env.*` isenta `.env.local`),
 # ancora (`/x` so na raiz), `*` sem atravessar `/`, e a ultima regra que casa decide.
