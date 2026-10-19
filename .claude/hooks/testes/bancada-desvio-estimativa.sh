@@ -219,7 +219,7 @@ ABW="$(mktemp -d)"
 ab_copia() { rm -rf "$ABW/$1"; mkdir -p "$ABW/$1"; cp -R "$SK/." "$ABW/$1/"; printf '%s' "$ABW/$1"; }
 ab_muta() { # ab_muta <dir> <arquivo-rel> <expressao sed>
   [ -f "$1/$2" ] || return 1
-  sed -i "$3" "$1/$2" || return 1
+  sed "$3" "$1/$2" > "$ABW/.sed" && cat "$ABW/.sed" > "$1/$2" || return 1   # sem `sed -i` (so GNU)
   ! cmp -s "$SK/$2" "$1/$2"
 }
 ab_mata() { local c; for c in $AB_CASOS; do ab_caso "$c" "$1" || { printf '%s' "$c"; return; }; done; }
@@ -577,7 +577,7 @@ ACW="$(mktemp -d)"
 ac_copia() { rm -rf "$ACW/$1"; mkdir -p "$ACW/$1"; cp -R "$SK/." "$ACW/$1/"; printf '%s' "$ACW/$1"; }
 ac_muta() { # ac_muta <dir> <arquivo-rel> <expressao sed>
   [ -f "$1/$2" ] || return 1
-  sed -i "$3" "$1/$2" || return 1
+  sed "$3" "$1/$2" > "$ACW/.sed" && cat "$ACW/.sed" > "$1/$2" || return 1   # sem `sed -i` (so GNU)
   ! cmp -s "$SK/$2" "$1/$2"
 }
 ac_mata() { local c; for c in $AC_CASOS; do ac_caso "$c" "$1" || { printf '%s' "$c"; return; }; done; }
@@ -876,7 +876,7 @@ ADW="$(mktemp -d)"
 ad_copia() { rm -rf "$ADW/$1"; mkdir -p "$ADW/$1"; cp -R "$SK/." "$ADW/$1/"; printf '%s' "$ADW/$1"; }
 ad_muta() { # ad_muta <dir> <arquivo-rel> <expressao sed>
   [ -f "$1/$2" ] || return 1
-  sed -i "$3" "$1/$2" || return 1
+  sed "$3" "$1/$2" > "$ADW/.sed" && cat "$ADW/.sed" > "$1/$2" || return 1   # sem `sed -i` (so GNU)
   ! cmp -s "$SK/$2" "$1/$2"
 }
 ad_mata() { local c; for c in $AD_CASOS; do ad_caso "$c" "$1" || { printf '%s' "$c"; return; }; done; }
@@ -1134,7 +1134,11 @@ afirma "ae-ds165-preservada-append-only" $? "DS-165 continua no arquivo, intacta
 # Mutantes: a mesma mecanica de AD/AC, numa copia da arvore.
 AEW="$(mktemp -d)"
 ae_copia() { rm -rf "$AEW/$1"; mkdir -p "$AEW/$1"; cp -R "$AE_SK/." "$AEW/$1/"; printf '%s' "$AEW/$1"; }
-ae_muta() { [ -f "$1/$2" ] || return 1; sed -i "$3" "$1/$2" || return 1; ! cmp -s "$AE_SK/$2" "$1/$2"; }
+ae_muta() { # sem `sed -i` (so GNU): arquivo temporario e `cat` por cima, que mantem o modo
+  [ -f "$1/$2" ] || return 1
+  sed "$3" "$1/$2" > "$AEW/.sed" && cat "$AEW/.sed" > "$1/$2" || return 1
+  ! cmp -s "$AE_SK/$2" "$1/$2"
+}
 ae_mata() { local c; for c in $AE_CASOS; do ae_caso "$c" "$1" || { printf '%s' "$c"; return; }; done; }
 ae_mutante() { # ae_mutante <nome> <rc da geracao> <dir> <caso que TEM de matar>...
   local nome="$1" rcg="$2" d="$3" c vivos=""; shift 3
@@ -1268,7 +1272,11 @@ afirma "af-ds166-preservada-append-only" $? "DS-166 continua no arquivo, intacta
 
 AFW="$(mktemp -d)"
 af_copia() { rm -rf "$AFW/$1"; mkdir -p "$AFW/$1"; cp -R "$AF_SK/." "$AFW/$1/"; printf '%s' "$AFW/$1"; }
-af_muta() { [ -f "$1/$2" ] || return 1; sed -i "$3" "$1/$2" || return 1; ! cmp -s "$AF_SK/$2" "$1/$2"; }
+af_muta() { # sem `sed -i` (so GNU): arquivo temporario e `cat` por cima, que mantem o modo
+  [ -f "$1/$2" ] || return 1
+  sed "$3" "$1/$2" > "$AFW/.sed" && cat "$AFW/.sed" > "$1/$2" || return 1
+  ! cmp -s "$AF_SK/$2" "$1/$2"
+}
 af_mata() { local c; for c in $AF_CASOS; do af_caso "$c" "$1" || { printf '%s' "$c"; return; }; done; }
 af_mutante() { # af_mutante <nome> <rc da geracao> <dir> <caso que TEM de matar>...
   local nome="$1" rcg="$2" d="$3" c vivos=""; shift 3

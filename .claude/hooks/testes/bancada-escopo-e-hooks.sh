@@ -88,7 +88,8 @@ l_f() {
   l_fixture
   c2_abre 03 "$C2OC/sprint-03/tasks.md"
   c2_tarefa "$C2OC/sprint-03/tasks.md" T-03.01 concluida "src/ui/cabecalho-topo.tsx, tests/ui/cabecalho-topo.test.tsx" ""
-  sed -i 's/Task T-03.01 original/Cabecalho novo — reescrita total do topo/' "$C2OC/sprint-03/tasks.md"
+  sed 's/Task T-03.01 original/Cabecalho novo — reescrita total do topo/' "$C2OC/sprint-03/tasks.md" \
+    > "$WORKDIR/l_f.sed" && cat "$WORKDIR/l_f.sed" > "$C2OC/sprint-03/tasks.md"   # sem `sed -i` (so GNU)
   c2_fecha "$C2OC/sprint-03/tasks.md"
   c2_hook "$1" "tests/ui/cabecalho-topo.test.tsx" teste@eu; [ $? -eq 2 ]
 }
