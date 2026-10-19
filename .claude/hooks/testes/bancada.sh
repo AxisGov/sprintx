@@ -1796,10 +1796,21 @@ afirma "aa1-condicao-falsa-chega-nao-zero-com-nome-dinamico" "$aa_rc" "nome deri
 [ "${AA_SONDA#* }" = 0 ]; aa_rc=$?
 afirma "aa1b-a-forma-vulneravel-realmente-perde-o-status" "$aa_rc" "substituicao no nome antes de \$? -> rc=${AA_SONDA#* }, a condicao do defeito existe"
 
-# 2. O harness inteiro esta livre da forma — nao so as seis familias conhecidas.
-AA_VUL="$(aa_vulneraveis "$AA_BANC" | tr '\n' ' ')"
+# 2. O harness inteiro esta livre da forma — nao so as seis familias conhecidas. "Inteiro" e a
+#    bancada.sh e toda parte bancada-*.sh que ela carrega por `.`: as secoes movidas para as partes
+#    continuam sendo harness. Cada ocorrencia sai como "<arquivo>:<linha>:<texto>". Guarda que
+#    falha (leitura, awk) reprova: sob pipefail o status do pipe e o do aa_vulneraveis.
+AA_VUL=""; aa_n=0
+for aa_arq in "$H"/testes/bancada*.sh; do
+  [ -r "$aa_arq" ] || { AA_VUL="$AA_VUL ${aa_arq##*/}:ilegivel"; continue; }
+  aa_n=$((aa_n + 1))
+  aa_o="$(aa_vulneraveis "$aa_arq" | awk -v f="${aa_arq##*/}" '{ printf " %s:%s", f, $0 }')" \
+    || aa_o="$aa_o ${aa_arq##*/}:guarda-falhou"
+  AA_VUL="$AA_VUL$aa_o"
+done
+AA_VUL="${AA_VUL# }"
 [ -z "$AA_VUL" ]; aa_rc=$?
-afirma "aa2-nenhuma-chamada-vulneravel-no-harness" "$aa_rc" "${AA_VUL:-nenhuma leitura de \$? depois de substituicao}"
+afirma "aa2-nenhuma-chamada-vulneravel-no-harness" "$aa_rc" "${AA_VUL:-nenhuma leitura de \$? depois de substituicao em $aa_n arquivos bancada*.sh}"
 
 # 3. Auto-teste do guarda: cada forma vulneravel tem de ser acusada e cada forma segura tem de
 #    passar. Um guarda cego passaria no item 2 sem enxergar nada; um guarda que acusa todo `$?`

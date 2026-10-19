@@ -2,8 +2,9 @@
 #
 # Casos da secao N da bancada (escopo-da-task) para plano por link, carregados por
 # `.` de dentro da bancada.sh: usam os auxiliares dela (n_fx, n_plano, n_task, n_hook,
-# n_tem, n_silencio, NF_DIR). Moram aqui porque a bancada.sh passa do limite de
-# tamanho do expx-fatiamento (F4) e nao cresce.
+# n_tem, n_silencio, NF_DIR).
+# Ficam fora dela pela regra de tamanho de arquivo: < 5.000 linhas e < 200 KB (emenda
+# AxisGov/expxdev docs/superpowers/specs/2026-10-19-limites-do-codeant-emenda.md).
 
 n_lnkirma() { # sprint do trabalho corrente por link, com irma dona do arquivo: fail-closed
   local d="$NF_DIR/lnkirma"

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
 # Caso da secao T da bancada (limite a esquerda do prefixo de chave), carregado por `.` de
-# dentro da bancada.sh: usa os auxiliares dela (t_json, T_DIR). Mora aqui porque a bancada.sh
-# passa do limite de tamanho do expx-fatiamento (F4) e nao cresce.
+# dentro da bancada.sh: usa os auxiliares dela (t_json, T_DIR).
+# Fica fora dela pela regra de tamanho de arquivo: < 5.000 linhas e < 200 KB (emenda
+# AxisGov/expxdev docs/superpowers/specs/2026-10-19-limites-do-codeant-emenda.md).
 #
 # O prefixo de chave (sk-, gh?_, xox?-, AIza) so vale no comeco da linha ou depois de
 # caractere fora de [A-Za-z0-9_-]: dentro de um identificador ("ta" + "sk-...") nao e chave.
