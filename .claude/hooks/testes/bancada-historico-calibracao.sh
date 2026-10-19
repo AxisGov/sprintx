@@ -952,7 +952,8 @@ afirma "z8k3a-ds170-registrada" $? "a decisao do escape do pipe existe no regist
 # 8k4. Mutantes que RESTAURAM cada defeito corrigido nesta secao, numa COPIA da skill — a arvore
 #      real nunca e tocada — e tem de morrer exatamente pelo caso nomeado.
 ZM_A="$(mktemp -d)"; cp -R "$SK/." "$ZM_A/"
-sed -i 's/×{{desvio}} \\| não/×{{desvio}} | não/' "$ZM_A/assets/TEMPLATE-HISTORICO.md"
+sed 's/×{{desvio}} \\| não/×{{desvio}} | não/' "$ZM_A/assets/TEMPLATE-HISTORICO.md" > "$ZM_A.sed" \
+  && cat "$ZM_A.sed" > "$ZM_A/assets/TEMPLATE-HISTORICO.md"   # sem `sed -i` (so GNU)
 ! cmp -s "$Z_TPL" "$ZM_A/assets/TEMPLATE-HISTORICO.md"; Z_MA_GEROU=$?
 ZM_A_LINHA="$(grep -F '{{tipo_task}} | {{n}}' "$ZM_A/assets/TEMPLATE-HISTORICO.md")"
 ZM_A_SEM_ESCAPE="${ZM_A_LINHA//\\|/@PIPE_ESCAPADO@}"

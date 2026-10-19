@@ -1136,8 +1136,14 @@ aj_tr_viola "aj51-wrapper-command-e-atravessado" \
   'command cp /tmp/f.jsonl docs/eventos/fx.jsonl' "command"
 aj_tr_viola "aj52-wrapper-exec-e-atravessado" \
   'exec cp /tmp/f.jsonl docs/eventos/fx.jsonl' "exec"
-aj_tr_viola "aj53-wrapper-builtin-e-atravessado" \
-  'builtin cp /tmp/f.jsonl docs/eventos/fx.jsonl' "builtin"
+# `builtin` so executa builtin do shell: `builtin cp` falha (rc=1) e nao grava nada. O que escreve
+# atras dele e um builtin que executa outro comando, como `command`. O aj53b roda o mesmo comando
+# num diretorio descartavel e prova que ele grava mesmo.
+AJ53_CMD='builtin command cp f.jsonl docs/eventos/fx.jsonl'
+aj_tr_viola "aj53-wrapper-builtin-e-atravessado" "$AJ53_CMD" "builtin command"
+mkdir -p "$AJ_T/aj53/docs/eventos" && printf '{}\n' > "$AJ_T/aj53/f.jsonl"
+(cd "$AJ_T/aj53" && bash -c "$AJ53_CMD") >/dev/null 2>&1 && [ -s "$AJ_T/aj53/docs/eventos/fx.jsonl" ]
+afirma "aj53b-o-comando-do-aj53-grava-de-verdade" $? "$AJ53_CMD, num diretorio descartavel, cria docs/eventos/fx.jsonl"
 aj_tr_viola "aj54-wrapper-nohup-e-atravessado" \
   'nohup cp /tmp/f.jsonl docs/eventos/fx.jsonl' "nohup"
 aj_tr_viola "aj55-wrapper-nice-e-atravessado" \
@@ -1365,8 +1371,10 @@ AK_SK="$SK"
 # Dado os `desvio` persistidos de um tipo ("null" para a entrada sem desvio), o que o item de
 # `calibracao_por_tipo` tem de gravar em `fator`: `null` com menos de 3 elegiveis, ou a media das
 # elegiveis com duas casas half-up (DS-160/DS-164) — INCLUSIVE quando essa media e `1.00`.
+# `LC_ALL=C`: o separador decimal do `printf` nao depende do locale (awk que respeita LC_NUMERIC
+# escreveria `1,00` num locale de virgula).
 ak_fator() { # ak_fator <desvio|null> ...
-  awk -v lista="$*" '
+  LC_ALL=C awk -v lista="$*" '
     BEGIN {
       n = split(lista, v, / +/); soma = 0; e = 0
       for (i = 1; i <= n; i++) { if (v[i] == "null") continue; e++; soma += v[i] + 0 }
