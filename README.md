@@ -1,11 +1,6 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/AxisGov/sprintx/main/.github/assets/banner-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/AxisGov/sprintx/main/.github/assets/banner-light.svg">
-  <img alt="sprintx — a metade Build do metodo Expx" src="https://raw.githubusercontent.com/AxisGov/sprintx/main/.github/assets/banner-light.svg" width="100%">
-</picture>
-
+<img alt="sprintx — a metade Build do método Expx: seis fases, da ingestão à execução autônoma" src=".github/assets/anim/hero.svg" width="100%">
 <p>
   <img alt="harness: Claude Code" src="https://raw.githubusercontent.com/AxisGov/sprintx/main/.github/assets/badge-claude.svg">
   <img alt="harness: OpenCode" src="https://raw.githubusercontent.com/AxisGov/sprintx/main/.github/assets/badge-opencode.svg">
@@ -42,6 +37,10 @@ de features novas para <a href="https://claude.com/claude-code">Claude Code</a> 
 
 O método Expx é um conjunto de skills que se compõem, instaladas e mantidas pelo CLI [`expxdev`](https://github.com/AxisGov/expxdev).
 
+<p align="center">
+  <img alt="O ecossistema Expx: prodx decide se há trabalho, sprintx decide como, camadas modificam o comportamento, mergex entrega, buildx orquestra o projeto inteiro" src=".github/assets/anim/ecossistema.svg" width="100%">
+</p>
+
 | Peça | Papel | Relação com a `sprintx` |
 |---|---|---|
 | **[expxdev](https://github.com/AxisGov/expxdev)** | o CLI: instala, atualiza e diagnostica o ecossistema, e sobe o painel de operação | é quem instala esta skill (`npx expxdev init`) |
@@ -63,6 +62,10 @@ Detalhes do ecossistema inteiro no [README do expxdev](https://github.com/AxisGo
 ## Build e Run
 
 O método Expx tem duas metades, irmãs e com a mesma disciplina de engenharia:
+
+<p align="center">
+  <img alt="Build e Run: sprintx e runx compartilham os mesmos contratos. Muda o gatilho e o tamanho, nunca o rigor." src=".github/assets/anim/build-run.svg" width="100%">
+</p>
 
 | | **sprintx** (Build) | **[runx](https://github.com/AxisGov/runx)** (Run) |
 |---|---|---|
@@ -86,6 +89,10 @@ A maioria dos fluxos "planeje e depois implemente" para agentes de IA falha da m
 - **Hierarquia clara** — sprint contém fases, fase contém tasks, cada nível em seu próprio arquivo.
 - **Contrato obrigatório por task** — toda task declara objetivo, arquivos tocados, teste de integração, teste funcional, critério de aceite verificável, dependências e se pode rodar em paralelo.
 - **TDD como regra, não como sugestão** — o teste é escrito antes da implementação; task só é concluída quando os dois testes passam.
+
+<p align="center">
+  <img alt="O ciclo de uma task: contrato, teste antes do código, vermelho, implementação, os dois testes verdes, e só então concluída" src=".github/assets/anim/tdd-ciclo.svg" width="100%">
+</p>
 - **Portões de aceite em toda transição** — task → task, task → fase, fase → sprint. Critério não atendido, não avança.
 - **Paralelismo declarado no plano**, nunca decidido pelo agente em tempo de execução.
 - **Execução que nunca para** — dúvida nova durante a execução vira bloqueio registrado, não uma pergunta. O agente pula para a próxima task paralelizável e segue.
@@ -121,6 +128,10 @@ Já os **hooks** divergem de mecanismo, e é a única parte com fork. A lógica 
 
 Várias sessões — do mesmo harness ou de harnesses diferentes — podem trabalhar ao mesmo tempo no mesmo projeto. Sem isolamento, um `stash` de uma sessão levaria o trabalho não salvo de outra, e a suíte inteira do fechamento de sprint reprovaria por causa do código que outra sessão está no meio de mudar.
 
+<p align="center">
+  <img alt="Sessões paralelas: worktree por feature, reivindicação de task pelo rastro e árvore limpa antes da suíte inteira" src=".github/assets/anim/sessoes-paralelas.svg" width="100%">
+</p>
+
 Três mecanismos resolvem isso:
 
 - **Worktree por feature** (regra 21): com git, a F1 abre a feature num `git worktree` próprio, num diretório irmão do checkout principal, na branch `feature/<slug>`.
@@ -136,6 +147,10 @@ O texto do método vale nos dois harnesses; os hooks rodam nativamente no Claude
 Toda regra do método é, sozinha, uma instrução que o modelo pode esquecer na task 14 de uma execução autônoma. **Hook é script determinístico: quem executa é o harness, não o modelo.** Agente roda em contexto próprio, com ferramentas restritas.
 
 Hooks e agentes **não criam regra nova** — eles garantem regras que já existem.
+
+<p align="center">
+  <img alt="Hooks: scripts determinísticos que o harness executa. Aviso deixa passar com marca; bloqueio barra." src=".github/assets/anim/hooks.svg" width="100%">
+</p>
 
 | Hook | Quando | Modo inicial | O que garante |
 |---|---|---|---|
@@ -154,6 +169,10 @@ Hooks e agentes **não criam regra nova** — eles garantem regras que já exist
 ```
 
 Os agentes de veredito têm **somente leitura**, o que transforma "aponta, não corrige" de promessa em impossibilidade técnica:
+
+<p align="center">
+  <img alt="Três agentes de veredito, somente leitura: investigador, auditor-plano e revisor-testes. Apontam, não corrigem." src=".github/assets/anim/agentes.svg" width="100%">
+</p>
 
 | Agente | Fase | Papel |
 |---|---|---|
@@ -233,6 +252,10 @@ Descreva o que quer construir. **Não é preciso dizer `sprintx`, "plano" nem "s
 Quero adicionar exportação de relatório em CSV nessa tela.
 ```
 
+<p align="center">
+  <img alt="Demonstração: o usuário descreve a feature e a sprintx a leva pelas seis fases até a entrega" src=".github/assets/anim/demo-terminal.svg" width="100%">
+</p>
+
 ### Comandos
 
 | Comando | O que faz |
@@ -258,6 +281,10 @@ F1 INGESTÃO → F2 DESCOBERTA → F3 PLANO → [F3.5 ESTIMATIVA] → F4 ORQUEST
 
 Estritamente sequenciais. A skill descobre onde está **inspecionando o disco**, não perguntando — você nunca precisa dizer "estou na fase X". A fonte primária é o `00-PLANEJAMENTO.md` da feature, o estado durável do laço F3 ↔ F5; com Git, cada fim de F2, F3, F4 e cada veredito da F5 vira um checkpoint local na branch `feature/<slug>`, só da pasta da feature, para o planejamento sobreviver à sessão antes da execução.
 
+<p align="center">
+  <img alt="A skill descobre em que fase está inspecionando o disco, nunca perguntando" src=".github/assets/anim/maquina-de-estados.svg" width="100%">
+</p>
+
 A elas se soma uma única fase **opcional**, a F3.5 (estimativa), que roda entre a F3 e a F4 apenas quando você pede — e cuja ausência nunca impede nada.
 
 | Fase | Nome | O que faz |
@@ -270,11 +297,21 @@ A elas se soma uma única fase **opcional**, a F3.5 (estimativa), que roda entre
 | **F5** | Auditoria | A IA vira auditora do próprio plano e não corrige nada — só aponta. Verifica tasks sem teste, testes fracos, critérios subjetivos, dependências circulares, paralelismo falso e mais. Veredito único: pronto para execução autônoma, SIM ou NÃO. Teste fraco é tipado (`ausente`, `criterio`, `teste`) e a severidade sai do tipo, não do julgamento da sessão. Quem aciona a skill pode declarar um teto de reprovações; ao atingi-lo, o planejamento para em `orcamento_esgotado`, sem F6. |
 | **F6** | Execução | Lê o orquestrador e implementa até o fim, sob as regras de autonomia. Escreve o teste antes do código, atualiza o status de cada task, e entrega um relatório final com o que foi concluído, os bloqueios e a saída da suíte. Um bloqueio `defeito_de_plano` devolve o plano à F3 (`replanejar_execucao`, com orçamento próprio declarado pelo caller) sem descartar nem reabrir as tasks já concluídas. |
 
+Na F6, dúvida nova vira bloqueio registrado e a execução segue para a próxima task paralelizável.
+
+<p align="center">
+  <img alt="F6: a execução nunca para. Paralelismo declarado no plano, dúvida vira bloqueio registrado, e o agente segue para a próxima task." src=".github/assets/anim/execucao-autonoma.svg" width="100%">
+</p>
+
 ---
 
 ## Orçar sem chutar
 
 Uma software house vive de orçar, e a maior parte das estimativas erra por não ter insumo: sem tasks granulares, com dependências e paralelismo declarados, estimar é chute com aparência de método. O plano da `sprintx` já é esse insumo — a **F3.5** é a camada opcional que o converte em faixa de esforço.
+
+<p align="center">
+  <img alt="F3.5: faixa de esforço, nunca número único; esforço, nunca prazo. Esforço total versus caminho crítico." src=".github/assets/anim/estimativa.svg" width="100%">
+</p>
 
 Rode `/sprintx-estimar <feature>` sobre um plano pronto. Sai um `00-ESTIMATIVA.md` assim:
 
@@ -361,6 +398,10 @@ docs/sprintx/
 ## expx-schema v1
 
 Todo arquivo de estado carrega um **frontmatter YAML legível por máquina**, para que um painel de operação leia o andamento das features sem depender de prosa.
+
+<p align="center">
+  <img alt="expx-schema v1: a máquina lê o YAML do frontmatter, a pessoa lê a prosa. Só a skill escreve." src=".github/assets/anim/schema.svg" width="100%">
+</p>
 
 ```yaml
 ---
