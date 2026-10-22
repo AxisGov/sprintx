@@ -99,7 +99,7 @@ Objetivo, fases, critério de saída, riscos conhecidos.
 ## Entrega no repositório
 
 A `sprintx` termina com o código escrito e os testes verdes. Levar isso até o repositório e até
-o revisor é trabalho da [`mergex`](https://github.com/bittencourtthulio/mergex): ela adota a
+o revisor é trabalho da [`mergex`](https://github.com/AxisGov/mergex): ela adota a
 branch e o worktree que a F1 abriu (regra 21), commita cada task que fecha, e ao fim monta a
 entrega — portão de prontidão, classificação do diff por atenção humana, descrição do pull
 request e pacote para o QA.
