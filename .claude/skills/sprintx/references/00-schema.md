@@ -11,7 +11,7 @@ O painel apenas LÊ. Esta skill continua sendo a única a escrever.
 
 ## Contrato irmão — a runx
 
-O `expx-schema v1` é compartilhado com a [`runx`](https://github.com/bittencourtthulio/runx), a metade Run do
+O `expx-schema v1` é compartilhado com a [`runx`](https://github.com/AxisGov/runx), a metade Run do
 método Expx (ocorrências em produção, estágios E1–E5). Os kinds `orquestrador`, `sprint`, `fases`,
 `tasks`, `bloqueios` e `base_indice` existem nas duas skills com os mesmos campos e os mesmos enums;
 `expx_tool` (`sprintx` | `runx`) diz qual das duas gravou o arquivo, e é por isso que o enum tem os

@@ -1,29 +1,29 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/bittencourtthulio/sprintx/main/.github/assets/banner-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/bittencourtthulio/sprintx/main/.github/assets/banner-light.svg">
-  <img alt="sprintx — a metade Build do metodo Expx" src="https://raw.githubusercontent.com/bittencourtthulio/sprintx/main/.github/assets/banner-light.svg" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/AxisGov/sprintx/main/.github/assets/banner-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/AxisGov/sprintx/main/.github/assets/banner-light.svg">
+  <img alt="sprintx — a metade Build do metodo Expx" src="https://raw.githubusercontent.com/AxisGov/sprintx/main/.github/assets/banner-light.svg" width="100%">
 </picture>
 
 <p>
-  <img alt="harness: Claude Code" src="https://raw.githubusercontent.com/bittencourtthulio/sprintx/main/.github/assets/badge-claude.svg">
-  <img alt="harness: OpenCode" src="https://raw.githubusercontent.com/bittencourtthulio/sprintx/main/.github/assets/badge-opencode.svg">
-  <img alt="fases F1 a F6" src="https://raw.githubusercontent.com/bittencourtthulio/sprintx/main/.github/assets/badge-fases.svg">
-  <img alt="TDD obrigatorio" src="https://raw.githubusercontent.com/bittencourtthulio/sprintx/main/.github/assets/badge-tdd.svg">
-  <img alt="schema expx v1" src="https://raw.githubusercontent.com/bittencourtthulio/sprintx/main/.github/assets/badge-schema.svg">
-  <img alt="docs pt-BR" src="https://raw.githubusercontent.com/bittencourtthulio/sprintx/main/.github/assets/badge-lang.svg">
-  <img alt="licenca MIT" src="https://raw.githubusercontent.com/bittencourtthulio/sprintx/main/.github/assets/badge-license.svg">
+  <img alt="harness: Claude Code" src="https://raw.githubusercontent.com/AxisGov/sprintx/main/.github/assets/badge-claude.svg">
+  <img alt="harness: OpenCode" src="https://raw.githubusercontent.com/AxisGov/sprintx/main/.github/assets/badge-opencode.svg">
+  <img alt="fases F1 a F6" src="https://raw.githubusercontent.com/AxisGov/sprintx/main/.github/assets/badge-fases.svg">
+  <img alt="TDD obrigatorio" src="https://raw.githubusercontent.com/AxisGov/sprintx/main/.github/assets/badge-tdd.svg">
+  <img alt="schema expx v1" src="https://raw.githubusercontent.com/AxisGov/sprintx/main/.github/assets/badge-schema.svg">
+  <img alt="docs pt-BR" src="https://raw.githubusercontent.com/AxisGov/sprintx/main/.github/assets/badge-lang.svg">
+  <img alt="licenca MIT" src="https://raw.githubusercontent.com/AxisGov/sprintx/main/.github/assets/badge-license.svg">
 </p>
 
 <p>
-  <a href="https://bittencourtthulio.github.io/expxdev/#sprintx"><strong>📘 Documentação do método</strong></a>
+  <a href="https://github.com/AxisGov/sprintx#readme"><strong>📘 Documentação do método</strong></a>
   &nbsp;·&nbsp;
-  <a href="https://bittencourtthulio.github.io/expxdev/#sprintx">Fases F1–F6</a>
+  <a href="#as-seis-fases">Fases F1–F6</a>
   &nbsp;·&nbsp;
-  <a href="https://bittencourtthulio.github.io/expxdev/#ecossistema">O ecossistema</a>
+  <a href="https://github.com/AxisGov/expxdev#o-ecossistema">O ecossistema</a>
   &nbsp;·&nbsp;
-  <a href="https://bittencourtthulio.github.io/expxdev/#schema">Contratos</a>
+  <a href="#os-contratos">Contratos</a>
 </p>
 
 <strong>A metade Build do método Expx</strong> — a skill de planejamento e execução<br>
@@ -40,23 +40,23 @@ de features novas para <a href="https://claude.com/claude-code">Claude Code</a> 
 
 ## O ecossistema Expx
 
-O método Expx é um conjunto de skills que se compõem, instaladas e mantidas pelo CLI [`expxdev`](https://github.com/bittencourtthulio/expxdev).
+O método Expx é um conjunto de skills que se compõem, instaladas e mantidas pelo CLI [`expxdev`](https://github.com/AxisGov/expxdev).
 
 | Peça | Papel | Relação com a `sprintx` |
 |---|---|---|
-| **[expxdev](https://github.com/bittencourtthulio/expxdev)** | o CLI: instala, atualiza e diagnostica o ecossistema, e sobe o painel de operação | é quem instala esta skill (`npx expxdev init`) |
+| **[expxdev](https://github.com/AxisGov/expxdev)** | o CLI: instala, atualiza e diagnostica o ecossistema, e sobe o painel de operação | é quem instala esta skill (`npx expxdev init`) |
 | **sprintx** *(este repositório)* | **Build** — feature nova, F1…F6 | — |
-| **[runx](https://github.com/bittencourtthulio/runx)** | **Run** — ocorrência em produção, E1…E5 | skill irmã; mesmos contratos, gatilho diferente |
+| **[runx](https://github.com/AxisGov/runx)** | **Run** — ocorrência em produção, E1…E5 | skill irmã; mesmos contratos, gatilho diferente |
 | **[legadox](https://github.com/bittencourtthulio/legadox)** | **camada** de segurança para código legado | endurece as fases da `sprintx` quando existe `PERFIL.md` |
 | **[stackx](https://github.com/bittencourtthulio/stackx)** | **camada** de convenções do repositório | a `sprintx` lê o `CONVENCOES.md` antes de planejar e de escrever código |
-| **[mergex](https://github.com/bittencourtthulio/mergex)** | entrega: branch, commit por task, PR e pacote de QA | adota na F6 a branch e o worktree que a F1 abriu (regra 21), commita cada task concluída e entrega ao fim da fase |
+| **[mergex](https://github.com/AxisGov/mergex)** | entrega: branch, commit por task, PR e pacote de QA | adota na F6 a branch e o worktree que a F1 abriu (regra 21), commita cada task concluída e entrega ao fim da fase |
 | **[memox](https://github.com/bittencourtthulio/MemoX)** | **camada** de memória do projeto | consultada na F1 e na F3, sobre os arquivos que o plano pretende tocar |
 | **[prodx](https://github.com/bittencourtthulio/prodx)** | **camada** de produto: decide **se** há trabalho | roda antes da F1 e entrega o `BRIEFING.md` assinado como entrada dela |
-| **[buildx](https://github.com/bittencourtthulio/buildx)** | orquestra um projeto inteiro, da descrição ao sistema pronto | invoca a `sprintx` uma vez por feature do mapa; quebra a regra 10 — a F2 deixa de entrevistar o humano, a `buildx` responde no lugar dele derivando de `PROJETO.md`, `PREMISSAS.md` e `CONVENCOES.md` e registrando em `00-DECISOES.md` com `respondido_por: buildx`. TDD, regra 4 e auditoria da F5 seguem intactos. É dependência obrigatória dela |
+| **[buildx](https://github.com/AxisGov/buildx)** | orquestra um projeto inteiro, da descrição ao sistema pronto | invoca a `sprintx` uma vez por feature do mapa; quebra a regra 10 — a F2 deixa de entrevistar o humano, a `buildx` responde no lugar dele derivando de `PROJETO.md`, `PREMISSAS.md` e `CONVENCOES.md` e registrando em `00-DECISOES.md` com `respondido_por: buildx`. TDD, regra 4 e auditoria da F5 seguem intactos. É dependência obrigatória dela |
 
 **Camadas** (`legadox`, `stackx`, `memox`, `prodx`) sozinhas não fazem nada — elas modificam o comportamento da `sprintx` e da `runx`. A `prodx` é a única que roda **antes** de tudo: ela decide *se* há trabalho, e só depois a `sprintx` decide *como* fazê-lo. A ausência de qualquer irmã nunca quebra o fluxo desta skill: insumo que não existe vira aviso do que falta, nunca invenção. A `buildx` é a exceção do método: por ficar acima de todas, é a única peça que **depende** de outras — e a `sprintx` é uma delas.
 
-Detalhes do ecossistema inteiro no [README do expxdev](https://github.com/bittencourtthulio/expxdev).
+Detalhes do ecossistema inteiro no [README do expxdev](https://github.com/AxisGov/expxdev).
 
 ---
 
@@ -64,7 +64,7 @@ Detalhes do ecossistema inteiro no [README do expxdev](https://github.com/bitten
 
 O método Expx tem duas metades, irmãs e com a mesma disciplina de engenharia:
 
-| | **sprintx** (Build) | **[runx](https://github.com/bittencourtthulio/runx)** (Run) |
+| | **sprintx** (Build) | **[runx](https://github.com/AxisGov/runx)** (Run) |
 |---|---|---|
 | **Gatilho** | feature nova, planejada do zero | ocorrência num sistema em produção |
 | **Entrada** | uma ideia, um requisito | um chamado, ticket ou relato de cliente |
@@ -75,7 +75,7 @@ As duas compartilham **exatamente** os mesmos contratos: base de conhecimento an
 
 **Muda o gatilho e o tamanho. Nunca o rigor.**
 
-> Precisa sustentar o que já está em produção — bug, ajuste, chamado de cliente? Essa é a outra metade: **[runx](https://github.com/bittencourtthulio/runx)**.
+> Precisa sustentar o que já está em produção — bug, ajuste, chamado de cliente? Essa é a outra metade: **[runx](https://github.com/AxisGov/runx)**.
 
 ---
 
@@ -186,7 +186,7 @@ O `init` busca a `sprintx` na versão publicada, empacota como plugin local e co
 Monta a estrutura **dos dois harnesses de uma vez**:
 
 ```bash
-git clone https://github.com/bittencourtthulio/sprintx.git
+git clone https://github.com/AxisGov/sprintx.git
 cd sprintx
 ./install.sh
 ```
@@ -391,7 +391,7 @@ tasks:
 
 O painel apenas **lê**; a skill continua sendo a única a escrever. A máquina lê o YAML, a pessoa lê a prosa abaixo dele.
 
-Os kinds `orquestrador`, `sprint`, `fases`, `tasks`, `bloqueios` e `base_indice` são **idênticos campo por campo** aos da [`runx`](https://github.com/bittencourtthulio/runx) — o campo `expx_tool` (`sprintx` | `runx`) diz qual das duas escreveu. A única diferença é na task: a `runx` acrescenta `teste_regressao`, que só faz sentido quando existe um comportamento errado a provar. Pendente: o bloqueio da `sprintx` ganhou a chave `classe` (tipada, nunca inferida da descrição), ainda não adotada pela `runx`; sem ela, o B-NN é lido como legado. A `sprintx` tem ainda dois kinds próprios da camada de estimativa: `estimativa` e `estimativa_historico`. Contrato completo em [`references/00-schema.md`](.claude/skills/sprintx/references/00-schema.md).
+Os kinds `orquestrador`, `sprint`, `fases`, `tasks`, `bloqueios` e `base_indice` são **idênticos campo por campo** aos da [`runx`](https://github.com/AxisGov/runx) — o campo `expx_tool` (`sprintx` | `runx`) diz qual das duas escreveu. A única diferença é na task: a `runx` acrescenta `teste_regressao`, que só faz sentido quando existe um comportamento errado a provar. Pendente: o bloqueio da `sprintx` ganhou a chave `classe` (tipada, nunca inferida da descrição), ainda não adotada pela `runx`; sem ela, o B-NN é lido como legado. A `sprintx` tem ainda dois kinds próprios da camada de estimativa: `estimativa` e `estimativa_historico`. Contrato completo em [`references/00-schema.md`](.claude/skills/sprintx/references/00-schema.md).
 
 ---
 
@@ -451,11 +451,11 @@ MIT — use, copie e adapte livremente.
 
 <div align="center">
 <sub>Parte do método <strong>Expx</strong> ·
-<a href="https://github.com/bittencourtthulio/expxdev">expxdev</a> ·
-<a href="https://github.com/bittencourtthulio/buildx">buildx</a> ·
+<a href="https://github.com/AxisGov/expxdev">expxdev</a> ·
+<a href="https://github.com/AxisGov/buildx">buildx</a> ·
 sprintx ·
-<a href="https://github.com/bittencourtthulio/runx">runx</a> ·
+<a href="https://github.com/AxisGov/runx">runx</a> ·
 <a href="https://github.com/bittencourtthulio/legadox">legadox</a> ·
 <a href="https://github.com/bittencourtthulio/stackx">stackx</a> ·
-<a href="https://github.com/bittencourtthulio/mergex">mergex</a></sub>
+<a href="https://github.com/AxisGov/mergex">mergex</a></sub>
 </div>
