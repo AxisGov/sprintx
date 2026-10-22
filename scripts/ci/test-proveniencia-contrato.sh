@@ -125,6 +125,29 @@ rastrear_texto "$repo_atributo" bootstrap.sh \
 rastrear_texto "$repo_atributo" .gitattributes 'bootstrap.sh binary'
 esperar_falha atributo_binary "$repo_atributo"
 
+repo_nul_operacional="$(nova_fixture nul_operacional)"
+{
+  printf '#!/usr/bin/env bash\n'
+  printf '\000git clone https://%s/%s/runx.git\n' "$github_host" "$proprietario"
+} > "$repo_nul_operacional/bootstrap.sh"
+git -C "$repo_nul_operacional" add bootstrap.sh
+git -C "$repo_nul_operacional" -c user.name=Fixture -c user.email=fixture@example.invalid \
+  commit -qm 'fixture: script operacional com NUL'
+esperar_falha nul_operacional "$repo_nul_operacional"
+
+repo_nul_sem_shebang="$(nova_fixture nul_sem_shebang)"
+{
+  contador=0
+  while [ "$contador" -lt 32 ]; do
+    printf '\000\001\002\003\004\005\006\007'
+    contador=$((contador + 1))
+  done
+  printf 'git clone https://%s/%s/runx.git\n' "$github_host" "$proprietario"
+} > "$repo_nul_sem_shebang/bootstrap.sh"
+git -C "$repo_nul_sem_shebang" add bootstrap.sh
+git -C "$repo_nul_sem_shebang" -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm 'fixture: texto operacional ofuscado por NUL'
+esperar_falha nul_sem_shebang "$repo_nul_sem_shebang"
+
 repo_extra="$(nova_fixture extra_allowlisted)"
 rastrear_texto "$repo_extra" docs/historico-proveniencia.md \
   "https://$github_host/$proprietario/runx https://$github_host/$proprietario/runx"
@@ -156,8 +179,14 @@ rastrear_texto "$repo_axisgov" bootstrap.sh \
 esperar_sucesso axisgov "$repo_axisgov"
 
 repo_binario="$(nova_fixture binario)"
-printf '\000https://%s/%s/runx.git\000' "$github_host" "$proprietario" \
-  > "$repo_binario/asset.bin"
+printf '\211PNG\r\n\032\n' > "$repo_binario/asset.bin"
+contador=0
+while [ "$contador" -lt 32 ]; do
+  printf '\000\001\002\003\004\005\006\007' >> "$repo_binario/asset.bin"
+  contador=$((contador + 1))
+done
+printf 'https://%s/AxisGov/runx.git\000' "$github_host" \
+  >> "$repo_binario/asset.bin"
 git -C "$repo_binario" add asset.bin
 git -C "$repo_binario" -c user.name=Fixture -c user.email=fixture@example.invalid \
   commit -qm 'fixture: binario'

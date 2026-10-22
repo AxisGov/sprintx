@@ -28,23 +28,30 @@ registrar_ocorrencia() {
   encontrados["$chave"]=$((${encontrados["$chave"]:-0} + 1))
 }
 
+registrar_fluxo() {
+  local arquivo="$1"
+  local ocorrencia
+
+  while IFS= read -r ocorrencia; do
+    registrar_ocorrencia "$arquivo" "$ocorrencia"
+  done
+}
+
 while IFS= read -r -d '' arquivo; do
   if [ -L "$arquivo" ]; then
-    while IFS= read -r ocorrencia; do
-      registrar_ocorrencia "$arquivo" "$ocorrencia"
-    done < <(readlink -- "$arquivo" | LC_ALL=C grep -a -h -o -i -E -- "$legada" || true)
+    registrar_fluxo "$arquivo" < <(
+      readlink -- "$arquivo" | LC_ALL=C grep -a -h -o -i -E -- "$legada" || true
+    )
     continue
   fi
   [ -f "$arquivo" ] || continue
 
-  # Classificacao deterministica por bytes: NUL significa binario.
-  # Extensao e atributos Git nunca podem retirar um texto da varredura.
-  if LC_ALL=C od -An -tx1 -v -- "$arquivo" | grep -qw '00'; then
-    continue
-  fi
-  while IFS= read -r ocorrencia; do
-    registrar_ocorrencia "$arquivo" "$ocorrencia"
-  done < <(LC_ALL=C grep -a -h -o -i -E -- "$legada" "$arquivo" || true)
+  # grep -a torna a verificacao independente de extensao, atributo Git e NUL.
+  # Binarios sem uma ocorrencia textual exata sao inertes; se a URL proibida
+  # estiver embutida, ela continua sendo proveniencia rastreada e deve falhar.
+  registrar_fluxo "$arquivo" < <(
+    LC_ALL=C grep -a -h -o -i -E -- "$legada" "$arquivo" || true
+  )
 done < <(git ls-files -z)
 
 numero_linha=0
