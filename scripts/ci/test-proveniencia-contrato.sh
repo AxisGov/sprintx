@@ -28,7 +28,11 @@ printf '%s\n' \
   'name: fixture' \
   'on:' \
   '  pull_request:' \
-  'jobs: {}' \
+  'jobs:' \
+  '  origem:' \
+  '    steps:' \
+  '      - run: bash scripts/ci/test-proveniencia.sh' \
+  '      - run: bash scripts/ci/test-proveniencia-contrato.sh' \
   > "$base/.github/workflows/proveniencia.yml"
 git -C "$base" add .
 git -C "$base" -c user.name=Fixture -c user.email=fixture@example.invalid \
@@ -196,5 +200,89 @@ repo_nao_rastreado="$(nova_fixture nao_rastreado)"
 printf '%s\n' "https://$github_host/$proprietario/runx.git" \
   > "$repo_nao_rastreado/nao-rastreado.txt"
 esperar_sucesso nao_rastreado "$repo_nao_rastreado"
+
+esperar_falha_de_leitura() {
+  local nome="$1"
+  local repo="$2"
+  local bin_falso="$3"
+
+  if PATH="$bin_falso:$PATH" bash "$repo/scripts/ci/test-proveniencia.sh" >"$temporario/$nome.out" 2>&1; then
+    printf 'FALHA: guard ignorou erro de leitura %s\n' "$nome" >&2
+    exit 1
+  fi
+  grep -q 'falha ao varrer arquivo rastreado' "$temporario/$nome.out" || {
+    printf 'FALHA: erro de leitura nao foi reportado por %s\n' "$nome" >&2
+    sed -n '1,80p' "$temporario/$nome.out" >&2
+    exit 1
+  }
+}
+
+repo_limite="$(nova_fixture limite_repositorio)"
+rastrear_texto "$repo_limite" docs/fork-valido.md \
+  "https://$github_host/$proprietario/runx-fork"
+esperar_sucesso limite_repositorio "$repo_limite"
+
+repo_erro_leitura="$(nova_fixture erro_leitura)"
+rastrear_texto "$repo_erro_leitura" falha-leitura.txt \
+  "https://$github_host/AxisGov/runx"
+bin_falso="$repo_erro_leitura/fake-bin"
+mkdir -p "$bin_falso"
+grep_real="$(command -v grep)"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'for argumento in "$@"; do' \
+  '  case "$argumento" in' \
+  '    *falha-leitura.txt) exit 2 ;;' \
+  '  esac' \
+  'done' \
+  "exec \"$grep_real\" \"\$@\"" \
+  > "$bin_falso/grep"
+chmod +x "$bin_falso/grep"
+esperar_falha_de_leitura erro_leitura "$repo_erro_leitura" "$bin_falso"
+
+for filtro in paths paths-ignore branches branches-ignore types; do
+  repo_filtro="$(nova_fixture "workflow_$filtro")"
+  case "$filtro" in
+    paths|paths-ignore) valor='"docs/**"' ;;
+    branches|branches-ignore) valor='"main"' ;;
+    types) valor='"opened"' ;;
+  esac
+  rastrear_texto "$repo_filtro" .github/workflows/proveniencia.yml \
+    "$(printf '%s\n' \
+      'name: fixture' \
+      'on:' \
+      '  pull_request:' \
+      "    $filtro: [$valor]" \
+      'jobs:' \
+      '  origem:' \
+      '    steps:' \
+      '      - run: bash scripts/ci/test-proveniencia.sh' \
+      '      - run: bash scripts/ci/test-proveniencia-contrato.sh')"
+  esperar_falha "workflow_$filtro" "$repo_filtro"
+done
+
+repo_sem_guard="$(nova_fixture workflow_sem_guard)"
+rastrear_texto "$repo_sem_guard" .github/workflows/proveniencia.yml \
+  "$(printf '%s\n' \
+    'name: fixture' \
+    'on:' \
+    '  pull_request:' \
+    'jobs:' \
+    '  origem:' \
+    '    steps:' \
+    '      - run: bash scripts/ci/test-proveniencia-contrato.sh')"
+esperar_falha workflow_sem_guard "$repo_sem_guard"
+
+repo_sem_contrato="$(nova_fixture workflow_sem_contrato)"
+rastrear_texto "$repo_sem_contrato" .github/workflows/proveniencia.yml \
+  "$(printf '%s\n' \
+    'name: fixture' \
+    'on:' \
+    '  pull_request:' \
+    'jobs:' \
+    '  origem:' \
+    '    steps:' \
+    '      - run: bash scripts/ci/test-proveniencia.sh')"
+esperar_falha workflow_sem_contrato "$repo_sem_contrato"
 
 printf 'contrato de proveniencia verificado\n'

@@ -4,7 +4,8 @@ set -euo pipefail
 raiz="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$raiz"
 
-legada='((github[.]com[/:]|raw[.]githubusercontent[.]com/)bittencourtthulio/(runx|mergex|sprintx|buildx|expxdev)([.]git)?|bittencourtthulio[.]github[.]io/expxdev)'
+legada_base='((github[.]com[/:]|raw[.]githubusercontent[.]com/)bittencourtthulio/(runx|mergex|sprintx|buildx|expxdev)([.]git)?|bittencourtthulio[.]github[.]io/expxdev)'
+legada="$legada_base([^[:alnum:]_.-]|$)"
 allowlist='scripts/ci/proveniencia-allowlist.tsv'
 separador=$'\x1f'
 declare -A encontrados=()
@@ -23,6 +24,9 @@ registrar_ocorrencia() {
   local chave
 
   [ -n "$ocorrencia" ] || return 0
+  if [[ "$ocorrencia" =~ [^[:alnum:]_.-]$ ]]; then
+    ocorrencia="${ocorrencia%?}"
+  fi
   normalizada="$(printf '%s' "$ocorrencia" | LC_ALL=C tr '[:upper:]' '[:lower:]')"
   chave="$arquivo$separador$normalizada"
   encontrados["$chave"]=$((${encontrados["$chave"]:-0} + 1))
@@ -37,11 +41,60 @@ registrar_fluxo() {
   done
 }
 
+registrar_grep_arquivo() {
+  local arquivo="$1"
+  local saida
+  local status
+
+  if saida="$(LC_ALL=C grep -a -h -o -i -E -- "$legada" "$arquivo")"; then
+    registrar_fluxo "$arquivo" <<< "$saida"
+    return 0
+  else
+    status=$?
+    if [ "$status" -ne 1 ]; then
+      printf 'falha ao varrer arquivo rastreado: %s (grep=%s)\n' "$arquivo" "$status" >&2
+      return "$status"
+    fi
+  fi
+  return 0
+}
+
+registrar_grep_texto() {
+  local arquivo="$1"
+  local texto="$2"
+  local saida
+  local status
+
+  if saida="$(printf '%s\n' "$texto" | LC_ALL=C grep -a -h -o -i -E -- "$legada")"; then
+    registrar_fluxo "$arquivo" <<< "$saida"
+    return 0
+  else
+    status=$?
+    if [ "$status" -ne 1 ]; then
+      printf 'falha ao varrer link rastreado: %s (grep=%s)\n' "$arquivo" "$status" >&2
+      return "$status"
+    fi
+  fi
+  return 0
+}
+
+lista_rastreados="$(mktemp)" || {
+  printf 'nao foi possivel criar lista temporaria de arquivos rastreados\n' >&2
+  exit 1
+}
+trap 'rm -f "$lista_rastreados"' EXIT
+git ls-files -z > "$lista_rastreados" || {
+  printf 'git ls-files falhou durante a enumeracao de proveniencia\n' >&2
+  exit 1
+}
+
 while IFS= read -r -d '' arquivo; do
   if [ -L "$arquivo" ]; then
-    registrar_fluxo "$arquivo" < <(
-      readlink -- "$arquivo" | LC_ALL=C grep -a -h -o -i -E -- "$legada" || true
-    )
+    destino="$(readlink -- "$arquivo")" || {
+      printf 'falha ao ler link rastreado: %s\n' "$arquivo" >&2
+      exit 1
+    }
+    registrar_grep_texto "$arquivo" "$destino"
     continue
   fi
   [ -f "$arquivo" ] || continue
@@ -49,10 +102,10 @@ while IFS= read -r -d '' arquivo; do
   # grep -a torna a verificacao independente de extensao, atributo Git e NUL.
   # Binarios sem uma ocorrencia textual exata sao inertes; se a URL proibida
   # estiver embutida, ela continua sendo proveniencia rastreada e deve falhar.
-  registrar_fluxo "$arquivo" < <(
-    LC_ALL=C grep -a -h -o -i -E -- "$legada" "$arquivo" || true
-  )
-done < <(git ls-files -z)
+  registrar_grep_arquivo "$arquivo"
+done < "$lista_rastreados"
+rm -f "$lista_rastreados"
+trap - EXIT
 
 numero_linha=0
 while IFS=$'\t' read -r arquivo ocorrencia quantidade finalidade justificativa extra ||
@@ -148,9 +201,42 @@ workflow='.github/workflows/proveniencia.yml'
 if [ ! -f "$workflow" ]; then
   workflow='.github/workflows/ci.yml'
 fi
-grep -q '^  pull_request:$' "$workflow"
-! grep -q '^[[:space:]]*paths:' "$workflow" || {
-  printf 'workflow de proveniencia nao pode limitar caminhos de pull request\n' >&2
+LC_ALL=C awk '
+  /^  pull_request:[[:space:]]*(#[^[:cntrl:]]*)?$/ {
+    encontrado = 1
+    no_bloco = 1
+    next
+  }
+  /^  pull_request:[[:space:]]*\{\}[[:space:]]*(#[^[:cntrl:]]*)?$/ {
+    encontrado = 1
+    no_bloco = 0
+    next
+  }
+  /^  pull_request:/ {
+    encontrado = 1
+    invalido = 1
+    no_bloco = 0
+    next
+  }
+  no_bloco && /^  [^[:space:]]/ {
+    no_bloco = 0
+  }
+  no_bloco && /^[[:space:]]+[^[:space:]#]/ {
+    invalido = 1
+  }
+  END {
+    exit !(encontrado && !invalido)
+  }
+' "$workflow" || {
+  printf 'evento pull_request ausente ou filtrado no workflow de proveniencia\n' >&2
+  exit 1
+}
+grep -Eq '^[[:space:]]*(-[[:space:]]+)?run:[[:space:]]+bash[[:space:]]+scripts/ci/test-proveniencia[.]sh([[:space:]]|$)' "$workflow" || {
+  printf 'workflow nao executa scripts/ci/test-proveniencia.sh\n' >&2
+  exit 1
+}
+grep -Eq '^[[:space:]]*(-[[:space:]]+)?run:[[:space:]]+bash[[:space:]]+scripts/ci/test-proveniencia-contrato[.]sh([[:space:]]|$)' "$workflow" || {
+  printf 'workflow nao executa scripts/ci/test-proveniencia-contrato.sh\n' >&2
   exit 1
 }
 
