@@ -285,4 +285,25 @@ rastrear_texto "$repo_sem_contrato" .github/workflows/proveniencia.yml \
     '      - run: bash scripts/ci/test-proveniencia.sh')"
 esperar_falha workflow_sem_contrato "$repo_sem_contrato"
 
+for mascarado in guard contrato; do
+  repo_mascarado="$(nova_fixture "workflow_mascarado_$mascarado")"
+  comando_guard='bash scripts/ci/test-proveniencia.sh'
+  comando_contrato='bash scripts/ci/test-proveniencia-contrato.sh'
+  case "$mascarado" in
+    guard) comando_guard="$comando_guard || true" ;;
+    contrato) comando_contrato="$comando_contrato || true" ;;
+  esac
+  rastrear_texto "$repo_mascarado" .github/workflows/proveniencia.yml \
+    "$(printf '%s\n' \
+      'name: fixture' \
+      'on:' \
+      '  pull_request:' \
+      'jobs:' \
+      '  origem:' \
+      '    steps:' \
+      "      - run: $comando_guard" \
+      "      - run: $comando_contrato")"
+  esperar_falha "workflow_mascarado_$mascarado" "$repo_mascarado"
+done
+
 printf 'contrato de proveniencia verificado\n'

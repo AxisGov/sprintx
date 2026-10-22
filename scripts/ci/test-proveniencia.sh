@@ -231,11 +231,11 @@ LC_ALL=C awk '
   printf 'evento pull_request ausente ou filtrado no workflow de proveniencia\n' >&2
   exit 1
 }
-grep -Eq '^[[:space:]]*(-[[:space:]]+)?run:[[:space:]]+bash[[:space:]]+scripts/ci/test-proveniencia[.]sh([[:space:]]|$)' "$workflow" || {
+grep -Eq '^[[:space:]]*(-[[:space:]]+)?run:[[:space:]]+bash[[:space:]]+scripts/ci/test-proveniencia[.]sh[[:space:]]*(#[^[:cntrl:]]*)?$' "$workflow" || {
   printf 'workflow nao executa scripts/ci/test-proveniencia.sh\n' >&2
   exit 1
 }
-grep -Eq '^[[:space:]]*(-[[:space:]]+)?run:[[:space:]]+bash[[:space:]]+scripts/ci/test-proveniencia-contrato[.]sh([[:space:]]|$)' "$workflow" || {
+grep -Eq '^[[:space:]]*(-[[:space:]]+)?run:[[:space:]]+bash[[:space:]]+scripts/ci/test-proveniencia-contrato[.]sh[[:space:]]*(#[^[:cntrl:]]*)?$' "$workflow" || {
   printf 'workflow nao executa scripts/ci/test-proveniencia-contrato.sh\n' >&2
   exit 1
 }
