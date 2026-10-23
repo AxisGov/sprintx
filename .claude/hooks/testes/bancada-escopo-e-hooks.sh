@@ -268,12 +268,9 @@ echo "== M. portabilidade Git Bash: scripts e contratos markdown LF, caminho dev
 # cygpath traduzir, em qualquer SO — e o que mata os mutantes tanto em Linux quanto no Git
 # Bash. Real: sem falsos; no Git Bash o Git for Windows devolve `C:/...` de verdade.
 MS="$(mktemp -d)"
-# Testes podem ser carregados da cópia .claude ou do marketplace instalado.
-# Resolva a raiz pelo contrato da skill, não pela profundidade de $H.
-RAIZ_SRC="$H"
-while [ "$RAIZ_SRC" != "/" ] && [ ! -d "$RAIZ_SRC/.claude/hooks/sprintx" ]; do
-  RAIZ_SRC="$(dirname "$RAIZ_SRC")"
-done
+# A parte pode ser carregada por uma bancada instalada em outro projeto. Sua
+# propria localização identifica a fonte; $H identifica apenas o host executor.
+RAIZ_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 [ -d "$RAIZ_SRC/.claude/hooks/sprintx" ] || { echo "bancada: raiz sprintx indisponivel" >&2; exit 1; }
 MSIM="$MS/sim"; MBIN="$MS/bin"; mkdir -p "$MSIM/z" "$MBIN" "$MS/vazio" "$MS/real"
 REALGIT="$(command -v git)"; BASHBIN="$(command -v bash)"
