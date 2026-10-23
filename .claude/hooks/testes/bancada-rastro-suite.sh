@@ -1371,18 +1371,21 @@ AK_SK="$SK"
 # Dado os `desvio` persistidos de um tipo ("null" para a entrada sem desvio), o que o item de
 # `calibracao_por_tipo` tem de gravar em `fator`: `null` com menos de 3 elegiveis, ou a media das
 # elegiveis com duas casas half-up (DS-160/DS-164) — INCLUSIVE quando essa media e `1.00`.
-# `LC_ALL=C`: o separador decimal do `printf` nao depende do locale (awk que respeita LC_NUMERIC
-# escreveria `1,00` num locale de virgula).
+# `Decimal` evita que uma fronteira como 1.005 caia abaixo do meio por representação binária.
 ak_fator() { # ak_fator <desvio|null> ...
-  LC_ALL=C awk -v lista="$*" '
-    BEGIN {
-      n = split(lista, v, / +/); soma = 0; e = 0
-      for (i = 1; i <= n; i++) { if (v[i] == "null") continue; e++; soma += v[i] + 0 }
-      if (e < 3) { print "null"; exit }                      # fator_ativo: false (DS-164)
-      m = soma / e
-      printf "%.2f\n", int(m * 100 + 0.5) / 100              # duas casas, half-up (DS-160)
-    }'
+  python3 - "$@" <<'PY'
+from decimal import Decimal, ROUND_HALF_UP
+import sys
+valores = [Decimal(v) for v in sys.argv[1:] if v != "null"]
+if len(valores) < 3:
+    print("null")                                            # fator_ativo: false (DS-164)
+else:
+    media = sum(valores, Decimal()) / Decimal(len(valores))
+    print(media.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+PY
 }
+[ "$(ak_fator 1.005 1.005 1.005)" = "1.01" ]
+afirma "ak0-oraculo-fronteira-decimal-half-up" $? "1.005 exato -> 1.01, sem erro de ponto flutuante binário"
 [ "$(ak_fator 1.00 1.00 1.00)" = "1.00" ]
 afirma "ak1-oraculo-media-exata-de-1-e-fator-1.00" $? "3 elegiveis, todas 1.00 -> fator medido 1.00, nunca null"
 [ "$(ak_fator 0.90 1.00 1.10)" = "1.00" ]
