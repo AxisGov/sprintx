@@ -268,7 +268,13 @@ echo "== M. portabilidade Git Bash: scripts e contratos markdown LF, caminho dev
 # cygpath traduzir, em qualquer SO — e o que mata os mutantes tanto em Linux quanto no Git
 # Bash. Real: sem falsos; no Git Bash o Git for Windows devolve `C:/...` de verdade.
 MS="$(mktemp -d)"
-RAIZ_SRC="$(cd "$H/../.." && pwd)"
+# Testes podem ser carregados da cópia .claude ou do marketplace instalado.
+# Resolva a raiz pelo contrato da skill, não pela profundidade de $H.
+RAIZ_SRC="$H"
+while [ "$RAIZ_SRC" != "/" ] && [ ! -d "$RAIZ_SRC/.claude/hooks/sprintx" ]; do
+  RAIZ_SRC="$(dirname "$RAIZ_SRC")"
+done
+[ -d "$RAIZ_SRC/.claude/hooks/sprintx" ] || { echo "bancada: raiz sprintx indisponivel" >&2; exit 1; }
 MSIM="$MS/sim"; MBIN="$MS/bin"; mkdir -p "$MSIM/z" "$MBIN" "$MS/vazio" "$MS/real"
 REALGIT="$(command -v git)"; BASHBIN="$(command -v bash)"
 cat > "$MBIN/cygpath" <<'EOF'
@@ -1576,7 +1582,7 @@ q_timeouts() {
 q_criticos() { q_timeouts "$2" "$3" && q_orcamento "$1" "$4"; }
 QGP=sprintx/git-perigoso.sh
 q_orcamento "$H" "$QGP"; afirma "q1-orcamento-de-processos-dos-criticos" $? "externos por execucao:$Q_CUSTO"
-q_timeouts "$H/../settings.json" "$H/../../.opencode/plugin/sprintx.ts"; afirma "q2-timeout-30s-so-nos-tres-criticos" $? "settings.json e plugin do OpenCode"
+q_timeouts "$RAIZ_SRC/.claude/settings.json" "$RAIZ_SRC/.opencode/plugin/sprintx.ts"; afirma "q2-timeout-30s-so-nos-tres-criticos" $? "settings.json e plugin do OpenCode"
 tem "$SKILLMD" 'timeout do runner é falha aberta' && tem "$SKILLMD" 'primeira barreira' && tem "$SKILLMD" 'E1 da `mergex`' \
   && [ "$(grep -c '^| DS-157 |' "$SK/DECISOES-DA-SKILL.md")" -eq 1 ]
 afirma "q3-contrato-fail-open-e-backstop" $? "SKILL.md e DS-157"
@@ -1602,7 +1608,7 @@ l_prosa "$H/sprintx/escopo-da-task.sh"; afirma "q4-prosa-nao-declara-ownership" 
 QM="$Q/mut"
 q_copia() { # q_copia <nome> — devolve a raiz de hooks copiada, com settings.json e plugin ao lado
   local d="$QM/$1"; rm -rf "$d"; mkdir -p "$d/hooks" "$d/plugin"
-  cp -R "$H/sprintx" "$H/comum" "$d/hooks/"; cp "$H/../settings.json" "$d/settings.json"; cp "$H/../../.opencode/plugin/sprintx.ts" "$d/plugin/sprintx.ts"
+  cp -R "$H/sprintx" "$H/comum" "$d/hooks/"; cp "$RAIZ_SRC/.claude/settings.json" "$d/settings.json"; cp "$RAIZ_SRC/.opencode/plugin/sprintx.ts" "$d/plugin/sprintx.ts"
   printf '%s' "$d"
 }
 q_mutante() { # q_mutante <nome> <rc geracao> <condicao que TEM de falhar...>
@@ -1813,7 +1819,7 @@ S_ROT=posix; S_FMT=posix; [ "$S_WIN" = 1 ] && { S_ROT="$(cygpath -m "$S_DIR" | c
 s_formatos "$S_SHOOK" "$S_DIR/fx c3d" "$S_TODOS" "A B C D E1 E2"
 afirma "s1-mesma-decisao-em-todo-formato-$S_ROT" $? "A..E x $S_FMT${S_FALHA:+ — FORA:$S_FALHA}"
 if [ "$S_WIN" = 1 ]; then
-  S_REPO_PAI="$(cd "$H/../../.." && pwd)"; S_ROT2="$(cygpath -m "$S_REPO_PAI" | cut -c1-2)"
+  S_REPO_PAI="$(cd "$RAIZ_SRC/.." && pwd)"; S_ROT2="$(cygpath -m "$S_REPO_PAI" | cut -c1-2)"
   if [ "$(printf '%s' "$S_ROT2" | tr a-z A-Z)" != "$(printf '%s' "$S_ROT" | tr a-z A-Z)" ] \
     && S_DIR2="$(mktemp -d -p "$S_REPO_PAI" .sx-s3d.XXXXXX 2>/dev/null)"; then
     s_formatos "$S_SHOOK" "$S_DIR2/fx c3d" "posix win caixa-do-drive" "A B C D E1 E2"
