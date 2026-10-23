@@ -1003,7 +1003,7 @@ Z_MB_RC=$?
 ! cmp -s "$Z_EST" "$ZM_B/references/07-estimativa.md"; Z_MB_GEROU=$?
 ZM_B_SAN_TXT="$(grep -F 'Verificação obrigatória de sanidade' "$ZM_B/references/07-estimativa.md")"
 printf '%s' "$ZM_B_SAN_TXT" | grep -qi 'publicada'; ZM_B_PAR_PUB=$?
-ZM_B_CHK_LINHA="$(grep -F 'estreita' "$ZM_B/references/07-estimativa.md" | grep -F '- [ ]')"
+ZM_B_CHK_LINHA="$(grep -F 'estreita' "$ZM_B/references/07-estimativa.md" | grep -F -- '- [ ]')"
 printf '%s' "$ZM_B_CHK_LINHA" | grep -qi 'decimal'; ZM_B_CHK_DEC=$?
 [ "$Z_MB_RC" -eq 0 ] && [ "$Z_MB_GEROU" -eq 0 ] && [ "$ZM_B_PAR_PUB" -ne 0 ] && [ "$ZM_B_CHK_DEC" -ne 0 ]
 afirma "z8k4b-mutante-reverte-sanidade-para-faixa-publicada-morto-por-z8k2" $? \
