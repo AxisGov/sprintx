@@ -79,7 +79,7 @@ Com a base (`base/`) e as decisões (`00-DECISOES.md`) na mão, desenhe Sprints 
 ## Passo 1.1 — Replanejar corrige a classe do defeito, não o exemplo
 
 Num retorno da F5, cada achado de `00-AUDITORIA.md` traz o item da auditoria que o gerou
-(`[item N]`) e, quando veio do `revisor-testes`, o tipo do teste fraco (`[fraco:<tipo>]`, ver
+(`[item N]`) e, quando veio do `sprintx-revisor-testes`, o tipo do teste fraco (`[fraco:<tipo>]`, ver
 `references/05-auditoria.md`). A implementação errada citada no achado é **um exemplo** do
 defeito, não o defeito inteiro.
 

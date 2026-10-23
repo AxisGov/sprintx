@@ -225,8 +225,8 @@ Os agentes de veredito têm **acesso somente de leitura**. É isso que transform
 | Agente | Fase | Ferramentas | Papel |
 |---|---|---|---|
 | `auditor-plano` | F5 | leitura | Fura o plano antes de virar código, sem ter visto o raciocínio que o gerou |
-| `revisor-testes` | F5 e F6 | leitura | Responde a uma pergunta só: esse teste passaria com a implementação errada? |
-| `investigador` | F1 (opcional) | leitura | Monta a base em contexto próprio, para não consumir o contexto principal |
+| `sprintx-revisor-testes` | F5 e F6 | leitura | Responde a uma pergunta só: esse teste passaria com a implementação errada? |
+| `sprintx-investigador` | F1 (opcional) | leitura | Monta a base em contexto próprio, para não consumir o contexto principal |
 
 Quando o agente não existe no harness em uso, a fase roda como sempre rodou — a skill nunca fica bloqueada por falta de agente.
 

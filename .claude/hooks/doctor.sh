@@ -62,7 +62,7 @@ done
 
 echo
 echo "AGENTES"
-for a in auditor-plano revisor-testes investigador; do
+for a in auditor-plano sprintx-revisor-testes sprintx-investigador; do
   cc=" "; oc=" "
   [ -f "$RAIZ/.claude/agents/$a.md" ]   && cc="x"
   [ -f "$RAIZ/.opencode/agent/$a.md" ] && oc="x"
