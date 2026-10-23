@@ -443,7 +443,7 @@ pula() { pulado=$((pulado+1)); printf '  pula %-46s SKIP INTERNO: %s\n' "$1" "$2
 pula_externo() { pulado_externo=$((pulado_externo+1)); printf '  dep  %-46s dependencia externa ausente: %s\n' "$1" "$2"; }
 
 echo "== D. frontmatter dos agentes carrega =="
-# O E2E achou o revisor-testes invisivel ao Claude Code: `description:` sem aspas
+# O E2E achou o sprintx-revisor-testes invisivel ao Claude Code: `description:` sem aspas
 # com ": " no meio e YAML invalido, e o agente some sem erro nenhum. Guarda
 # ESTRUTURAL e conservadora (awk, roda em qualquer maquina); nao e um parser YAML
 # completo. Quando ha um parser real (PyYAML), ele confere tambem, logo abaixo.
@@ -490,7 +490,7 @@ for f in "$H"/../../.opencode/agent/*.md; do
 done
 NAG=$(ls "$H"/../agents/*.md 2>/dev/null | wc -l); NOA=$(ls "$H"/../../.opencode/agent/*.md 2>/dev/null | wc -l)
 [ "$NAG" -eq 3 ] && [ "$NOA" -eq 3 ]; afirma "d1-nenhum-agente-sumiu" $? "$NAG claude, $NOA opencode (esperado 3 e 3)"
-tem "$H/../agents/revisor-testes.md" 'tools: Read, Glob, Grep'; afirma "d1-revisor-so-leitura" $? "tools de leitura preservadas"
+tem "$H/../agents/sprintx-revisor-testes.md" 'tools: Read, Glob, Grep'; afirma "d1-revisor-so-leitura" $? "tools de leitura preservadas"
 
 # D2. a guarda reconhece cada forma de cabecalho quebrado — inclusive o bug do E2E.
 AG="$W/agentes-ruins"; mkdir -p "$AG"
@@ -498,7 +498,7 @@ printf 'name: x\ndescription: y\n---\n' > "$AG/sem-inicio.md"
 printf '%s\n' '---' 'name: x' 'description: y' > "$AG/sem-fim.md"
 printf '%s\n' '---' 'description: y' '---' > "$AG/sem-name.md"
 printf '%s\n' '---' 'name: x' 'tools: Read' '---' > "$AG/sem-description.md"
-printf '%s\n' '---' 'name: revisor-testes' 'description: Responde sobre os testes de uma task: esse teste passaria?' '---' > "$AG/dois-pontos.md"
+printf '%s\n' '---' 'name: sprintx-revisor-testes' 'description: Responde sobre os testes de uma task: esse teste passaria?' '---' > "$AG/dois-pontos.md"
 printf '%s\n' '---' '---' 'corpo' > "$AG/vazio.md"
 printf '\n---\nname: x\ndescription: y\n---\n' > "$AG/linha-antes.md"
 printf '\357\273\277---\nname: x\ndescription: y\n---\n' > "$AG/bom-antes.md"
@@ -1054,7 +1054,7 @@ AUD_NAO_LEGADA='# Auditoria — velha
 
 | severidade | arquivo | problema | correção sugerida |
 |---|---|---|---|
-| ALTA | sprint-02/tasks.md | revisor-testes `fraco`: passaria com item no grupo errado | Caso por grupo |
+| ALTA | sprint-02/tasks.md | sprintx-revisor-testes `fraco`: passaria com item no grupo errado | Caso por grupo |
 | BAIXA | sprint-02/tasks.md | contagem errada | Reescrever |
 
 VEREDITO: NÃO — o plano não está pronto para execução autônoma.'
@@ -1282,7 +1282,7 @@ AUDF="$SK/references/05-auditoria.md"
 [ -z "$(grep -rlF 'a severidade é sua' "$SK" "$H/../agents" "$H/../../.opencode/agent" | grep -vF 'DECISOES-DA-SKILL.md')" ]; afirma "g-frase-severidade-e-sua-removida" $? "nenhuma sessao escolhe"
 tem "$AUDF" '| `fraco:teste` | **MÉDIA** |' && tem "$AUDF" '| `fraco:ausente` | **ALTA** |' && tem "$AUDF" '| `fraco:criterio` | **ALTA** |'
 afirma "g-f5-tabela-deterministica" $? "05-auditoria.md"
-for ag in "$H/../agents/auditor-plano.md" "$H/../agents/revisor-testes.md"; do
+for ag in "$H/../agents/auditor-plano.md" "$H/../agents/sprintx-revisor-testes.md"; do
   i_nome="g-agente-tabela-$(basename "$ag" .md)"
   grep -qE '`?(\[item 2\]\[fraco:)?teste\]?`? \| MÉDIA' "$ag" && grep -qE '`?(\[item 2\]\[fraco:)?ausente\]?`? \| ALTA' "$ag" \
     && grep -qE '`?(\[item 2\]\[fraco:)?criterio\]?`? \| ALTA' "$ag"; i_rc=$?
@@ -1310,16 +1310,16 @@ afirma "gx2-f6-endurece-antes-de-implementar" $? "obrigacao=$L_OBR < vermelho=$L
 tem "$EXEC" 'demonstre que o teste **discrimina explicitamente** a implementação errada registrada'; afirma "gx3-f6-discrimina-impl-registrada" $? "prova explicita"
 [ -n "$L_BLOQ" ] && [ "$L_BLOQ" -lt "$L_IMPL" ] && tem "$EXEC" 'e **não implemente**'
 afirma "gy-nao-discriminou-bloqueia-antes" $? "bloqueio=$L_BLOQ < impl=$L_IMPL, sem implementar"
-tem "$EXEC" '**A task não conclui se alguma delas continuar passando.**'; afirma "gy2-revisor-f6-confere-registradas" $? "revisor-testes na F6"
-tem "$H/../agents/revisor-testes.md" 'confira, lendo o teste de verdade, que **cada uma delas é discriminada**'; afirma "gy3-agente-f6-confere" $? "revisor-testes.md"
+tem "$EXEC" '**A task não conclui se alguma delas continuar passando.**'; afirma "gy2-revisor-f6-confere-registradas" $? "sprintx-revisor-testes na F6"
+tem "$H/../agents/sprintx-revisor-testes.md" 'confira, lendo o teste de verdade, que **cada uma delas é discriminada**'; afirma "gy3-agente-f6-confere" $? "sprintx-revisor-testes.md"
 
 # Z. Espelho Claude/OpenCode: mesmo corpo em todos os agentes.
 corpo_agente() { tr -d '\r' < "$1" | awk 'f && (n || $0 != "") { n = 1; print } /^---$/ { c++; if (c == 2) f = 1 }'; }
-for ag in auditor-plano revisor-testes investigador; do
+for ag in auditor-plano sprintx-revisor-testes sprintx-investigador; do
   [ "$(corpo_agente "$H/../agents/$ag.md")" = "$(corpo_agente "$H/../../.opencode/agent/$ag.md")" ]
   afirma "gz-espelho-$ag" $? "corpo identico nos dois harnesses"
 done
-EXREV="$(tr -d '\r' < "$H/../agents/revisor-testes.md" | sed -n '/^T-01.02 | solido$/,/^```$/p' | grep '^T-')"
+EXREV="$(tr -d '\r' < "$H/../agents/sprintx-revisor-testes.md" | sed -n '/^T-01.02 | solido$/,/^```$/p' | grep '^T-')"
 printf '%s\n' "$EXREV" | bash "$PL" revisor >/dev/null 2>&1; afirma "gz2-exemplos-do-agente-validos" $? "$(printf '%s\n' "$EXREV" | wc -l | tr -d ' ') linha(s) aceitas pelo script"
 
 rm -rf "$G"

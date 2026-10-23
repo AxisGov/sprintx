@@ -65,7 +65,7 @@ Chaves em `snake_case` sem acento, enums minúsculos sem acento, datas ISO, e **
 | `evento` | um dos da tabela acima |
 | `fase` | `f1`..`f6`, ou `null` |
 | `task` | `T-NN.MM`, ou `null` |
-| `agente` | `principal` \| `auditor-plano` \| `revisor-testes` \| `qa` \| `investigador` \| `cartografo` |
+| `agente` | `principal` \| `auditor-plano` \| `sprintx-revisor-testes` \| `sprintx-investigador` \| `runx-revisor-testes` \| `runx-investigador` \| `qa` \| `legadox-cartografo` \| `avaliador-de-raio` \| `stackx-cartografo` \| `revisor-diff` \| `analista-de-conflito` \| `auditor-design` \| `cartografo-visual` |
 | `resultado` | `ok` \| `falha` \| `aviso` \| `bloqueado` |
 | `detalhe` | uma linha de texto |
 | `arquivos` | lista de caminhos relativos, ou `[]` |

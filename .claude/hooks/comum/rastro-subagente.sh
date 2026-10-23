@@ -18,7 +18,7 @@ RAIZ="$(rastro_raiz "$CWD")"
 
 AGENTE="$(rastro_json_get "$ENTRADA" agent_type)"
 case "$AGENTE" in
-  auditor-plano|revisor-testes|qa|investigador|cartografo) ;;
+  principal|auditor-plano|sprintx-revisor-testes|sprintx-investigador|runx-revisor-testes|runx-investigador|qa|legadox-cartografo|avaliador-de-raio|stackx-cartografo|revisor-diff|analista-de-conflito|auditor-design|cartografo-visual) ;;
   *) AGENTE="principal" ;;
 esac
 

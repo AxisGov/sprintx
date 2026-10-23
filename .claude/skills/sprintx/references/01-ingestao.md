@@ -227,7 +227,7 @@ Decida pelo que o usuário descreveu:
 
 Se genuinamente ambíguo, trate como os dois: ingira a documentação externa E as áreas internas tocadas. No modo EXTERNO, ingira também o mínimo interno necessário (os pontos do sistema que a integração vai tocar) — uma integração nunca é só o lado de fora.
 
-## Passo 2.1 — Delegar ao agente `investigador`, ou ler direto
+## Passo 2.1 — Delegar ao agente `sprintx-investigador`, ou ler direto
 
 O agente existe para não gastar o contexto do planejamento com a leitura da base. Mas ele
 tem custo de partida: relê do zero o que a sessão principal já tem em contexto. Numa feature
@@ -238,7 +238,7 @@ candidatos a ingestão a varredura inicial encontrou**:
 
 | Candidatos à base | O que fazer |
 |---|---|
-| **3 ou mais** | delegue ao agente `investigador`, quando ele existir neste harness |
+| **3 ou mais** | delegue ao agente `sprintx-investigador`, quando ele existir neste harness |
 | 1 ou 2 | **leia direto**, você mesma, na sessão principal — o método é idêntico |
 
 Faça a varredura primeiro, conte, e só então decida. Decidir antes de varrer é palpite, e é
@@ -246,8 +246,8 @@ o que este corte existe para evitar. Na dúvida entre os dois lados — document
 extensa, cadeia de dependências que já se mostrou longa —, delegue: o custo de delegar demais
 é uma leitura repetida, e o de delegar de menos é o contexto do plano gasto antes de planejar.
 
-Este corte vale **só para o `investigador`**. Os outros agentes não têm corte por tamanho: o
-`auditor-plano` é a verificação independente da F5, e o `revisor-testes` responde uma pergunta
+Este corte vale **só para o `sprintx-investigador`**. Os outros agentes não têm corte por tamanho: o
+`auditor-plano` é a verificação independente da F5, e o `sprintx-revisor-testes` responde uma pergunta
 só e é barato mesmo na feature mínima.
 
 ## Passo 3 — Ingerir

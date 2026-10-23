@@ -171,17 +171,17 @@ Hooks e agentes **não criam regra nova** — eles garantem regras que já exist
 Os agentes de veredito têm **somente leitura**, o que transforma "aponta, não corrige" de promessa em impossibilidade técnica:
 
 <p align="center">
-  <img alt="Três agentes de veredito, somente leitura: investigador, auditor-plano e revisor-testes. Apontam, não corrigem." src=".github/assets/anim/agentes.svg" width="100%">
+  <img alt="Três agentes de veredito, somente leitura: sprintx-investigador, auditor-plano e sprintx-revisor-testes. Apontam, não corrigem." src=".github/assets/anim/agentes.svg" width="100%">
 </p>
 
 | Agente | Fase | Papel |
 |---|---|---|
 | `auditor-plano` | F5 | Fura o plano sem ter visto o raciocínio que o gerou |
-| `revisor-testes` | F5 e F6 | Esse teste passaria com a implementação errada? |
-| `investigador` | F1 (opcional) | Monta a base em contexto próprio |
+| `sprintx-revisor-testes` | F5 e F6 | Esse teste passaria com a implementação errada? |
+| `sprintx-investigador` | F1 (opcional) | Monta a base em contexto próprio |
 
 Cada agente fixa o modelo e o esforço no próprio frontmatter, em vez de herdar de quem chama:
-`auditor-plano` e `revisor-testes` em `opus`/`high`, `investigador` em `sonnet`/`medium`. É o piso do método:
+`auditor-plano` e `sprintx-revisor-testes` em `opus`/`high`, `sprintx-investigador` em `sonnet`/`medium`. É o piso do método:
 um veredito dado por um modelo mais fraco que o do autor não verifica nada. Quem precisa de outro custo
 sobrepõe no projeto, em `.expx/agentes.json` (instalação pelo `expx`; o `install.sh` manual instala o piso).
 Isto vale para o Claude Code; os agentes de `.opencode/agent/` não declaram modelo nem esforço e ficam fora desta política.
@@ -462,8 +462,8 @@ Os kinds `orquestrador`, `sprint`, `fases`, `tasks`, `bloqueios` e `base_indice`
     sprintx/                    escopo-da-task, git-perigoso, task-so-fecha-verde, tdd, placeholder
   agents/
     auditor-plano.md            F5 em contexto separado, somente leitura
-    revisor-testes.md           o teste passaria com a implementação errada?
-    investigador.md             auxiliar opcional da F1
+    sprintx-revisor-testes.md           o teste passaria com a implementação errada?
+    sprintx-investigador.md             auxiliar opcional da F1
   settings.json                 registra os hooks no Claude Code
 .expx/
   hooks.json                    o modo (aviso/bloqueio) de cada hook

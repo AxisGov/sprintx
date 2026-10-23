@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="300" viewBox="0 0 1000 300" role="img" aria-label="Três agentes de veredito, somente leitura: investigador, auditor-plano e revisor-testes. Apontam, não corrigem.">
-<title>Agentes de veredito da sprintx: investigador, auditor-plano e revisor-testes, somente leitura — apontam, não corrigem</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="300" viewBox="0 0 1000 300" role="img" aria-label="Três agentes de veredito, somente leitura: sprintx-investigador, auditor-plano e sprintx-revisor-testes. Apontam, não corrigem.">
+<title>Agentes de veredito da sprintx: sprintx-investigador, auditor-plano e sprintx-revisor-testes, somente leitura — apontam, não corrigem</title>
 <style>
 .ag-sans{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
 .ag-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace}
@@ -84,10 +84,10 @@
 <text class="ag-sans ag-h1" x="36" y="44">Agentes de veredito</text>
 <text class="ag-sans ag-sub" x="36" y="66">contexto próprio, ferramentas restritas, somente leitura</text>
 
-<!-- cartão 1 · investigador -->
+<!-- cartão 1 · sprintx-investigador -->
 <g transform="translate(36 82)">
  <rect x="0.5" y="0.5" width="289" height="169" rx="10" fill="#161b22" stroke="#30363d"/>
- <text class="ag-mono ag-name" x="28" y="42">investigador</text>
+ <text class="ag-mono ag-name" x="28" y="42">sprintx-investigador</text>
  <text class="ag-mono ag-phase" x="262" y="42" text-anchor="end">F1 · opcional</text>
  <rect x="28" y="50" width="106" height="20" rx="10" fill="#a371f7" fill-opacity="0.14" stroke="#a371f7" stroke-opacity="0.45"/>
  <text class="ag-sans ag-pill" x="81" y="64" text-anchor="middle">somente leitura</text>
@@ -139,10 +139,10 @@
  </g>
 </g>
 
-<!-- cartão 3 · revisor-testes -->
+<!-- cartão 3 · sprintx-revisor-testes -->
 <g transform="translate(674 82)">
  <rect x="0.5" y="0.5" width="289" height="169" rx="10" fill="#161b22" stroke="#30363d"/>
- <text class="ag-mono ag-name" x="28" y="42">revisor-testes</text>
+ <text class="ag-mono ag-name" x="28" y="42">sprintx-revisor-testes</text>
  <text class="ag-mono ag-phase" x="262" y="42" text-anchor="end">F5 e F6</text>
  <rect x="28" y="50" width="106" height="20" rx="10" fill="#a371f7" fill-opacity="0.14" stroke="#a371f7" stroke-opacity="0.45"/>
  <text class="ag-sans ag-pill" x="81" y="64" text-anchor="middle">somente leitura</text>

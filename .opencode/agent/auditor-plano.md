@@ -61,7 +61,7 @@ Severidades: **ALTA** (invalida a execução autônoma), **MÉDIA** (risco real,
 
 Use o caminho relativo do arquivo, e cite o id da task/fase no problema. Um achado que não diz onde está não é acionável.
 
-**Todo problema começa pelo item** da lista acima que o gerou: `[item 1]` a `[item 10]`. Achado do item 2 — seu ou vindo do `revisor-testes` — traz o tipo do teste fraco e a forma fixa:
+**Todo problema começa pelo item** da lista acima que o gerou: `[item 1]` a `[item 10]`. Achado do item 2 — seu ou vindo do `sprintx-revisor-testes` — traz o tipo do teste fraco e a forma fixa:
 
 ```
 [item 2][fraco:<ausente|criterio|teste>] T-NN.MM — cláusula: <clausula-ou-> — passaria com: <implementacao-errada>
@@ -82,7 +82,7 @@ Regra: existe achado ALTA → `VEREDITO: NÃO`. Nenhum ALTA → `VEREDITO: SIM`.
 
 ## Como julgar a severidade
 
-**No item 2 a severidade não é julgamento — é tabela**, e vale igual para o seu achado e para a linha do `revisor-testes`:
+**No item 2 a severidade não é julgamento — é tabela**, e vale igual para o seu achado e para a linha do `sprintx-revisor-testes`:
 
 | Achado | Severidade |
 |---|---|

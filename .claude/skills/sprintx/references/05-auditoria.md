@@ -14,11 +14,11 @@ Você está na F5. Você agora é AUDITORA do plano, não autora. Você NÃO cor
 
 O `auditor-plano` tem **somente ferramentas de leitura**. É isso que torna "aponta, não corrige" impossível de violar — não uma promessa, uma impossibilidade técnica.
 
-Passe a ele o caminho da feature e peça a tabela de achados e o veredito, no formato do Passo 4. Acione também o agente `revisor-testes` sobre as tasks: ele responde à pergunta que mais escapa — *esse teste passaria mesmo com a implementação errada?* — e devolve uma linha por task no formato determinístico abaixo. Todo `fraco` vira um achado da tabela (item 2 da lista do Passo 3), com a severidade que a tabela "Severidade determinística do item 2" fixa — **nenhuma sessão escolhe essa severidade**.
+Passe a ele o caminho da feature e peça a tabela de achados e o veredito, no formato do Passo 4. Acione também o agente `sprintx-revisor-testes` sobre as tasks: ele responde à pergunta que mais escapa — *esse teste passaria mesmo com a implementação errada?* — e devolve uma linha por task no formato determinístico abaixo. Todo `fraco` vira um achado da tabela (item 2 da lista do Passo 3), com a severidade que a tabela "Severidade determinística do item 2" fixa — **nenhuma sessão escolhe essa severidade**.
 
 ## Passo 1.0 — O pedido neutro
 
-O que você manda ao `auditor-plano` e ao `revisor-testes` faz parte da independência deles, tanto quanto o contexto separado. Um pedido que carrega as suas hipóteses sobre o que "estaria errado" faz o agente confirmar a hipótese em vez de julgar o que está escrito.
+O que você manda ao `auditor-plano` e ao `sprintx-revisor-testes` faz parte da independência deles, tanto quanto o contexto separado. Um pedido que carrega as suas hipóteses sobre o que "estaria errado" faz o agente confirmar a hipótese em vez de julgar o que está escrito.
 
 O pedido tem **quatro campos, e só eles**:
 
@@ -35,7 +35,7 @@ Na F6 há um quinto campo, que não é hipótese sua: `Obrigações da F5:`, as 
 
 ## Passo 1.1 — O teste fraco tipado
 
-O `revisor-testes` responde, por task, exatamente uma destas formas:
+O `sprintx-revisor-testes` responde, por task, exatamente uma destas formas:
 
 ```
 T-NN.MM | solido
@@ -68,7 +68,7 @@ bash <raiz-da-skill>/scripts/planejamento.sh revisor < saida-do-revisor.txt
 | `fraco:criterio` | **ALTA** |
 | `fraco:teste` | **MÉDIA** |
 
-Vale igualmente para a linha do `revisor-testes` **e** para o achado equivalente que o
+Vale igualmente para a linha do `sprintx-revisor-testes` **e** para o achado equivalente que o
 `auditor-plano` fizer por conta própria no item 2: todo achado do item 2 carrega o tipo, e o tipo
 decide a severidade (`scripts/planejamento.sh severidade <tipo>`). Ninguém infla nem deflaciona.
 

@@ -25,7 +25,7 @@
 #   planejamento.sh valida-auditoria <slug>
 #   planejamento.sh obrigacoes-f6 <slug>
 #   planejamento.sh severidade ausente|criterio|teste
-#   planejamento.sh revisor            (linhas do revisor-testes no stdin)
+#   planejamento.sh revisor            (linhas do sprintx-revisor-testes no stdin)
 #
 # Saida: linhas chave=valor no stdout; motivo de erro no stderr.
 #
@@ -1931,7 +1931,7 @@ cmd_severidade() {
   printf '\n'
 }
 
-# revisor — normaliza a saida do revisor-testes. Entrada, uma por task:
+# revisor — normaliza a saida do sprintx-revisor-testes. Entrada, uma por task:
 #   T-NN.MM | solido
 #   T-NN.MM | fraco | <ausente|criterio|teste> | <clausula-ou-> | <implementacao-errada>
 # Saida: T-NN.MM TAB solido
