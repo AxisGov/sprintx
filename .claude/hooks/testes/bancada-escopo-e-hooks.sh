@@ -509,7 +509,7 @@ copia_skill_m() {
   local d="$MS/mut/$1"; rm -rf "$d"; mkdir -p "$d/scripts/lib" "$d/assets"
   cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$d/assets/"
   cp "$SK/scripts/planejamento.sh" "$SK/scripts/bloqueios.sh" "$SK/scripts/caminho-git.sh" "$d/scripts/"
-  cp "$SK/scripts/lib/trava-autorizacao-f6.sh" "$d/scripts/lib/"
+  cp "$SK/scripts/lib/trava-autorizacao-f6.sh" "$SK/scripts/lib/execucao.sh" "$d/scripts/lib/"
   printf '%s' "$d"
 }
 m_troca() { muta_lit "$1" "$1.m" "$2" "$3" && mv "$1.m" "$1"; }
@@ -1476,7 +1476,7 @@ afirma "p11-segredo-mesma-lista-do-hook" $? "planejamento.sh e comum/segredo.sh"
 # Mutantes do S3-A, em copia da skill (como na K). Cada um morre pelo caso designado; o
 # controle, copia sem mutacao, sobrevive a todos.
 MP="$P/mut"
-copia_skill_p() { mkdir -p "$MP/$1/scripts/lib" "$MP/$1/assets"; cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$MP/$1/assets/"; cp "$BL" "$SK/scripts/caminho-git.sh" "$MP/$1/scripts/"; cp "$SK/scripts/lib/trava-autorizacao-f6.sh" "$MP/$1/scripts/lib/"; printf '%s/%s/scripts/planejamento.sh' "$MP" "$1"; }
+copia_skill_p() { mkdir -p "$MP/$1/scripts/lib" "$MP/$1/assets"; cp "$SK/assets/TEMPLATE-PLANEJAMENTO.md" "$SK/assets/TEMPLATE-BLOQUEIOS.md" "$MP/$1/assets/"; cp "$BL" "$SK/scripts/caminho-git.sh" "$MP/$1/scripts/"; cp "$SK/scripts/lib/trava-autorizacao-f6.sh" "$SK/scripts/lib/execucao.sh" "$MP/$1/scripts/lib/"; printf '%s/%s/scripts/planejamento.sh' "$MP" "$1"; }
 mutante_p() { # mutante_p <nome> <rc da geracao> <script> <caso que TEM de matar>...
   local nome="$1" rc="$2" s="$3" c vivos=""; shift 3
   if [ "$rc" -eq 0 ]; then for c in "$@"; do roda_p "$c" "$s" && vivos="$vivos$c "; done; fi

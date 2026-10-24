@@ -54,6 +54,7 @@ uso() {
 }
 
 . "$SK/scripts/caminho-git.sh" || falha "$E_AMBIENTE" "scripts/caminho-git.sh ausente"
+. "$SK/scripts/lib/execucao.sh" || falha "$E_AMBIENTE" "scripts/lib/execucao.sh ausente"
 
 resolve_raiz() {
   if [ -n "${SPRINTX_RAIZ:-}" ]; then printf '%s' "$SPRINTX_RAIZ"; return; fi
@@ -140,6 +141,11 @@ elif [ "$EXIGE_IDENTIDADE" = 1 ]; then
 else
   EXTRAS='"sessao":null,"harness":null'
 fi
+# O snapshot do executor (DS-186). O harness sai da mesma derivacao da identidade, mesmo
+# quando a identidade em si nao e estavel: ele so decide se o frontmatter Claude se aplica.
+rastro_harness_em HARNESS_EXEC
+execucao_extras_em EXECUCAO "$RAIZ" "$RASTRO_AGENTE" "$HARNESS_EXEC"
+EXTRAS="$EXTRAS,$EXECUCAO"
 
 # ------------------------------------------------------------ fechar e do dono
 # `task_concluida` e `task_bloqueada` SAO, para toda leitura do rastro, o fechamento da

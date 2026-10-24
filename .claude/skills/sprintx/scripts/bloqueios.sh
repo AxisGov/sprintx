@@ -48,6 +48,7 @@ CLASSES="defeito_de_plano lacuna_de_decisao prerequisito_ausente suite_vermelha 
 falha() { local c="$1"; shift; printf 'bloqueios: %s\n' "$*" >&2; exit "$c"; }
 
 . "$SK/scripts/caminho-git.sh" || falha "$E_USO" "scripts/caminho-git.sh ausente"
+. "$SK/scripts/lib/execucao.sh" || falha "$E_USO" "scripts/lib/execucao.sh ausente"
 
 resolve_raiz() {
   if [ -n "${SPRINTX_RAIZ:-}" ]; then printf '%s' "$SPRINTX_RAIZ"; return; fi
@@ -72,13 +73,15 @@ json_esc() {
 
 # evento <evento> <task|null> <resultado> <detalhe> — contrato expx-eventos v1,
 # append-only, falha aberta: o rastro nunca derruba a gravacao do bloqueio.
+# A linha e sempre do principal; model/effort registram o executor (DS-186).
 evento() {
-  local task="null" dir="$RAIZ/docs/eventos"
+  local task="null" dir="$RAIZ/docs/eventos" execucao
   [ "$2" != null ] && [ "$2" != "-" ] && task="\"$2\""
+  execucao_extras_em execucao "$RAIZ" principal ""
   {
     mkdir -p "$dir" || return 0
-    printf '{"ts":"%s","expx_eventos":1,"trabalho_id":"%s","ferramenta":"sprintx","origem":"skill","evento":"%s","fase":null,"task":%s,"agente":"principal","resultado":"%s","detalhe":"%s","arquivos":["docs/sprintx/features/%s/00-BLOQUEIOS.md"]}\n' \
-      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SLUG" "$1" "$task" "$3" "$(json_esc "$4")" "$SLUG" >> "$dir/$SLUG.jsonl"
+    printf '{"ts":"%s","expx_eventos":1,"trabalho_id":"%s","ferramenta":"sprintx","origem":"skill","evento":"%s","fase":null,"task":%s,"agente":"principal","resultado":"%s","detalhe":"%s","arquivos":["docs/sprintx/features/%s/00-BLOQUEIOS.md"],%s}\n' \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SLUG" "$1" "$task" "$3" "$(json_esc "$4")" "$SLUG" "$execucao" >> "$dir/$SLUG.jsonl"
   } 2>/dev/null || true
   return 0
 }
