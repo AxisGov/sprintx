@@ -161,10 +161,17 @@ ag_cut_em_codigo() { # usos de `cut -c` em CODIGO de hook (comentario que o cita
   grep -rn 'cut -c' "$H/comum" "$H/sprintx" 2>/dev/null | sed 's/^[^:]*:[0-9]*://' | grep -v '^[[:space:]]*#'
 }
 AG_CUT="$(ag_cut_em_codigo)"; AG_CUT="${AG_CUT//$'\n'/ | }"
-AG_ROTA_CC="$(conta "$H/../settings.json" 'comum/rastro-post.sh')"
-AG_ROTA_OC="$(conta "$H/../../.opencode/plugin/sprintx.ts" 'comum/rastro-post.sh')"
-[ -z "$AG_CUT" ] && [ "$AG_ROTA_CC" -eq 1 ] && [ "$AG_ROTA_OC" -eq 1 ]; AG_RC=$?
-afirma "ag13-rotas-compartilham-o-mesmo-hook" "$AG_RC" "rotas para comum/rastro-post.sh: claude-code=$AG_ROTA_CC opencode=$AG_ROTA_OC; cut -c em codigo de hook: ${AG_CUT:-nenhum}"
+# As rotas sao as da fonte (settings.json e plugin do OpenCode): sem ela, dependencia externa.
+# A aspa de fechamento ancora o nome: `comum/rastro-post.sh.disabled` nao conta como rota.
+if [ -n "$RAIZ_SRC" ]; then
+  AG_ROTA_CC="$(conta "$RAIZ_SRC/.claude/settings.json" 'comum/rastro-post.sh"')"
+  AG_ROTA_OC="$(conta "$RAIZ_SRC/.opencode/plugin/sprintx.ts" 'comum/rastro-post.sh"')"
+  [ -z "$AG_CUT" ] && [ "$AG_ROTA_CC" -eq 1 ] && [ "$AG_ROTA_OC" -eq 1 ]; AG_RC=$?
+  afirma "ag13-rotas-compartilham-o-mesmo-hook" "$AG_RC" "rotas para comum/rastro-post.sh: claude-code=$AG_ROTA_CC opencode=$AG_ROTA_OC; cut -c em codigo de hook: ${AG_CUT:-nenhum}"
+else
+  [ -z "$AG_CUT" ]; afirma "ag13-sem-cut-c-em-codigo-de-hook" $? "cut -c em codigo de hook: ${AG_CUT:-nenhum}"
+  pula_externo "ag13-rotas-compartilham-o-mesmo-hook" "$SEM_FONTE"
+fi
 rm -rf "$AG_T"
 
 echo "== AH. serializacao do rastro: todo controle JSON escapado, marcador sem colisao, falha de escrita nao mascarada (PR#12) =="
@@ -812,6 +819,8 @@ ai_nome() {
   esac
 }
 AI_REAL="$(cd "$H/../.." && pwd)"
+# Sem a fonte, a arvore "real" e o layout instalado materializado de $H e $SK.
+[ -n "$RAIZ_SRC" ] || AI_REAL="$(ai_arvore instalada)"
 for ai_c in $AI_CASOS; do
   ai_nm="$(ai_nome "$ai_c")"; "$ai_c" "$AI_REAL" >/dev/null 2>&1; ai_rc=$?
   afirma "$ai_nm" "$ai_rc" "arvore do repositorio"

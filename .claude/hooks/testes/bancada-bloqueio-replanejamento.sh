@@ -1532,7 +1532,7 @@ tr -d '\r' < "$SCHK" | grep -F '| `estado` (planejamento) |' | grep -qF '`replan
   && tem "$SCHK" '**Erro de contrato nunca vira esta recusa**' && tem "$EXEC" 'recusa **operacional**, gravada e persistida'
 afirma "k18-estado-replanejamento_execucao_recusado-no-enum" $? "schema, SKILL.md, 06-execucao e script"
 KCMD="$CMD_PL replanejar-execucao <slug>"
-onde="$(grep -rlF -- "$KCMD" "$SK" "$H/../commands" "$H/../../.opencode" 2>/dev/null)"
+onde="$(grep -rlF -- "$KCMD" "$SK" "$H/../commands" ${RAIZ_SRC:+"$RAIZ_SRC/.opencode"} 2>/dev/null)"
 [ "$(printf '%s\n' "$onde" | sed '/^$/d' | wc -l | tr -d ' ')" -eq 1 ] && [ "$(basename "$onde")" = 06-execucao.md ] && [ "$(conta "$EXEC" "$KCMD")" -eq 1 ]
 afirma "k19-instrucao-unica-replanejar-execucao" $? "${onde:-nenhum arquivo}"
 L_REG=$(linha_de "$EXEC" 'bash <raiz-da-skill>/scripts/bloqueios.sh registrar <slug>'); L_RPL=$(linha_de "$EXEC" "$KCMD")

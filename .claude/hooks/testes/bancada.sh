@@ -251,6 +251,9 @@ echo "== contrato sprintx x mergex (F6) =="
 # Asserts textuais sobre o contrato de integracao. Sem python3 e sem rede: so
 # leitura dos arquivos da skill, para que o caso rode em qualquer maquina.
 SK="$H/../skills/sprintx"
+# A fonte da sprintx (RAIZ_SRC), vazia quando a bancada esta instalada: os casos que leem
+# artefatos que so existem no repositorio (agentes, espelho do OpenCode) viram dependencia externa.
+. "$H/testes/fonte.sh"
 EXEC="$SK/references/06-execucao.md"
 SKILLMD="$SK/SKILL.md"
 
@@ -258,6 +261,15 @@ afirma() { # afirma <nome> <condicao-ja-avaliada:0|1> <detalhe>
   if [ "$2" -eq 0 ]; then ok=$((ok+1)); printf '  ok   %-46s %s\n' "$1" "$3"
   else falhou=$((falhou+1)); printf '  FALHA %-45s %s\n' "$1" "$3"; fi
 }
+# Dois contadores, deliberadamente separados — misturar os dois esconde o que
+# importa. `pula` e SKIP INTERNO: caso que a logica da sprintx deixou de
+# cobrir nesta plataforma. A base candidata fecha com zero, e o proprio
+# script cobra isso no fim. `pula_externo` e dependencia externa ausente
+# (outro repositorio, outro pacote): nao e buraco de cobertura da sprintx.
+# Definidos junto do `afirma`: um caso de qualquer secao pode precisar deles.
+pulado=0; pulado_externo=0
+pula() { pulado=$((pulado+1)); printf '  pula %-46s SKIP INTERNO: %s\n' "$1" "$2"; }
+pula_externo() { pulado_externo=$((pulado_externo+1)); printf '  dep  %-46s dependencia externa ausente: %s\n' "$1" "$2"; }
 tem() { grep -qF "$2" "$1"; }          # substring literal
 conta() { grep -cF "$2" "$1"; }
 linha_de() { grep -nF "$2" "$1" | head -1 | cut -d: -f1; }
@@ -430,17 +442,12 @@ tem "$DIAG" 'Sprint condensada não tem diagrama'; afirma "c22b-diagrama-documen
 tem "$SCHEMA" 'continuam válidos e não são descontinuados'; afirma "c23-tres-arquivos-vivos" $? "nenhum formato descontinuado"
 tem "$EXEC" 'fechar sprint atualiza `sprint.md`'; afirma "c23b-f6-tres-arquivos" $? "caminho dos tres arquivos preservado"
 tem "$EST" 'ou três arquivos'; afirma "c-f35-aceita-os-dois" $? "F3.5 tambem resolve"
-AGENTE=$(grep -lF 'kind: plano' "$H/../agents/auditor-plano.md" "$H/../../.opencode/agent/auditor-plano.md" 2>/dev/null | wc -l)
-[ "$AGENTE" -eq 2 ]; afirma "c-agente-nos-dois-harnesses" $? "$AGENTE/2 espelhos do auditor corrigidos"
-
-# Dois contadores, deliberadamente separados — misturar os dois esconde o que
-# importa. `pula` e SKIP INTERNO: caso que a logica da sprintx deixou de
-# cobrir nesta plataforma. A base candidata fecha com zero, e o proprio
-# script cobra isso no fim. `pula_externo` e dependencia externa ausente
-# (outro repositorio, outro pacote): nao e buraco de cobertura da sprintx.
-pulado=0; pulado_externo=0
-pula() { pulado=$((pulado+1)); printf '  pula %-46s SKIP INTERNO: %s\n' "$1" "$2"; }
-pula_externo() { pulado_externo=$((pulado_externo+1)); printf '  dep  %-46s dependencia externa ausente: %s\n' "$1" "$2"; }
+if [ -n "$RAIZ_SRC" ]; then
+  AGENTE=$(grep -lF 'kind: plano' "$H/../agents/auditor-plano.md" "$H/../../.opencode/agent/auditor-plano.md" 2>/dev/null | wc -l)
+  [ "$AGENTE" -eq 2 ]; afirma "c-agente-nos-dois-harnesses" $? "$AGENTE/2 espelhos do auditor corrigidos"
+else
+  pula_externo "c-agente-nos-dois-harnesses" "$SEM_FONTE"
+fi
 
 echo "== D. frontmatter dos agentes carrega =="
 # O E2E achou o sprintx-revisor-testes invisivel ao Claude Code: `description:` sem aspas
@@ -481,7 +488,10 @@ valida_frontmatter() { # valida_frontmatter <arquivo> <exige_name:1|0> -> motivo
 }
 
 # D1. todo agente real dos dois harnesses passa. Claude Code exige `name`;
-# o OpenCode tira o nome do arquivo e so exige `description`.
+# o OpenCode tira o nome do arquivo e so exige `description`. Os agentes sao os da fonte.
+if [ -z "$RAIZ_SRC" ]; then
+  pula_externo "d1-agentes-da-fonte" "$SEM_FONTE"
+else
 for f in "$H"/../agents/*.md; do
   motivo="$(valida_frontmatter "$f" 1)"; rc=$?; afirma "d1-claude-$(basename "$f" .md)" "$rc" "${motivo:-frontmatter valido}"
 done
@@ -491,6 +501,7 @@ done
 NAG=$(ls "$H"/../agents/*.md 2>/dev/null | wc -l); NOA=$(ls "$H"/../../.opencode/agent/*.md 2>/dev/null | wc -l)
 [ "$NAG" -eq 3 ] && [ "$NOA" -eq 3 ]; afirma "d1-nenhum-agente-sumiu" $? "$NAG claude, $NOA opencode (esperado 3 e 3)"
 tem "$H/../agents/sprintx-revisor-testes.md" 'tools: Read, Glob, Grep'; afirma "d1-revisor-so-leitura" $? "tools de leitura preservadas"
+fi
 
 # D2. a guarda reconhece cada forma de cabecalho quebrado — inclusive o bug do E2E.
 AG="$W/agentes-ruins"; mkdir -p "$AG"
@@ -525,9 +536,13 @@ d = yaml.safe_load(t[4:].split('\n---', 1)[0])
 sys.exit(0 if isinstance(d, dict) and d.get('description') else 1)
 PY
   }
-  for f in "$H"/../agents/*.md "$H"/../../.opencode/agent/*.md; do
-    yaml_ok "$f"; rc=$?; afirma "d3-yaml-$(basename "$(dirname "$f")")-$(basename "$f" .md)" "$rc" "PyYAML ($PYY) carrega"
-  done
+  if [ -n "$RAIZ_SRC" ]; then
+    for f in "$H"/../agents/*.md "$H"/../../.opencode/agent/*.md; do
+      yaml_ok "$f"; rc=$?; afirma "d3-yaml-$(basename "$(dirname "$f")")-$(basename "$f" .md)" "$rc" "PyYAML ($PYY) carrega"
+    done
+  else
+    pula_externo "d3-yaml-agentes-da-fonte" "$SEM_FONTE"
+  fi
   yaml_ok "$AG/dois-pontos.md"; [ $? -ne 0 ]; afirma "d3-yaml-confirma-bug-e2e" $? "PyYAML tambem rejeita o caso do E2E"
 else
   pula_externo "d3-yaml-real" "PyYAML (python3); so a guarda estrutural rodou"
@@ -1183,7 +1198,7 @@ done
 for inst in "criar <slug>:01-ingestao" "avanca <slug> f2:02-descoberta" "avanca <slug> f3:03-plano" "avanca <slug> f4:04-orquestrador" \
   "avanca <slug> f5:05-auditoria" "checkpoint <slug>:02-descoberta" "obrigacoes-f6 <slug>:06-execucao"; do
   h_nome="gh-instrucao-unica-$(printf '%s' "${inst%%:*}" | tr -c 'a-z0-9' '_' | sed 's/_*$//')"
-  onde="$(grep -rlF -- "$CMD_PL ${inst%%:*}" "$SK" "$H/../commands" "$H/../../.opencode" 2>/dev/null)"
+  onde="$(grep -rlF -- "$CMD_PL ${inst%%:*}" "$SK" "$H/../commands" ${RAIZ_SRC:+"$RAIZ_SRC/.opencode"} 2>/dev/null)"
   [ "$(printf '%s\n' "$onde" | sed '/^$/d' | wc -l | tr -d ' ')" -eq 1 ] && [ "$(basename "$onde")" = "${inst##*:}.md" ]; h_rc=$?
   afirma "$h_nome" "$h_rc" "${onde:-nenhum arquivo}"
 done
@@ -1279,10 +1294,11 @@ aud_linha '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: 
 pl "$D" avanca menu f5 >/dev/null; rc=$?
 [ "$rc" -eq 4 ] && [ "$(fmv "$F/00-PLANEJAMENTO.md" estado)" = aguardando_f5 ]; afirma "g-auditoria-invalida-nao-registra-rodada" $? "rc=$rc, estado aguardando_f5"
 AUDF="$SK/references/05-auditoria.md"
-[ -z "$(grep -rlF 'a severidade é sua' "$SK" "$H/../agents" "$H/../../.opencode/agent" | grep -vF 'DECISOES-DA-SKILL.md')" ]; afirma "g-frase-severidade-e-sua-removida" $? "nenhuma sessao escolhe"
+[ -z "$(grep -rlF 'a severidade é sua' "$SK" ${RAIZ_SRC:+"$H/../agents" "$H/../../.opencode/agent"} | grep -vF 'DECISOES-DA-SKILL.md')" ]; afirma "g-frase-severidade-e-sua-removida" $? "nenhuma sessao escolhe"
 tem "$AUDF" '| `fraco:teste` | **MÉDIA** |' && tem "$AUDF" '| `fraco:ausente` | **ALTA** |' && tem "$AUDF" '| `fraco:criterio` | **ALTA** |'
 afirma "g-f5-tabela-deterministica" $? "05-auditoria.md"
-for ag in "$H/../agents/auditor-plano.md" "$H/../agents/sprintx-revisor-testes.md"; do
+[ -n "$RAIZ_SRC" ] || pula_externo "g-agente-tabela-da-fonte" "$SEM_FONTE"
+for ag in ${RAIZ_SRC:+"$H/../agents/auditor-plano.md" "$H/../agents/sprintx-revisor-testes.md"}; do
   i_nome="g-agente-tabela-$(basename "$ag" .md)"
   grep -qE '`?(\[item 2\]\[fraco:)?teste\]?`? \| MÉDIA' "$ag" && grep -qE '`?(\[item 2\]\[fraco:)?ausente\]?`? \| ALTA' "$ag" \
     && grep -qE '`?(\[item 2\]\[fraco:)?criterio\]?`? \| ALTA' "$ag"; i_rc=$?
@@ -1311,16 +1327,23 @@ tem "$EXEC" 'demonstre que o teste **discrimina explicitamente** a implementaç�
 [ -n "$L_BLOQ" ] && [ "$L_BLOQ" -lt "$L_IMPL" ] && tem "$EXEC" 'e **não implemente**'
 afirma "gy-nao-discriminou-bloqueia-antes" $? "bloqueio=$L_BLOQ < impl=$L_IMPL, sem implementar"
 tem "$EXEC" '**A task não conclui se alguma delas continuar passando.**'; afirma "gy2-revisor-f6-confere-registradas" $? "sprintx-revisor-testes na F6"
-tem "$H/../agents/sprintx-revisor-testes.md" 'confira, lendo o teste de verdade, que **cada uma delas é discriminada**'; afirma "gy3-agente-f6-confere" $? "sprintx-revisor-testes.md"
+if [ -n "$RAIZ_SRC" ]; then
+  tem "$H/../agents/sprintx-revisor-testes.md" 'confira, lendo o teste de verdade, que **cada uma delas é discriminada**'; afirma "gy3-agente-f6-confere" $? "sprintx-revisor-testes.md"
+else
+  pula_externo "gy3-agente-f6-confere" "$SEM_FONTE"
+fi
 
 # Z. Espelho Claude/OpenCode: mesmo corpo em todos os agentes.
 corpo_agente() { tr -d '\r' < "$1" | awk 'f && (n || $0 != "") { n = 1; print } /^---$/ { c++; if (c == 2) f = 1 }'; }
-for ag in auditor-plano sprintx-revisor-testes sprintx-investigador; do
+[ -n "$RAIZ_SRC" ] || pula_externo "gz-espelho-e-exemplos-dos-agentes" "$SEM_FONTE"
+for ag in ${RAIZ_SRC:+auditor-plano sprintx-revisor-testes sprintx-investigador}; do
   [ "$(corpo_agente "$H/../agents/$ag.md")" = "$(corpo_agente "$H/../../.opencode/agent/$ag.md")" ]
   afirma "gz-espelho-$ag" $? "corpo identico nos dois harnesses"
 done
-EXREV="$(tr -d '\r' < "$H/../agents/sprintx-revisor-testes.md" | sed -n '/^T-01.02 | solido$/,/^```$/p' | grep '^T-')"
-printf '%s\n' "$EXREV" | bash "$PL" revisor >/dev/null 2>&1; afirma "gz2-exemplos-do-agente-validos" $? "$(printf '%s\n' "$EXREV" | wc -l | tr -d ' ') linha(s) aceitas pelo script"
+if [ -n "$RAIZ_SRC" ]; then
+  EXREV="$(tr -d '\r' < "$H/../agents/sprintx-revisor-testes.md" | sed -n '/^T-01.02 | solido$/,/^```$/p' | grep '^T-')"
+  printf '%s\n' "$EXREV" | bash "$PL" revisor >/dev/null 2>&1; afirma "gz2-exemplos-do-agente-validos" $? "$(printf '%s\n' "$EXREV" | wc -l | tr -d ' ') linha(s) aceitas pelo script"
+fi
 
 rm -rf "$G"
 
@@ -1621,6 +1644,8 @@ u_nome() {
     u_tr) echo "utr-verificador-de-transcrito-do-agente" ;;
   esac
 }
+# Sem a fonte, a arvore "real" e o layout instalado materializado de $H e $SK.
+[ -n "$RAIZ_SRC" ] || U_REAL="$(u_arvore instalada)"
 for c in $U_CASOS; do u_nm="$(u_nome "$c")"; "$c" "$U_REAL" >/dev/null 2>&1; u_rc=$?
   afirma "$u_nm" "$u_rc" "arvore do repositorio"; done
 

@@ -329,7 +329,7 @@ Y_TPL="$SK/assets/TEMPLATE-HISTORICO.md"
 Y_SCH="$SK/references/00-schema.md"
 Y_EST="$SK/references/07-estimativa.md"
 Y_DS="$SK/DECISOES-DA-SKILL.md"
-Y_RME="$H/../../README.md"
+Y_RME="${RAIZ_SRC:+$RAIZ_SRC/README.md}"  # o README da vitrine nao e instalado com a skill
 
 # Os pontos que DEFINEM o agregador, e o conjunto maior onde a regra oposta nao pode reaparecer.
 Y_DEFINEM="$Y_EXE $Y_RAS $Y_TPL $Y_SCH $Y_EST"

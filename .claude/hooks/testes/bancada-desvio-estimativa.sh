@@ -313,7 +313,7 @@ rm -rf "$ABW"
 
 # 15. E a vitrine e a SKILL.md tambem nao carregam o simbolo colidente: sao os lugares de onde a
 #     proxima sessao reconstroi o vocabulario errado sem nunca abrir uma reference.
-AB_VITRINE="$(grep -rlF 'desvio_task' "$H/../../README.md" "$SK/SKILL.md" 2>/dev/null | tr '\n' ' ')"
+AB_VITRINE="$(grep -rlF 'desvio_task' ${RAIZ_SRC:+"$RAIZ_SRC/README.md"} "$SK/SKILL.md" 2>/dev/null | tr '\n' ' ')"
 [ -z "$AB_VITRINE" ]; ab_rc=$?
 afirma "ab-vitrine-sem-o-simbolo-colidente" "$ab_rc" "arquivos com o simbolo antigo=[${AB_VITRINE:-nenhum}]"
 
