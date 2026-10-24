@@ -13,7 +13,7 @@ O painel apenas LÊ. Esta skill continua sendo a única a escrever.
 
 O `expx-schema v1` é compartilhado com a [`runx`](https://github.com/AxisGov/runx), a metade Run do
 método Expx (ocorrências em produção, estágios E1–E5). Os kinds `orquestrador`, `sprint`, `fases`,
-`tasks`, `bloqueios` e `base_indice` existem nas duas skills com os mesmos campos e os mesmos enums;
+`tasks`, `plano`, `bloqueios` e `base_indice` existem nas duas skills com os mesmos campos e os mesmos enums;
 `expx_tool` (`sprintx` | `runx`) diz qual das duas gravou o arquivo, e é por isso que o enum tem os
 dois valores. A runx acrescenta na task o campo `teste_regressao` (prova o comportamento errado antes
 do fix) e tem kinds próprios do ciclo dela (`ocorrencia`, `causa_raiz`, `qa`, `relatorio_tecnico`,
