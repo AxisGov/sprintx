@@ -162,9 +162,10 @@ ag_cut_em_codigo() { # usos de `cut -c` em CODIGO de hook (comentario que o cita
 }
 AG_CUT="$(ag_cut_em_codigo)"; AG_CUT="${AG_CUT//$'\n'/ | }"
 # As rotas sao as da fonte (settings.json e plugin do OpenCode): sem ela, dependencia externa.
+# A aspa de fechamento ancora o nome: `comum/rastro-post.sh.disabled` nao conta como rota.
 if [ -n "$RAIZ_SRC" ]; then
-  AG_ROTA_CC="$(conta "$RAIZ_SRC/.claude/settings.json" 'comum/rastro-post.sh')"
-  AG_ROTA_OC="$(conta "$RAIZ_SRC/.opencode/plugin/sprintx.ts" 'comum/rastro-post.sh')"
+  AG_ROTA_CC="$(conta "$RAIZ_SRC/.claude/settings.json" 'comum/rastro-post.sh"')"
+  AG_ROTA_OC="$(conta "$RAIZ_SRC/.opencode/plugin/sprintx.ts" 'comum/rastro-post.sh"')"
   [ -z "$AG_CUT" ] && [ "$AG_ROTA_CC" -eq 1 ] && [ "$AG_ROTA_OC" -eq 1 ]; AG_RC=$?
   afirma "ag13-rotas-compartilham-o-mesmo-hook" "$AG_RC" "rotas para comum/rastro-post.sh: claude-code=$AG_ROTA_CC opencode=$AG_ROTA_OC; cut -c em codigo de hook: ${AG_CUT:-nenhum}"
 else
