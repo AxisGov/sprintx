@@ -1931,6 +1931,9 @@ PRE_SUITE="$H/../../scripts/ci/test-predecessores.sh"
 if [ -f "$PRE_SUITE" ]; then
   bash "$PRE_SUITE" todos
   afirma "predecessores-suite-dedicada" $? "scripts/ci/test-predecessores.sh todos"
+elif [ -z "$RAIZ_SRC" ]; then
+  # a suite dedicada mora em scripts/ci/ do repositorio, fora do que a skill instala
+  pula_externo "predecessores-suite-dedicada" "$SEM_FONTE"
 else
   afirma "predecessores-suite-dedicada" 1 "suite ausente: $PRE_SUITE"
 fi
