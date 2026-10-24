@@ -13,7 +13,7 @@ O painel apenas LÊ. Esta skill continua sendo a única a escrever.
 
 O `expx-schema v1` é compartilhado com a [`runx`](https://github.com/AxisGov/runx), a metade Run do
 método Expx (ocorrências em produção, estágios E1–E5). Os kinds `orquestrador`, `sprint`, `fases`,
-`tasks`, `bloqueios` e `base_indice` existem nas duas skills com os mesmos campos e os mesmos enums;
+`tasks`, `plano`, `bloqueios` e `base_indice` existem nas duas skills com os mesmos campos e os mesmos enums;
 `expx_tool` (`sprintx` | `runx`) diz qual das duas gravou o arquivo, e é por isso que o enum tem os
 dois valores. A runx acrescenta na task o campo `teste_regressao` (prova o comportamento errado antes
 do fix) e tem kinds próprios do ciclo dela (`ocorrencia`, `causa_raiz`, `qa`, `relatorio_tecnico`,
@@ -197,6 +197,14 @@ O arquivo mais importante. Cada task do plano vira um item da lista `tasks:`, co
 EXATAMENTE os mesmos campos do Contrato da Task do `SKILL.md` — nenhum a mais, nenhum a
 menos — acrescidos apenas dos três campos de execução (`concluida_em`, `suite`) e do
 vínculo com a fase (`fase`).
+
+**Campos de extensão de task.** A única exceção ao "nenhum a mais" são os campos de task
+que uma camada **instalada e ativa** declara no próprio schema — hoje, `design_refs` e
+`tom_estetico`, da designx (`references/06-schema.md` dela). Eles só aparecem com a
+camada ativa, nunca substituem nem renomeiam campo do contrato, e valem igual nos
+kinds `tasks` e `plano`. Quem lê o plano preserva a chave como veio; campo que nenhuma
+camada instalada e ativa declara continua proibido, inclusive o de uma camada instalada
+mas inativa. A regra é a mesma na sprintx e na runx.
 
 ```yaml
 ---
