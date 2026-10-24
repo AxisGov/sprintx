@@ -105,13 +105,13 @@ w_path_sem_jq() {
   local d f espelho novo="" i=0 IFS=:
   for d in $PATH; do
     [ -n "$d" ] || continue
-    if [ -x "$d/jq" ]; then
+    if [ -x "$d/jq" ] || [ -x "$d/jq.exe" ]; then
       i=$((i+1)); espelho="$W_DIR/bin$i"
       if [ ! -d "$espelho" ]; then
         mkdir -p "$espelho"
         for f in "$d"/*; do
           [ -e "$f" ] || continue
-          [ "${f##*/}" = jq ] && continue
+          case "${f##*/}" in jq|jq.exe) continue ;; esac  # Git Bash: jq.exe
           ln -sf "$f" "$espelho/${f##*/}" 2>/dev/null
         done
       fi
