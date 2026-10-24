@@ -63,6 +63,7 @@ falha() { local c="$1"; shift; printf 'planejamento: %s\n' "$*" >&2; exit "$c"; 
 
 . "$SK/scripts/caminho-git.sh" || falha "$E_USO" "scripts/caminho-git.sh ausente"
 . "$SK/scripts/lib/trava-autorizacao-f6.sh" || falha "$E_USO" "scripts/lib/trava-autorizacao-f6.sh ausente"
+. "$SK/scripts/lib/execucao.sh" || falha "$E_USO" "scripts/lib/execucao.sh ausente"
 
 # ------------------------------------------------------------------ contexto
 
@@ -121,14 +122,16 @@ json_esc() {
 
 # evento <evento> <fase|-> <task|-> <resultado> <detalhe> [arquivo] — contrato
 # expx-eventos v1, append-only. Falha aberta: o rastro nunca derruba o planejamento.
+# A linha e sempre do principal; model/effort registram o executor (DS-186).
 evento() {
-  local fase="null" task="null" dir="$RAIZ/docs/eventos" arq="${6:-${PREFIXO}00-PLANEJAMENTO.md}"
+  local fase="null" task="null" dir="$RAIZ/docs/eventos" arq="${6:-${PREFIXO}00-PLANEJAMENTO.md}" execucao
   [ "$2" != "-" ] && fase="\"$2\""
   [ "$3" != "-" ] && task="\"$3\""
+  execucao_extras_em execucao "$RAIZ" principal ""
   {
     mkdir -p "$dir" || return 0
-    printf '{"ts":"%s","expx_eventos":1,"trabalho_id":"%s","ferramenta":"sprintx","origem":"skill","evento":"%s","fase":%s,"task":%s,"agente":"principal","resultado":"%s","detalhe":"%s","arquivos":["%s"]}\n' \
-      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SLUG" "$1" "$fase" "$task" "$4" "$(json_esc "$5")" "$arq" \
+    printf '{"ts":"%s","expx_eventos":1,"trabalho_id":"%s","ferramenta":"sprintx","origem":"skill","evento":"%s","fase":%s,"task":%s,"agente":"principal","resultado":"%s","detalhe":"%s","arquivos":["%s"],%s}\n' \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SLUG" "$1" "$fase" "$task" "$4" "$(json_esc "$5")" "$arq" "$execucao" \
       >> "$dir/$SLUG.jsonl"
   } 2>/dev/null || true
   return 0
