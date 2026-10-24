@@ -112,7 +112,9 @@ w_path_sem_jq() {
         for f in "$d"/*; do
           [ -e "$f" ] || continue
           case "${f##*/}" in jq|jq.exe) continue ;; esac  # Git Bash: jq.exe
-          ln -sf "$f" "$espelho/${f##*/}" 2>/dev/null
+          ln -sf "$f" "$espelho/${f##*/}" 2>/dev/null \
+            || ln -f "$f" "$espelho/${f##*/}" 2>/dev/null \
+            || cp -pR "$f" "$espelho/${f##*/}" 2>/dev/null  # sem symlink (Git Bash): hard link, senao copia
         done
       fi
       novo="$novo:$espelho"
