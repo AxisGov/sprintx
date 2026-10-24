@@ -573,6 +573,11 @@ echo "== N. escopo e ownership do TRABALHO corrente, nao do id da task (P0.2-C7-
 # toda feature antiga. O id sozinho nunca identifica o plano — a sessao resolve
 # TRABALHO + TASK pelo rastro, e so o plano daquele trabalho participa (DS-153).
 NF_DIR="$(mktemp -d)"
+# No Windows sem privilegio de symlink o Git Bash falha no `ln -s`, ou copia o arquivo: os
+# casos n_lnk* nao testariam link nenhum. A sonda decide uma vez se ha link de verdade.
+N_LINK=0
+{ : > "$NF_DIR/.sonda-alvo" && ln -s "$NF_DIR/.sonda-alvo" "$NF_DIR/.sonda-link" 2>/dev/null && [ -L "$NF_DIR/.sonda-link" ]; } && N_LINK=1
+rm -f "$NF_DIR/.sonda-alvo" "$NF_DIR/.sonda-link"
 N_SEQ=0
 N_SAIDA=""; N_RC=0
 
@@ -901,6 +906,9 @@ for par in \
   n_lnkoutra:nlnkoutra-link-de-outra-feature-segue-aviso \
   n_lnkvazio:nlnkvazio-task-sem-arquivos-com-sprint-por-link-fecha \
   n_lnkfundo:nlnkfundo-link-fora-do-alcance-do-resolvedor-nao-fecha; do
+  case "${par%%:*}" in
+    n_lnk*) [ "$N_LINK" = 1 ] || { pula_externo "${par#*:}" "link simbolico indisponivel (Windows sem privilegio de symlink)"; continue; } ;;
+  esac
   "${par%%:*}" "$NHOOK"; afirma "${par#*:}" $? "${par%%:*}"
 done
 

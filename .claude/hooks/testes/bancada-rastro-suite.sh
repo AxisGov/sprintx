@@ -41,14 +41,16 @@ ag_path_sem_jq() {
   local d f espelho novo="" i=0 IFS=:
   for d in $PATH; do
     [ -n "$d" ] || continue
-    if [ -x "$d/jq" ]; then
+    if [ -x "$d/jq" ] || [ -x "$d/jq.exe" ]; then
       i=$((i+1)); espelho="$AG_T/bin$i"
       if [ ! -d "$espelho" ]; then
         mkdir -p "$espelho"
         for f in "$d"/*; do
           [ -e "$f" ] || continue
-          [ "${f##*/}" = jq ] && continue
-          ln -sf "$f" "$espelho/${f##*/}" 2>/dev/null
+          case "${f##*/}" in jq|jq.exe) continue ;; esac  # Git Bash: jq.exe
+          ln -sf "$f" "$espelho/${f##*/}" 2>/dev/null \
+            || ln -f "$f" "$espelho/${f##*/}" 2>/dev/null \
+            || cp -pR "$f" "$espelho/${f##*/}" 2>/dev/null  # sem symlink (Git Bash): hard link, senao copia
         done
       fi
       novo="$novo:$espelho"
@@ -59,6 +61,24 @@ ag_path_sem_jq() {
   printf '%s' "${novo#:}"
 }
 AG_SEMJQ="$(ag_path_sem_jq)"
+# No Git Bash o binario e jq.exe: o espelho tem de esconder os dois nomes. A prova roda em
+# qualquer SO com um diretorio falso que so tem jq.exe, num espelho proprio.
+( AG_T="$(mktemp -d)"; mkdir -p "$AG_T/falso"; printf '#!/bin/sh\nexit 0\n' > "$AG_T/falso/jq.exe"
+  chmod +x "$AG_T/falso/jq.exe"; : > "$AG_T/falso/outro"
+  esp="$(PATH="$AG_T/falso:$PATH" ag_path_sem_jq)"; r=0; IFS=:
+  for d in $esp; do [ -e "$d/jq" ] || [ -e "$d/jq.exe" ] && r=1; done
+  case ":$esp:" in *":$AG_T/falso:"*) r=1 ;; esac
+  rm -rf "$AG_T"; exit "$r" )
+afirma "ag0-espelho-sem-jq-esconde-jq-exe" $? "diretorio com jq.exe (Git Bash) tambem e espelhado sem ele"
+# Sem symlink (Git Bash sem privilegio), o espelho nao pode perder as outras ferramentas do
+# diretorio: um `ln` que recusa -s tem de cair para hard link ou copia.
+( AG_T="$(mktemp -d)"; mkdir -p "$AG_T/falso"; printf '#!/bin/sh\nexit 0\n' > "$AG_T/falso/jq.exe"
+  chmod +x "$AG_T/falso/jq.exe"; printf 'x\n' > "$AG_T/falso/outro"
+  ln() { case "$1" in -s*) return 1 ;; esac; command ln "$@"; }
+  esp="$(PATH="$AG_T/falso:$PATH" ag_path_sem_jq)"; r=1; IFS=:
+  for d in $esp; do [ -f "$d/outro" ] && [ ! -e "$d/jq.exe" ] && r=0; done
+  rm -rf "$AG_T"; exit "$r" )
+afirma "ag0b-espelho-sem-symlink-mantem-as-outras-ferramentas" $? "ln -s recusado: hard link ou copia, sem o jq.exe"
 
 # Fixture minima, como na secao Q: raiz com .git e docs/eventos. Sem reivindicacao de sessao no
 # rastro, o destino do evento e docs/eventos/sem-trabalho.jsonl (DS-155) — o arquivo do defeito.
@@ -208,14 +228,16 @@ ah_path_sem_jq() {
   local d f espelho novo="" i=0 IFS=:
   for d in $PATH; do
     [ -n "$d" ] || continue
-    if [ -x "$d/jq" ]; then
+    if [ -x "$d/jq" ] || [ -x "$d/jq.exe" ]; then
       i=$((i+1)); espelho="$AH_T/bin$i"
       if [ ! -d "$espelho" ]; then
         mkdir -p "$espelho"
         for f in "$d"/*; do
           [ -e "$f" ] || continue
-          [ "${f##*/}" = jq ] && continue
-          ln -sf "$f" "$espelho/${f##*/}" 2>/dev/null
+          case "${f##*/}" in jq|jq.exe) continue ;; esac  # Git Bash: jq.exe
+          ln -sf "$f" "$espelho/${f##*/}" 2>/dev/null \
+            || ln -f "$f" "$espelho/${f##*/}" 2>/dev/null \
+            || cp -pR "$f" "$espelho/${f##*/}" 2>/dev/null  # sem symlink (Git Bash): hard link, senao copia
         done
       fi
       novo="$novo:$espelho"
@@ -578,15 +600,17 @@ ai_path_sem_awk() {
   local d f real espelho novo="" IFS=:
   for d in $PATH; do
     [ -n "$d" ] || continue
-    if [ -x "$d/awk" ]; then
+    if [ -x "$d/awk" ] || [ -x "$d/awk.exe" ]; then
       real="$(cd "$d" 2>/dev/null && pwd -P)" || real="$d"
       espelho="$AI_T/semawk$(printf '%s' "$real" | tr -c 'A-Za-z0-9' '-')"
       if [ ! -d "$espelho" ]; then
         mkdir -p "$espelho"
         for f in "$d"/*; do
           [ -e "$f" ] || continue
-          [ "${f##*/}" = awk ] && continue
-          ln -sf "$f" "$espelho/${f##*/}" 2>/dev/null
+          case "${f##*/}" in awk|awk.exe) continue ;; esac  # Git Bash: awk.exe
+          ln -sf "$f" "$espelho/${f##*/}" 2>/dev/null \
+            || ln -f "$f" "$espelho/${f##*/}" 2>/dev/null \
+            || cp -pR "$f" "$espelho/${f##*/}" 2>/dev/null  # sem symlink (Git Bash): hard link, senao copia
         done
       fi
       novo="$novo:$espelho"
@@ -929,14 +953,16 @@ aj_path_sem_jq() {
   local d f espelho novo="" i=0 IFS=:
   for d in $PATH; do
     [ -n "$d" ] || continue
-    if [ -x "$d/jq" ]; then
+    if [ -x "$d/jq" ] || [ -x "$d/jq.exe" ]; then
       i=$((i+1)); espelho="$AJ_T/bin$i"
       if [ ! -d "$espelho" ]; then
         mkdir -p "$espelho"
         for f in "$d"/*; do
           [ -e "$f" ] || continue
-          [ "${f##*/}" = jq ] && continue
-          ln -sf "$f" "$espelho/${f##*/}" 2>/dev/null
+          case "${f##*/}" in jq|jq.exe) continue ;; esac  # Git Bash: jq.exe
+          ln -sf "$f" "$espelho/${f##*/}" 2>/dev/null \
+            || ln -f "$f" "$espelho/${f##*/}" 2>/dev/null \
+            || cp -pR "$f" "$espelho/${f##*/}" 2>/dev/null  # sem symlink (Git Bash): hard link, senao copia
         done
       fi
       novo="$novo:$espelho"
