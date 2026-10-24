@@ -198,6 +198,13 @@ EXATAMENTE os mesmos campos do Contrato da Task do `SKILL.md` — nenhum a mais,
 menos — acrescidos apenas dos três campos de execução (`concluida_em`, `suite`) e do
 vínculo com a fase (`fase`).
 
+**Campos de extensão de task.** A única exceção ao "nenhum a mais" são os campos de task
+que uma camada **instalada** declara no próprio schema — hoje, `design_refs` e
+`tom_estetico`, da designx (`references/06-schema.md` dela). Eles só aparecem quando a
+camada está ativa, nunca substituem nem renomeiam campo do contrato, e valem igual nos
+kinds `tasks` e `plano`. Quem lê o plano preserva a chave como veio; campo que nenhuma
+camada instalada declara continua proibido. A regra é a mesma na sprintx e na runx.
+
 ```yaml
 ---
 expx_schema: 1
