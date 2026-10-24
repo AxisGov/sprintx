@@ -70,6 +70,7 @@ Chaves em `snake_case` sem acento, enums minúsculos sem acento, datas ISO, e **
 | `detalhe` | uma linha de texto |
 | `arquivos` | lista de caminhos relativos, ou `[]` |
 | `sessao` · `harness` | identidade da sessão (`<harness>@<id>`), **derivada** pelo escritor `scripts/rastro.sh` — obrigatória em `task_iniciada`/`task_concluida`/`task_bloqueada`, `null` quando não existe num evento que não depende dela. Nunca é preenchida por quem chama |
+| `model` · `effort` | o snapshot do executor da linha, gravado pelos escritores da skill (o de eventos, o de planejamento e o de bloqueios); `null` quando o runtime não informou. `EXPX_MODEL`/`EXPX_EFFORT` descrevem o executor `EXPX_AGENTE` (sem ela, `principal`) e não passam para linha de outro agente; o frontmatter de `.claude/agents/<agente>.md` só completa o de um subagente no harness Claude. Linha de hook e linha antiga não têm as chaves: são **sem snapshot** (DS-186) |
 
 ## Como gravar
 
