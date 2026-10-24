@@ -74,17 +74,17 @@ an_caso an10-valor-explicito-sai-escapado-em-json-valido 'x"y\z|None' "$(an_snap
 
 # planejamento.sh — checkpoint sem Git grava o aviso pelo escritor proprio
 an_fx; rm -rf "$AN_T/fx/.git"
-(cd "$AN_T/fx" && env -u EXPX_AGENTE -u CLAUDECODE SPRINTX_RAIZ="$AN_T/fx" EXPX_MODEL=openai/gpt-5.4 EXPX_EFFORT=high \
+(cd "$AN_T/fx" && env -u EXPX_AGENTE -u EXPX_HARNESS -u EXPX_MODEL -u EXPX_EFFORT -u CLAUDECODE SPRINTX_RAIZ="$AN_T/fx" EXPX_MODEL=openai/gpt-5.4 EXPX_EFFORT=high \
   bash -c 'bash "$1" criar fx >/dev/null 2>&1; bash "$1" avanca fx f2 >/dev/null 2>&1' _ "$AN_SK/scripts/planejamento.sh")
 an_caso an11-planejamento-grava-o-snapshot-do-principal "openai/gpt-5.4|high" "$(an_snap "$AN_J" checkpoint_planejamento)"
 an_fx; rm -rf "$AN_T/fx/.git"
-(cd "$AN_T/fx" && env -u EXPX_AGENTE -u EXPX_MODEL -u EXPX_EFFORT CLAUDECODE=1 SPRINTX_RAIZ="$AN_T/fx" \
+(cd "$AN_T/fx" && env -u EXPX_AGENTE -u EXPX_HARNESS -u EXPX_MODEL -u EXPX_EFFORT CLAUDECODE=1 SPRINTX_RAIZ="$AN_T/fx" \
   bash -c 'bash "$1" criar fx >/dev/null 2>&1; bash "$1" avanca fx f2 >/dev/null 2>&1' _ "$AN_SK/scripts/planejamento.sh")
 an_caso an12-planejamento-sem-runtime-grava-null "None|None" "$(an_snap "$AN_J" checkpoint_planejamento)"
 
 # bloqueios.sh — resolver grava bloqueio_resolvido
 an_fx
-(cd "$AN_T/fx" && env -u EXPX_AGENTE -u CLAUDECODE SPRINTX_RAIZ="$AN_T/fx" EXPX_HARNESS=opencode EXPX_MODEL=openai/gpt-5.4 \
+(cd "$AN_T/fx" && env -u EXPX_AGENTE -u EXPX_HARNESS -u EXPX_MODEL -u EXPX_EFFORT -u CLAUDECODE SPRINTX_RAIZ="$AN_T/fx" EXPX_HARNESS=opencode EXPX_MODEL=openai/gpt-5.4 \
   bash -c 'bash "$1" registrar fx null lacuna_de_decisao d x >/dev/null 2>&1; bash "$1" resolver fx B-01 >/dev/null 2>&1' _ "$AN_SK/scripts/bloqueios.sh")
 an_caso an13-bloqueios-grava-o-snapshot-do-principal "openai/gpt-5.4|None" "$(an_snap "$AN_J" bloqueio_resolvido)"
 
