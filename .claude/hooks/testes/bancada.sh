@@ -386,6 +386,7 @@ tem "$ING" 'git rev-parse --git-path info/exclude'; afirma "a-contrato-usa-git-p
 tem "$ING" 'git check-ignore'; afirma "a-contrato-checa-antes" $? "check-ignore antes de escrever"
 . "$H/testes/bancada-base-encadeada.sh"
 t_base_encadeada "$ING"; afirma "a-f1-base-pela-linha-da-base" $? "bloco do item 2 em git real${BX_FALHA:+ — FORA:$BX_FALHA}"
+t_base_encadeada_assinando "$ING"; afirma "a-f1-base-com-assinatura-ligada" $? "commit.gpgsign=true e gpg.program=false no ambiente${BX_FALHA:+ — FORA:$BX_FALHA}"
 
 echo "== B. HISTORICO.md: artefato global de metodo, versionado =="
 # 9. a F6 continua exigindo o arquivo.

@@ -27,6 +27,16 @@ bx_nasceu() { # a chave de nascimento e o commit de onde a branch saiu (a ponta,
   [ "$(git -C "$BX_R" config "branch.feature/$1.expxBaseNascimento")" = "$(git -C "$BX_R" rev-parse "feature/$1")" ]
 }
 
+# O mesmo caso com a assinatura de commit ligada e um gpg que sempre falha, como no git de
+# quem assina por padrao: todo commit da bancada desliga a assinatura pelo `-c`, que vence
+# o GIT_CONFIG_COUNT do ambiente. Sem isso, a secao A cai na fixture.
+t_base_encadeada_assinando() { # t_base_encadeada_assinando <01-ingestao.md> — falhas em BX_FALHA
+  local GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=true \
+    GIT_CONFIG_KEY_1=gpg.program GIT_CONFIG_VALUE_1=false
+  export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 GIT_CONFIG_KEY_1 GIT_CONFIG_VALUE_1
+  t_base_encadeada "$1"
+}
+
 t_base_encadeada() { # t_base_encadeada <01-ingestao.md> — falhas em BX_FALHA
   BX_FALHA=""
   BX_BLOCO="$(bx_bloco "$1")" || { BX_FALHA=" sem-bloco-sh-com-expxBaseNascimento"; return 1; }
