@@ -21,7 +21,7 @@ bx_f1() { # bx_f1 <slug> <base> — o bloco com os marcadores trocados, da raiz;
   s="$(BX_S="$1" BX_B="$2" awk '{ gsub(/<slug>/, ENVIRON["BX_S"]); gsub(/<base>/, ENVIRON["BX_B"]); gsub(/<repo>/, "r"); print }' <<<"$BX_BLOCO")"
   (cd "$BX_R" && bash -c "$s") >/dev/null 2>&1
 }
-bx_git() { git -C "$BX_R" -c user.email=bancada@sprintx -c user.name=bancada "$@" >/dev/null 2>&1; }
+bx_git() { git -C "$BX_R" -c user.email=bancada@sprintx -c user.name=bancada -c commit.gpgsign=false "$@" >/dev/null 2>&1; }
 bx_commit() { bx_git checkout -q "$1" && bx_git commit -q --allow-empty -m "$2"; }
 bx_nasceu() { # a chave de nascimento e o commit de onde a branch saiu (a ponta, sem commit proprio)
   [ "$(git -C "$BX_R" config "branch.feature/$1.expxBaseNascimento")" = "$(git -C "$BX_R" rev-parse "feature/$1")" ]
@@ -41,7 +41,7 @@ t_base_encadeada() { # t_base_encadeada <01-ingestao.md> — falhas em BX_FALHA
   # 0. A base avanca no meio da criacao (post-checkout do worktree add): o nascimento e o
   #    commit de onde a branch saiu, e a retomada seguinte aceita.
   printf '%s\n' '#!/bin/sh' '[ -f "$BX_CORRIDA" ] && exit 0; : > "$BX_CORRIDA"' \
-    'c=$(git commit-tree "feature/pred^{tree}" -p feature/pred -m corrida) && git update-ref refs/heads/feature/pred "$c"' \
+    'c=$(git -c commit.gpgsign=false commit-tree "feature/pred^{tree}" -p feature/pred -m corrida) && git update-ref refs/heads/feature/pred "$c"' \
     > "$BX_R/.git/hooks/post-checkout"; chmod +x "$BX_R/.git/hooks/post-checkout"
   local p0; p0="$(git -C "$BX_R" rev-parse feature/pred)"
   BX_CORRIDA="$WORKDIR/base-encadeada/corrida" GIT_AUTHOR_NAME=b GIT_AUTHOR_EMAIL=b@b GIT_COMMITTER_NAME=b GIT_COMMITTER_EMAIL=b@b \
@@ -70,7 +70,7 @@ t_base_encadeada() { # t_base_encadeada <01-ingestao.md> — falhas em BX_FALHA
   [ -z "$(git -C "$BX_R" config branch.feature/dex.expxBase)" ] || BX_FALHA="$BX_FALHA derivada-gravou-chave"
   # 7. A feature recebeu "update branch" (merge da base): aceita, com e sem nascimento gravado;
   #    sem ele, o nascimento gravado e o ponto de onde a branch saiu, nao a ponta atual.
-  bx_commit feature/pred p3 && git -C "$WORKDIR/base-encadeada/r--avanca" -c user.email=b@b -c user.name=b \
+  bx_commit feature/pred p3 && git -C "$WORKDIR/base-encadeada/r--avanca" -c user.email=b@b -c user.name=b -c commit.gpgsign=false \
     merge -q --no-ff -m upd feature/pred >/dev/null 2>&1 || BX_FALHA="$BX_FALHA fixture-update-na-feature"
   bx_f1 avanca feature/pred || BX_FALHA="$BX_FALHA update-na-feature-recusado"
   bx_git branch feature/leg feature/pred && bx_commit feature/leg l1 && bx_commit feature/pred p4 \
@@ -97,7 +97,7 @@ t_base_encadeada() { # t_base_encadeada <01-ingestao.md> — falhas em BX_FALHA
   BX_R="$rr"
   # 8. Tag com o mesmo nome da base (e da feature), fora da linha dela: a ref sem qualificar
   #    escolhe a tag. A branch nasce da ponta da branch base, e a retomada a aceita.
-  local t; t="$(git -C "$BX_R" -c user.email=b@b -c user.name=b commit-tree "feature/pred^{tree}" -m tag)" \
+  local t; t="$(git -C "$BX_R" -c user.email=b@b -c user.name=b -c commit.gpgsign=false commit-tree "feature/pred^{tree}" -m tag)" \
     && bx_git tag feature/pred "$t" && bx_git tag feature/tag "$t" || BX_FALHA="$BX_FALHA fixture-tag"
   bx_f1 tag feature/pred || BX_FALHA="$BX_FALHA tag-criacao-recusada"
   [ "$(git -C "$BX_R" rev-parse refs/heads/feature/tag)" = "$(git -C "$BX_R" rev-parse refs/heads/feature/pred)" ] \
