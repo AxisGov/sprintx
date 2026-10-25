@@ -557,6 +557,14 @@ grupo_lista_vazia() {
   awk '{ print } /^predecessores: \[\]$/ { print "  - caminho: docs/superpowers/specs/x.md" }' "$MANIFESTO" > "$MANIFESTO.tmp" \
     && mv "$MANIFESTO.tmp" "$MANIFESTO"
   caso_falha_com 'lista vazia seguida de item e recusada' 'nao aceita itens' pred --validar ft-pre
+  # o template nasce com []: registrar o primeiro documento lido e o caminho normal, mesmo
+  # com documento elegivel no historico (e justamente quando se registra). A prova de
+  # ausencia nao se aplica a uma lista que vai deixar de ser vazia.
+  nova_fixture; manifesto_do_template
+  saida="$(pred --registrar ft-pre --origem superpowers --papel especificacao --caminho "$SPEC" 2>&1)"; rc=$?
+  [ "$rc" -eq 0 ] && [ "$(pred --validar ft-pre 2>&1 | sed -n '1p')" = resultado=ok ] \
+    && grep -Fq "  - caminho: $SPEC" "$MANIFESTO" && ! grep -Fq 'predecessores: []' "$MANIFESTO"
+  afirma 'o template [] recebe o primeiro registro e vira lista em bloco que valida ok' $? "rc=$rc: $saida"
 }
 
 selecionado() {

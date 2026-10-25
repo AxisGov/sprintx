@@ -310,8 +310,9 @@ prova_lista_vazia() {
   P_PROVA_NA="$nascimento"
 }
 
-valida_manifesto() {
-  local t="$TMP_BASE/manifesto.tsv" snapshot="$TMP_BASE/manifesto-estavel.md" dir esperado
+valida_manifesto() { # valida_manifesto [registro] — no registro, a lista vazia vai receber um item:
+  # a prova de ausencia nao se aplica a ela (o resto da validacao, sim)
+  local modo="${1:-}" t="$TMP_BASE/manifesto.tsv" snapshot="$TMP_BASE/manifesto-estavel.md" dir esperado
   valida_diretorio_manifesto
   dir="$(dirname "$MANIFESTO")"
   esperado="$RAIZ_FISICA/docs/sprintx/features/$SLUG"
@@ -325,7 +326,7 @@ valida_manifesto() {
       || falha "$E_CONTRATO" 'diretorio do manifesto mudou durante a leitura'
   )
   parse_manifesto "$snapshot" "$t"
-  [ "$P_N" -ne 0 ] || prova_lista_vazia
+  [ "$P_N" -ne 0 ] || [ "$modo" = registro ] || prova_lista_vazia
   valida_tsv "$t"
   P_TSV_FINAL="$t"
 }
@@ -393,7 +394,7 @@ cmd_registrar() {
   adquire_trava_registro
   t="$TMP_BASE/atuais.tsv"; : > "$t"; criado="$(date +%Y-%m-%d)"
   if [ -e "$MANIFESTO" ] || [ -L "$MANIFESTO" ]; then
-    valida_manifesto
+    valida_manifesto registro
     cp "$P_TSV_FINAL" "$t" || falha "$E_CONTRATO" "nao foi possivel copiar o manifesto atual: nenhum predecessor foi alterado"
     criado="$P_CRIADO"
   fi
