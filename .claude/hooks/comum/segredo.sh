@@ -105,9 +105,9 @@ chave privada PEM|-----BEGIN ([A-Z ]+ )?PRIVATE KEY-----
 token da AWS|(^|[^A-Za-z0-9_])A[KS]IA[0-9A-Z]{16}($|[^A-Za-z0-9_])
 chave da OpenAI|(^|[^A-Za-z0-9_-])sk-((proj|svcacct|admin)-[A-Za-z0-9_-]{20,}|[A-Za-z0-9]{20,})
 chave da Anthropic|(^|[^A-Za-z0-9_-])sk-ant-[A-Za-z0-9_-]{20,}
-token do GitHub|(^|[^A-Za-z0-9_-])gh[pousr]_[A-Za-z0-9]{30,}
+token do GitHub|(^|[^A-Za-z0-9_-])(gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,})
 token do Slack|(^|[^A-Za-z0-9_-])xox[baprs]-[A-Za-z0-9-]{10,}
-chave do Google|(^|[^A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}
+chave do Google|(^|[^A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}($|[^A-Za-z0-9_-])
 credencial em URL|://[A-Za-z0-9_.-]+:[^@/[:space:]]{8,}@
 PADROES
 
