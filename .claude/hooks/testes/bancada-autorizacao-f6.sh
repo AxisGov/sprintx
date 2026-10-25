@@ -175,8 +175,9 @@ al_mutante "ds175-mutante-09" $? "$AL_M" l5_checkpoint_e_retomada
 AL_M="$(al_copia m10)"
 al_muta "$AL_M" '  [ "$max6" = "$P_MAX6" ] \' '  true \' \
   && al_muta "$AL_M" '  [ "$por" = "$P_AUT6_POR" ] \' '  true \'
+AL_RC10=$?
 AL_SIG10="$(cksum < "$AL_M")"
-al_mutante "ds175-mutante-10" $? "$AL_M" l5_checkpoint_e_retomada
+al_mutante "ds175-mutante-10" "$AL_RC10" "$AL_M" l5_checkpoint_e_retomada
 
 # 11 — a autorizacao tardia reatribui o dono ja existente da F5.
 AL_M="$(al_copia m11)"

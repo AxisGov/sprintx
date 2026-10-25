@@ -1217,6 +1217,7 @@ AF_SK="$SK"
 AF_LIT_AGREG_EST='media_conjunto = soma de ( media_task(t) * fator(t) )'
 AF_LIT_AGREG_TPL='media_conjunto = soma de ( media_task(t) * fator(t) )'
 AF_LIT_QUAD_EST='desvio_conjunto = raiz_quadrada( soma de ( desvio_padrao_task(t) * fator(t) )^2 )'
+AF_LIT_QUAD_TPL='desvio_conjunto = raiz_quadrada( soma de ( desvio_padrao_task(t) * fator(t) )^2 )'
 AF_LIT_DS167_EST='A agregação soma e quadratura já corrigidos, nunca os valores crus (DS-167)'
 AF_LIT_DS167_TPL='A soma e a quadratura já corrigem pelo fator, nunca os valores crus (DS-167)'
 AF_LIT_CONDICIONAL_UM='Com um único `tipo_task` presente neste trabalho, declare também'
@@ -1233,6 +1234,7 @@ af_caso() { # af_caso <caso> <dir> -> 0 se o caso PASSA naquela arvore
              "$d/references/07-estimativa.md"   "$AF_LIT_QUAD_EST" \
              "$d/references/07-estimativa.md"   "$AF_LIT_DS167_EST" \
              "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AF_LIT_AGREG_TPL" \
+             "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AF_LIT_QUAD_TPL" \
              "$d/assets/TEMPLATE-ESTIMATIVA.md" "$AF_LIT_DS167_TPL" ;;
     # media_task/desvio_padrao_task continuam os simbolos crus do Passo 4 (DS-162 intacta): a
     # formula crua NUNCA desaparece, so a formula do CONJUNTO passa a multiplicar por fator(t).
