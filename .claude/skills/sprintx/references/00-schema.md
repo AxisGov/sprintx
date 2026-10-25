@@ -379,7 +379,13 @@ atualizado_em: 2026-10-13
 
 Regras duras deste kind:
 
-- `predecessores` é lista não vazia; arquivo presente com `[]` é contrato inválido.
+- `predecessores` em bloco é lista não vazia. A forma inline `predecessores: []` (a do
+  `assets/TEMPLATE-PREDECESSORES.md`) declara ausência, não omissão: só vale quando o histórico
+  Git prova que nenhum `docs/superpowers/**` elegível existiu em commit estritamente anterior ao
+  nascimento do planejamento. `--validar` responde então `resultado=n_a` com a linha
+  `prova_n_a sem_predecessor_elegivel <nascimento>` (campos separados por TAB); com
+  predecessor elegível, ou com item depois de `[]`, é contrato inválido. O primeiro
+  `--registrar` converte `[]` em lista em bloco.
 - `trabalho_id` é o slug da pasta.
 - `caminho` é relativo à raiz Git, literal e canônico: sem absoluto, `./`, `.`, `..`, segmento
   vazio, barra invertida ou glob. Precisa estar sob `docs/superpowers/` e ser seguro como scalar

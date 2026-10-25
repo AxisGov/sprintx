@@ -432,6 +432,12 @@ grupo_contrato() {
   afirma 'schema documenta enums do predecessor' $? 'origem ou papel ausente'
   tem "$skill" '00-PREDECESSORES.md'
   afirma 'estrutura fixa inclui 00-PREDECESSORES.md' $? 'arquivo ausente da arvore da skill'
+  # a lista vazia do template e ausencia provada: o schema e o criterio da F1 dizem o mesmo que o script
+  ! tem "$schema" 'arquivo presente com `[]` é contrato inválido' && tem "$schema" '`predecessores: []`' \
+    && tem "$schema" 'sem_predecessor_elegivel'
+  afirma 'schema aceita [] como ausencia provada, como o script e o template' $? 'schema ainda recusa a lista vazia'
+  tem "$ingestao" 'resultado=n_a' && tem "$ingestao" 'sem_predecessor_elegivel'
+  afirma 'criterio da F1 aceita o n_a da lista vazia' $? 'F1 exige resultado=ok mesmo sem predecessor'
 
   l_leu="$(linha_de "$ingestao" 'Leia esses arquivos de verdade')"
   l_reg="$(linha_de "$ingestao" 'predecessores.sh --registrar')"

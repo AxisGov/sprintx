@@ -329,7 +329,8 @@ Use `assets/TEMPLATE-base-recurso.md` (caminho relativo à raiz da skill). Todo 
 - [ ] `00-BLOQUEIOS.md` e `base/00-INDICE.md` têm frontmatter válido conforme `references/00-schema.md`.
 - [ ] `00-PLANEJAMENTO.md` existe, criado por `scripts/planejamento.sh criar`, com os três tetos que o caller declarou (`max_reprovacoes_f5`, `orcamento_declarado_por`, `max_replanejamentos_f6`) — e `null` em cada um que ele não declarou.
 - [ ] Se `00-PREDECESSORES.md` existe, cada item foi realmente lido e citado pela base, e
-  `bash <raiz-da-skill>/scripts/predecessores.sh --validar <slug>` responde `resultado=ok`.
+  `bash <raiz-da-skill>/scripts/predecessores.sh --validar <slug>` responde `resultado=ok` — ou,
+  com `predecessores: []`, `resultado=n_a` com a prova `sem_predecessor_elegivel`.
 
 ## Quando o critério não é atendido
 
