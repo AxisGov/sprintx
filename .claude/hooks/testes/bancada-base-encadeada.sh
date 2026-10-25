@@ -16,10 +16,14 @@ bx_bloco() { # bloco do contrato, sem a indentacao da lista
        dentro { sub(/^   /, ""); b = b $0 "\n" }
        END { exit achou ? 0 : 1 }' "$1"
 }
-bx_f1() { # bx_f1 <slug> <base> — o bloco com os marcadores trocados, da raiz; rc do bloco
+bx_arquivo_base() { git -C "$BX_R" rev-parse --path-format=absolute --git-path expx-f1-base; }
+bx_roda() { # bx_roda <slug> — o bloco com o slug trocado, da raiz, sem gravar a base; rc do bloco
   local s
-  s="$(BX_S="$1" BX_B="$2" awk '{ gsub(/<slug>/, ENVIRON["BX_S"]); gsub(/<base>/, ENVIRON["BX_B"]); gsub(/<repo>/, "r"); print }' <<<"$BX_BLOCO")"
+  s="$(BX_S="$1" awk '{ gsub(/<slug>/, ENVIRON["BX_S"]); gsub(/<repo>/, "r"); print }' <<<"$BX_BLOCO")"
   (cd "$BX_R" && bash -c "$s") >/dev/null 2>&1
+}
+bx_f1() { # bx_f1 <slug> <base> — grava a base no arquivo (o papel da ferramenta de escrita) e roda o bloco
+  printf '%s\n' "$2" > "$(bx_arquivo_base)" && bx_roda "$1"
 }
 bx_git() { git -C "$BX_R" -c user.email=bancada@sprintx -c user.name=bancada -c commit.gpgsign=false "$@" >/dev/null 2>&1; }
 bx_commit() { bx_git checkout -q "$1" && bx_git commit -q --allow-empty -m "$2"; }
@@ -128,5 +132,17 @@ t_base_encadeada() { # t_base_encadeada <01-ingestao.md> — falhas em BX_FALHA
     || BX_FALHA="$BX_FALHA base-gravada-sem-resolver"
   bx_commit feature/pred p-qual
   bx_f1 qual refs/heads/feature/pred || BX_FALHA="$BX_FALHA qualificada-retomada-recusada"
+  # 11. A base chega por arquivo, gravado pela ferramenta de escrita, e nunca pelo texto do bloco:
+  #     por substituicao, uma quebra de linha seguida do delimitador do heredoc antigo fechava-o, e
+  #     o resto rodava como comando. Mais de uma linha, ou nenhum arquivo, para o bloco; o arquivo
+  #     e apagado depois de lido; o CRLF da ferramenta de escrita no Windows nao conta.
+  case "$BX_BLOCO" in *'<base>'*) BX_FALHA="$BX_FALHA base-no-corpo-do-bloco" ;; esac
+  rm -f "$sent"
+  bx_f1 multi "$(printf 'main\nEXPX_BASE__INVALIDA~\ntouch %s' "$sent")" && BX_FALHA="$BX_FALHA base-multilinha-aceita"
+  [ ! -e "$sent" ] || BX_FALHA="$BX_FALHA base-multilinha-executou"
+  git -C "$BX_R" rev-parse -q --verify refs/heads/feature/multi >/dev/null && BX_FALHA="$BX_FALHA base-multilinha-criou-branch"
+  rm -f "$(bx_arquivo_base)"; bx_roda ausente && BX_FALHA="$BX_FALHA base-ausente-aceita"
+  bx_f1 crlf "$(printf 'feature/pred\r')" || BX_FALHA="$BX_FALHA base-crlf-recusada"
+  [ ! -e "$(bx_arquivo_base)" ] || BX_FALHA="$BX_FALHA arquivo-da-base-sobrou"
   [ -z "$BX_FALHA" ]
 }

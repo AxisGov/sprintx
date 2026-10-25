@@ -49,16 +49,17 @@ canônico `docs/stack/CONVENCOES.md`.
    `refs/remotes/<base>` (`origin/main` informado, sem branch local com esse nome; para não
    depender disso, informe `refs/remotes/origin/main`); `refs/heads/...` e `refs/remotes/...`
    ficam como estão; outra ref qualificada (`refs/tags/...`) deixa `r` vazio, e o bloco para.
-   Troque `<base>` por uma linha só, com o texto exato que o caller informou: a base entra no
-   heredoc por substituição de texto, e uma quebra de linha seguida do delimitador o fecharia,
-   rodando o resto antes de qualquer conferência. Uma base com quebra de linha não é ref: pare
-   antes do bloco, sem rodá-lo, e trate como base inválida.
+
+   A base nunca entra no texto do bloco: no shell, um texto do caller pode virar comando. Antes
+   do bloco, obtenha o caminho com `git rev-parse --path-format=absolute --git-path expx-f1-base`,
+   da raiz, e grave nele o texto exato da base **pela ferramenta de escrita de arquivo** do
+   harness — nunca pelo shell (nada de `echo`, `printf`, heredoc ou redirecionamento com a base no
+   comando). O bloco lê o arquivo como dado e o apaga em seguida; base ausente ou com mais de uma
+   linha (ref nunca tem quebra de linha) deixa `b` vazio, e o bloco para:
 
    ```sh
    f=feature/<slug>; n=; h="refs/heads/$f"
-   IFS= read -r b <<'EXPX_BASE__INVALIDA~'
-   <base>
-   EXPX_BASE__INVALIDA~
+   a=$(git rev-parse --git-path expx-f1-base); b=$(awk 'NR == 1 { l = $0; sub(/\r$/, "", l) } END { if (NR == 1) print l }' "$a" 2>/dev/null); rm -f "$a"
    c=$(git symbolic-ref -q --short HEAD); m=$(git config "branch.$c.remote"); [ -n "$m" ] && [ "$m" != . ] || m=origin
    resolve_base() { case $1 in refs/heads/*|refs/remotes/*) printf '%s\n' "$1" ;; refs/*|'') return 1 ;;
      *) for x in "refs/heads/$1" "refs/remotes/$m/$1" "refs/remotes/$1"; do git show-ref -q --verify "$x" && { printf '%s\n' "$x"; return; }; done; return 1 ;; esac; }
