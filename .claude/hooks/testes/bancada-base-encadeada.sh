@@ -107,5 +107,16 @@ t_base_encadeada() { # t_base_encadeada <01-ingestao.md> — falhas em BX_FALHA
   # A tag informada ja qualificada (refs/tags/...) tambem nao e base: para, sem criar a branch.
   bx_f1 tagq refs/tags/feature/pred && BX_FALHA="$BX_FALHA base-tag-qualificada-aceita"
   git -C "$BX_R" rev-parse -q --verify refs/heads/feature/tagq >/dev/null && BX_FALHA="$BX_FALHA base-tag-qualificada-criou-branch"
+  # 10. Correções P1 do Login. A base entra por heredoc com delimitador entre aspas: nada nela é
+  #     avaliado pelo shell. E a identidade gravada é a ref resolvida: a retomada informada na forma
+  #     qualificada reconhece a mesma base depois de ela avançar.
+  local sent="$WORKDIR/base-encadeada/sentinela"; rm -f "$sent"
+  bx_f1 inj 'main$(touch '"$sent"')`touch '"$sent"'`'
+  [ ! -e "$sent" ] || BX_FALHA="$BX_FALHA base-avaliada-pelo-shell"
+  bx_f1 qual feature/pred || BX_FALHA="$BX_FALHA qualificada-criacao-recusada"
+  [ "$(git -C "$BX_R" config branch.feature/qual.expxBase)" = refs/heads/feature/pred ] \
+    || BX_FALHA="$BX_FALHA base-gravada-sem-resolver"
+  bx_commit feature/pred p-qual
+  bx_f1 qual refs/heads/feature/pred || BX_FALHA="$BX_FALHA qualificada-retomada-recusada"
   [ -z "$BX_FALHA" ]
 }

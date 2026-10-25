@@ -51,21 +51,23 @@ canônico `docs/stack/CONVENCOES.md`.
    ficam como estão; outra ref qualificada (`refs/tags/...`) deixa `r` vazio, e o bloco para:
 
    ```sh
-   f=feature/<slug>; b=<base>; n=; h="refs/heads/$f"
+   f=feature/<slug>; n=; h="refs/heads/$f"
+   IFS= read -r b <<'EXPX_BASE__INVALIDA~'
+   <base>
+   EXPX_BASE__INVALIDA~
    c=$(git symbolic-ref -q --short HEAD); m=$(git config "branch.$c.remote"); [ -n "$m" ] && [ "$m" != . ] || m=origin
-   case $b in
-     refs/heads/*|refs/remotes/*) r=$b ;;
-     refs/*) r= ;;
-     *) for r in "refs/heads/$b" "refs/remotes/$m/$b" "refs/remotes/$b"; do git show-ref -q --verify "$r" && break; done ;;
-   esac
+   resolve_base() { case $1 in refs/heads/*|refs/remotes/*) printf '%s\n' "$1" ;; refs/*|'') return 1 ;;
+     *) for x in "refs/heads/$1" "refs/remotes/$m/$1" "refs/remotes/$1"; do git show-ref -q --verify "$x" && { printf '%s\n' "$x"; return; }; done; return 1 ;; esac; }
+   r=$(resolve_base "$b")
    if ! git rev-parse -q --verify "$h" >/dev/null; then
      n=$(git rev-parse --verify "$r^{commit}") && git worktree add -b "$f" ../<repo>--<slug> "$n"
    else
-     [ "$(git config "branch.$f.expxBase")" = "$b" ] && n=$(git config "branch.$f.expxBaseNascimento")
+     br=$(resolve_base "$(git config "branch.$f.expxBase")")
+     [ "$br" = "$r" ] && n=$(git config "branch.$f.expxBaseNascimento")
      { [ -n "$n" ] && git merge-base --is-ancestor "$n" "$h" && git merge-base --is-ancestor "$n" "$r"; } \
        || { git merge-base --is-ancestor "$r" "$h" && n=$(git reflog show --format=%H "$h" | tail -n 1) \
             && [ -n "$n" ] && git merge-base --is-ancestor "$n" "$r"; }
-   fi && git config "branch.$f.expxBase" "$b" && git config "branch.$f.expxBaseNascimento" "$n"
+   fi && git config "branch.$f.expxBase" "$r" && git config "branch.$f.expxBaseNascimento" "$n"
    ```
 
    A pergunta é se a branch nasceu da linha da base, não se contém a ponta atual: a base que
