@@ -198,7 +198,8 @@ campo_topo() { # campo_topo <key> <value>
 
 abre_lista() { # abre_lista <marcador>
   [ "$P_LIST_STATE" = antes ] || falha "$E_CONTRATO" 'secao predecessores repetida ou reaberta'
-  campo_topo predecessores "$1"
+  campo_topo predecessores __LISTA__
+  [ "$1" = __VAZIA__ ] && P_LISTA_VAZIA=1
   P_LIST_STATE=lista
 }
 
@@ -213,7 +214,7 @@ parse_manifesto() { # parse_manifesto <file> <tsv>
   local arq="$1" out="$2" linha n=0 fechado=0 k v
   [ -f "$arq" ] && [ ! -L "$arq" ] || falha "$E_CONTRATO" '00-PREDECESSORES.md ausente ou nao regular'
   P_TSV="$out"; P_PATHS="$out.paths"; : > "$P_TSV"; : > "$P_PATHS"
-  P_TOP_SEEN=""; P_SCHEMA=""; P_TOOL=""; P_KIND=""; P_TRAB=""; P_CRIADO=""; P_ATUAL=""; P_N=0; P_LIST_STATE=antes; zera_item
+  P_TOP_SEEN=""; P_SCHEMA=""; P_TOOL=""; P_KIND=""; P_TRAB=""; P_CRIADO=""; P_ATUAL=""; P_N=0; P_LISTA_VAZIA=0; P_LIST_STATE=antes; zera_item
   while IFS= read -r linha || [ -n "$linha" ]; do
     n=$((n + 1)); linha="${linha%$'\r'}"
     if [ "$n" -eq 1 ]; then [ "$linha" = '---' ] || falha "$E_CONTRATO" 'frontmatter precisa iniciar na primeira linha'; continue; fi
@@ -221,6 +222,7 @@ parse_manifesto() { # parse_manifesto <file> <tsv>
     case "$linha" in
       '  - caminho: '*)
         [ "$P_LIST_STATE" = lista ] || falha "$E_CONTRATO" 'item fora da secao predecessores'
+        [ "$P_LISTA_VAZIA" = 0 ] || falha "$E_CONTRATO" 'predecessores: [] nao aceita itens'
         fecha_item; zera_item; I_OPEN=1; campo_item caminho "${linha#  - caminho: }" ;;
       '    origem: '*) campo_item origem "${linha#    origem: }" ;;
       '    papel: '*) campo_item papel "${linha#    papel: }" ;;
@@ -242,7 +244,11 @@ parse_manifesto() { # parse_manifesto <file> <tsv>
   [ "$P_TOOL" = sprintx ] || falha "$E_CONTRATO" 'expx_tool precisa ser sprintx'
   [ "$P_KIND" = predecessores ] || falha "$E_CONTRATO" 'kind precisa ser predecessores'
   [ "$P_TRAB" = "$SLUG" ] || falha "$E_CONTRATO" 'trabalho_id diverge do slug'
-  [ "$P_N" -gt 0 ] || falha "$E_CONTRATO" 'predecessores precisa ter ao menos um item'
+  if [ "$P_LISTA_VAZIA" = 1 ]; then
+    [ "$P_N" -eq 0 ] || falha "$E_CONTRATO" 'predecessores: [] nao aceita itens'
+  else
+    [ "$P_N" -gt 0 ] || falha "$E_CONTRATO" 'predecessores em bloco precisa ter ao menos um item'
+  fi
   case "$P_CRIADO" in [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;; *) falha "$E_CONTRATO" 'criado_em invalido' ;; esac
   case "$P_ATUAL" in [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;; *) falha "$E_CONTRATO" 'atualizado_em invalido' ;; esac
   rm -f "$P_PATHS"
@@ -282,6 +288,28 @@ valida_tsv() {
   done < "$1"
 }
 
+prova_lista_vazia() {
+  local nascimentos n nascimento linha_pais pais
+  [ "$(git -C "$RAIZ" rev-parse --is-shallow-repository 2>/dev/null)" = false ] \
+    || falha "$E_PROVA" 'repositorio raso nao prova ausencia de predecessores'
+  nascimentos="$(git -C "$RAIZ" log --format=%H --full-history --diff-filter=A HEAD -- "$PLANEJAMENTO_REL" 2>/dev/null)" \
+    || falha "$E_PROVA" 'nao foi possivel ler o nascimento do planejamento'
+  n="$(printf '%s\n' "$nascimentos" | sed '/^$/d' | wc -l | tr -d ' ')"
+  [ "$n" = 1 ] || falha "$E_PROVA" "nascimento do planejamento ambiguo ou ausente ($n)"
+  nascimento="$(printf '%s\n' "$nascimentos" | sed -n '1p')"
+  linha_pais="$(git -C "$RAIZ" rev-list --parents -n 1 "$nascimento" 2>/dev/null)" \
+    || falha "$E_PROVA" 'pais do nascimento do planejamento ilegiveis'
+  case "$linha_pais" in *' '*) pais="${linha_pais#* }" ;; *) pais="" ;; esac
+  : > "$TMP_BASE/elegiveis"
+  if [ -n "$pais" ]; then
+    git -C "$RAIZ" log --format=%H --full-history $pais -- docs/superpowers > "$TMP_BASE/elegiveis" 2>/dev/null \
+      || falha "$E_PROVA" 'historico de predecessores elegiveis ilegivel'
+  fi
+  [ ! -s "$TMP_BASE/elegiveis" ] \
+    || falha "$E_PROVA" 'lista vazia com predecessor elegivel estritamente anterior ao planejamento'
+  P_PROVA_NA="$nascimento"
+}
+
 valida_manifesto() {
   local t="$TMP_BASE/manifesto.tsv" snapshot="$TMP_BASE/manifesto-estavel.md" dir esperado
   valida_diretorio_manifesto
@@ -297,6 +325,7 @@ valida_manifesto() {
       || falha "$E_CONTRATO" 'diretorio do manifesto mudou durante a leitura'
   )
   parse_manifesto "$snapshot" "$t"
+  [ "$P_N" -ne 0 ] || prova_lista_vazia
   valida_tsv "$t"
   P_TSV_FINAL="$t"
 }
@@ -410,7 +439,14 @@ trap limpa EXIT HUP INT TERM
 
 case "$CMD" in
   --registrar) cmd_registrar "$@" ;;
-  --validar) valida_manifesto; printf 'resultado=ok\n' ;;
+  --validar)
+    valida_manifesto
+    if [ "$P_N" -eq 0 ]; then
+      printf 'resultado=n_a\nprova_n_a\tsem_predecessor_elegivel\t%s\n' "$P_PROVA_NA"
+    else
+      printf 'resultado=ok\n'
+    fi
+    ;;
   --listar)
     valida_manifesto
     while IFS="	" read -r caminho origem papel commit blob; do

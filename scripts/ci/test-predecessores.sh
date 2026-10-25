@@ -519,12 +519,46 @@ grupo_dispatcher() {
   caso_rc 'grupo desconhecido devolve erro de uso' 64 bash "$0" grupo-inexistente
 }
 
-GRUPOS='registro caminhos estado-git historia schema contrato checkpoint dispatcher'
+GRUPOS='registro caminhos estado-git historia schema contrato checkpoint dispatcher lista-vazia'
 [ "$#" -gt 0 ] || set -- todos
 for pedido in "$@"; do
   [ "$pedido" = todos ] && continue
   case " $GRUPOS " in *" $pedido "*) ;; *) uso=1; printf 'grupo desconhecido: %s\n' "$pedido" >&2; exit 64 ;; esac
 done
+# `predecessores: []` é como o template da SprintX nasce. Só vale como ausência provada: nenhum
+# docs/superpowers/** em commit estritamente anterior ao nascimento do planejamento (correção P1
+# do Login, db19655). A v0.12.2 recusava a própria forma do template.
+fixture_sem_superpowers() {
+  fx_n=$((fx_n + 1)); FX="$K/fx-$fx_n"
+  git init -q -b main "$FX"
+  git -C "$FX" config user.email teste@fixture.invalid; git -C "$FX" config user.name teste
+  printf 'inicio\n' > "$FX/README.md"; git_commit B0
+  mkdir -p "$FX/docs/sprintx/features/ft-pre"
+  printf '%s\n' '---' 'expx_schema: 1' 'expx_tool: sprintx' 'kind: planejamento' \
+    'trabalho_id: ft-pre' 'estado: null' '---' > "$FX/docs/sprintx/features/ft-pre/00-PLANEJAMENTO.md"
+  git_commit F1; FX_F1_COMMIT="$(git -C "$FX" rev-parse HEAD)"
+  MANIFESTO="$FX/docs/sprintx/features/ft-pre/00-PREDECESSORES.md"
+}
+manifesto_do_template() { # o template da skill, com os marcadores trocados
+  sed -e 's/{{trabalho_id}}/ft-pre/g; s/{{data}}/2026-10-25/g' \
+    "$RAIZ_SUITE/.claude/skills/sprintx/assets/TEMPLATE-PREDECESSORES.md" > "$MANIFESTO"
+}
+grupo_lista_vazia() {
+  local saida rc
+  fixture_sem_superpowers; manifesto_do_template
+  saida="$(pred --validar ft-pre 2>&1)"; rc=$?
+  [ "$rc" -eq 0 ] && [ "$(printf '%s\n' "$saida" | sed -n '1p')" = resultado=n_a ] \
+    && printf '%s\n' "$saida" | grep -Fxq "$(printf 'prova_n_a\tsem_predecessor_elegivel\t%s' "$FX_F1_COMMIT")"
+  afirma 'o template sem predecessor elegivel valida como n_a, com a prova do nascimento' $? "rc=$rc: $saida"
+  nova_fixture; manifesto_do_template
+  caso_falha_com 'lista vazia com superpowers anterior ao nascimento falha' 'predecessor elegivel' pred --validar ft-pre
+  fixture_sem_superpowers; manifesto_do_template
+  # o item vai dentro do frontmatter, logo abaixo da forma inline
+  awk '{ print } /^predecessores: \[\]$/ { print "  - caminho: docs/superpowers/specs/x.md" }' "$MANIFESTO" > "$MANIFESTO.tmp" \
+    && mv "$MANIFESTO.tmp" "$MANIFESTO"
+  caso_falha_com 'lista vazia seguida de item e recusada' 'nao aceita itens' pred --validar ft-pre
+}
+
 selecionado() {
   local pedido="$1" x
   shift
@@ -543,6 +577,7 @@ for grupo in $GRUPOS; do
       contrato) grupo_contrato ;;
       checkpoint) grupo_checkpoint ;;
       dispatcher) grupo_dispatcher ;;
+      lista-vazia) grupo_lista_vazia ;;
     esac
   fi
 done
