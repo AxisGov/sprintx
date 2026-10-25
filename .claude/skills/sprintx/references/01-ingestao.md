@@ -48,7 +48,11 @@ canônico `docs/stack/CONVENCOES.md`.
    do upstream da branch atual, ou `origin` — o clone novo que só tem `origin/main`) e
    `refs/remotes/<base>` (`origin/main` informado, sem branch local com esse nome; para não
    depender disso, informe `refs/remotes/origin/main`); `refs/heads/...` e `refs/remotes/...`
-   ficam como estão; outra ref qualificada (`refs/tags/...`) deixa `r` vazio, e o bloco para:
+   ficam como estão; outra ref qualificada (`refs/tags/...`) deixa `r` vazio, e o bloco para.
+   Troque `<base>` por uma linha só, com o texto exato que o caller informou: a base entra no
+   heredoc por substituição de texto, e uma quebra de linha seguida do delimitador o fecharia,
+   rodando o resto antes de qualquer conferência. Uma base com quebra de linha não é ref: pare
+   antes do bloco, sem rodá-lo, e trate como base inválida.
 
    ```sh
    f=feature/<slug>; n=; h="refs/heads/$f"
