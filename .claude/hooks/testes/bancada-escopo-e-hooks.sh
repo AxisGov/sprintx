@@ -871,6 +871,22 @@ n_lnkdir() { # plano numa pasta por link: tambem nao le; avisa, ou fecha se a se
   n_hook "$d" "$1" src/novo.ts eu@sessao
   [ "$N_RC" -eq 2 ] && n_tem plano_corrente_ilegivel && n_tem "(pasta por link)"
 }
+n_paren() { # o sufixo do ilegivel sai inteiro, nunca no primeiro " (" do caminho (correcao P1 do Login)
+  local f; f="$(awk '/^_ilegivel_do_trabalho\(\) \{/ { p = 1 } p { print } p && /^}$/ { exit }' "$1")"
+  [ -n "$f" ] || return 1
+  # cada caso: entrada de ILEGIVEIS|0 se e plano do trabalho corrente, 1 se nao e
+  while IFS='|' read -r e esp; do
+    TRABALHO=corrente bash -c "$f"'
+ILEGIVEIS=("$1"); _ilegivel_do_trabalho' _ "$e"
+    [ "$?" = "$esp" ] || { N_SAIDA="caso: $e"; return 1; }
+  done <<'CASOS'
+docs/sprintx/features/corrente/sprint-01/tasks.md (pasta por link)|0
+docs/sprintx/features/corrente/sprint (1)/tasks.md (link)|0
+docs/corrente/sprint (antiga)/a/b/tasks.md (link)|1
+docs/corrente/a (b)/c/d/tasks.md|1
+docs/outra/sprint-01/tasks.md (link)|1
+CASOS
+}
 . "$H/testes/bancada-escopo-links.sh"
 
 NHOOK="$H/sprintx/escopo-da-task.sh"
@@ -898,6 +914,7 @@ for par in \
   n_u:nu-terceira-feature-historica-nao-muda-nada \
   n_div:ndiv-trabalho-divergente-fail-closed \
   n_amb:namb-dois-layouts-do-mesmo-trabalho-fail-closed \
+  n_paren:nparen-sufixo-do-ilegivel-sai-inteiro \
   n_fora:nfora-task-fora-do-plano-corrente-fail-closed \
   n_lnk:nlnk-plano-por-link-avisa-ou-fecha-pela-reivindicacao \
   n_lnkdir:nlnkdir-plano-em-pasta-por-link-avisa-ou-fecha-pela-reivindicacao \

@@ -16,15 +16,29 @@ bx_bloco() { # bloco do contrato, sem a indentacao da lista
        dentro { sub(/^   /, ""); b = b $0 "\n" }
        END { exit achou ? 0 : 1 }' "$1"
 }
-bx_f1() { # bx_f1 <slug> <base> — o bloco com os marcadores trocados, da raiz; rc do bloco
+bx_arquivo_base() { git -C "$BX_R" rev-parse --path-format=absolute --git-path expx-f1-base; }
+bx_roda() { # bx_roda <slug> — o bloco com o slug trocado, da raiz, sem gravar a base; rc do bloco
   local s
-  s="$(BX_S="$1" BX_B="$2" awk '{ gsub(/<slug>/, ENVIRON["BX_S"]); gsub(/<base>/, ENVIRON["BX_B"]); gsub(/<repo>/, "r"); print }' <<<"$BX_BLOCO")"
+  s="$(BX_S="$1" awk '{ gsub(/<slug>/, ENVIRON["BX_S"]); gsub(/<repo>/, "r"); print }' <<<"$BX_BLOCO")"
   (cd "$BX_R" && bash -c "$s") >/dev/null 2>&1
 }
-bx_git() { git -C "$BX_R" -c user.email=bancada@sprintx -c user.name=bancada "$@" >/dev/null 2>&1; }
+bx_f1() { # bx_f1 <slug> <base> — grava a base no arquivo (o papel da ferramenta de escrita) e roda o bloco
+  printf '%s\n' "$2" > "$(bx_arquivo_base)" && bx_roda "$1"
+}
+bx_git() { git -C "$BX_R" -c user.email=bancada@sprintx -c user.name=bancada -c commit.gpgsign=false "$@" >/dev/null 2>&1; }
 bx_commit() { bx_git checkout -q "$1" && bx_git commit -q --allow-empty -m "$2"; }
 bx_nasceu() { # a chave de nascimento e o commit de onde a branch saiu (a ponta, sem commit proprio)
   [ "$(git -C "$BX_R" config "branch.feature/$1.expxBaseNascimento")" = "$(git -C "$BX_R" rev-parse "feature/$1")" ]
+}
+
+# O mesmo caso com a assinatura de commit ligada e um gpg que sempre falha, como no git de
+# quem assina por padrao: todo commit da bancada desliga a assinatura pelo `-c`, que vence
+# o GIT_CONFIG_COUNT do ambiente. Sem isso, a secao A cai na fixture.
+t_base_encadeada_assinando() { # t_base_encadeada_assinando <01-ingestao.md> — falhas em BX_FALHA
+  local GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=true \
+    GIT_CONFIG_KEY_1=gpg.program GIT_CONFIG_VALUE_1=false
+  export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 GIT_CONFIG_KEY_1 GIT_CONFIG_VALUE_1
+  t_base_encadeada "$1"
 }
 
 t_base_encadeada() { # t_base_encadeada <01-ingestao.md> — falhas em BX_FALHA
@@ -41,7 +55,7 @@ t_base_encadeada() { # t_base_encadeada <01-ingestao.md> — falhas em BX_FALHA
   # 0. A base avanca no meio da criacao (post-checkout do worktree add): o nascimento e o
   #    commit de onde a branch saiu, e a retomada seguinte aceita.
   printf '%s\n' '#!/bin/sh' '[ -f "$BX_CORRIDA" ] && exit 0; : > "$BX_CORRIDA"' \
-    'c=$(git commit-tree "feature/pred^{tree}" -p feature/pred -m corrida) && git update-ref refs/heads/feature/pred "$c"' \
+    'c=$(git -c commit.gpgsign=false commit-tree "feature/pred^{tree}" -p feature/pred -m corrida) && git update-ref refs/heads/feature/pred "$c"' \
     > "$BX_R/.git/hooks/post-checkout"; chmod +x "$BX_R/.git/hooks/post-checkout"
   local p0; p0="$(git -C "$BX_R" rev-parse feature/pred)"
   BX_CORRIDA="$WORKDIR/base-encadeada/corrida" GIT_AUTHOR_NAME=b GIT_AUTHOR_EMAIL=b@b GIT_COMMITTER_NAME=b GIT_COMMITTER_EMAIL=b@b \
@@ -70,7 +84,7 @@ t_base_encadeada() { # t_base_encadeada <01-ingestao.md> — falhas em BX_FALHA
   [ -z "$(git -C "$BX_R" config branch.feature/dex.expxBase)" ] || BX_FALHA="$BX_FALHA derivada-gravou-chave"
   # 7. A feature recebeu "update branch" (merge da base): aceita, com e sem nascimento gravado;
   #    sem ele, o nascimento gravado e o ponto de onde a branch saiu, nao a ponta atual.
-  bx_commit feature/pred p3 && git -C "$WORKDIR/base-encadeada/r--avanca" -c user.email=b@b -c user.name=b \
+  bx_commit feature/pred p3 && git -C "$WORKDIR/base-encadeada/r--avanca" -c user.email=b@b -c user.name=b -c commit.gpgsign=false \
     merge -q --no-ff -m upd feature/pred >/dev/null 2>&1 || BX_FALHA="$BX_FALHA fixture-update-na-feature"
   bx_f1 avanca feature/pred || BX_FALHA="$BX_FALHA update-na-feature-recusado"
   bx_git branch feature/leg feature/pred && bx_commit feature/leg l1 && bx_commit feature/pred p4 \
@@ -97,7 +111,7 @@ t_base_encadeada() { # t_base_encadeada <01-ingestao.md> — falhas em BX_FALHA
   BX_R="$rr"
   # 8. Tag com o mesmo nome da base (e da feature), fora da linha dela: a ref sem qualificar
   #    escolhe a tag. A branch nasce da ponta da branch base, e a retomada a aceita.
-  local t; t="$(git -C "$BX_R" -c user.email=b@b -c user.name=b commit-tree "feature/pred^{tree}" -m tag)" \
+  local t; t="$(git -C "$BX_R" -c user.email=b@b -c user.name=b -c commit.gpgsign=false commit-tree "feature/pred^{tree}" -m tag)" \
     && bx_git tag feature/pred "$t" && bx_git tag feature/tag "$t" || BX_FALHA="$BX_FALHA fixture-tag"
   bx_f1 tag feature/pred || BX_FALHA="$BX_FALHA tag-criacao-recusada"
   [ "$(git -C "$BX_R" rev-parse refs/heads/feature/tag)" = "$(git -C "$BX_R" rev-parse refs/heads/feature/pred)" ] \
@@ -107,5 +121,28 @@ t_base_encadeada() { # t_base_encadeada <01-ingestao.md> — falhas em BX_FALHA
   # A tag informada ja qualificada (refs/tags/...) tambem nao e base: para, sem criar a branch.
   bx_f1 tagq refs/tags/feature/pred && BX_FALHA="$BX_FALHA base-tag-qualificada-aceita"
   git -C "$BX_R" rev-parse -q --verify refs/heads/feature/tagq >/dev/null && BX_FALHA="$BX_FALHA base-tag-qualificada-criou-branch"
+  # 10. Correções P1 do Login. A base entra por heredoc com delimitador entre aspas: nada nela é
+  #     avaliado pelo shell. E a identidade gravada é a ref resolvida: a retomada informada na forma
+  #     qualificada reconhece a mesma base depois de ela avançar.
+  local sent="$WORKDIR/base-encadeada/sentinela"; rm -f "$sent"
+  bx_f1 inj 'main$(touch '"$sent"')`touch '"$sent"'`'
+  [ ! -e "$sent" ] || BX_FALHA="$BX_FALHA base-avaliada-pelo-shell"
+  bx_f1 qual feature/pred || BX_FALHA="$BX_FALHA qualificada-criacao-recusada"
+  [ "$(git -C "$BX_R" config branch.feature/qual.expxBase)" = refs/heads/feature/pred ] \
+    || BX_FALHA="$BX_FALHA base-gravada-sem-resolver"
+  bx_commit feature/pred p-qual
+  bx_f1 qual refs/heads/feature/pred || BX_FALHA="$BX_FALHA qualificada-retomada-recusada"
+  # 11. A base chega por arquivo, gravado pela ferramenta de escrita, e nunca pelo texto do bloco:
+  #     por substituicao, uma quebra de linha seguida do delimitador do heredoc antigo fechava-o, e
+  #     o resto rodava como comando. Mais de uma linha, ou nenhum arquivo, para o bloco; o arquivo
+  #     e apagado depois de lido; o CRLF da ferramenta de escrita no Windows nao conta.
+  case "$BX_BLOCO" in *'<base>'*) BX_FALHA="$BX_FALHA base-no-corpo-do-bloco" ;; esac
+  rm -f "$sent"
+  bx_f1 multi "$(printf 'main\nEXPX_BASE__INVALIDA~\ntouch %s' "$sent")" && BX_FALHA="$BX_FALHA base-multilinha-aceita"
+  [ ! -e "$sent" ] || BX_FALHA="$BX_FALHA base-multilinha-executou"
+  git -C "$BX_R" rev-parse -q --verify refs/heads/feature/multi >/dev/null && BX_FALHA="$BX_FALHA base-multilinha-criou-branch"
+  rm -f "$(bx_arquivo_base)"; bx_roda ausente && BX_FALHA="$BX_FALHA base-ausente-aceita"
+  bx_f1 crlf "$(printf 'feature/pred\r')" || BX_FALHA="$BX_FALHA base-crlf-recusada"
+  [ ! -e "$(bx_arquivo_base)" ] || BX_FALHA="$BX_FALHA arquivo-da-base-sobrou"
   [ -z "$BX_FALHA" ]
 }

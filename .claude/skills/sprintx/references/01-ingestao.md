@@ -48,24 +48,31 @@ canônico `docs/stack/CONVENCOES.md`.
    do upstream da branch atual, ou `origin` — o clone novo que só tem `origin/main`) e
    `refs/remotes/<base>` (`origin/main` informado, sem branch local com esse nome; para não
    depender disso, informe `refs/remotes/origin/main`); `refs/heads/...` e `refs/remotes/...`
-   ficam como estão; outra ref qualificada (`refs/tags/...`) deixa `r` vazio, e o bloco para:
+   ficam como estão; outra ref qualificada (`refs/tags/...`) deixa `r` vazio, e o bloco para.
+
+   A base nunca entra no texto do bloco: no shell, um texto do caller pode virar comando. Antes
+   do bloco, obtenha o caminho com `git rev-parse --path-format=absolute --git-path expx-f1-base`,
+   da raiz, e grave nele o texto exato da base **pela ferramenta de escrita de arquivo** do
+   harness — nunca pelo shell (nada de `echo`, `printf`, heredoc ou redirecionamento com a base no
+   comando). O bloco lê o arquivo como dado e o apaga em seguida; base ausente ou com mais de uma
+   linha (ref nunca tem quebra de linha) deixa `b` vazio, e o bloco para:
 
    ```sh
-   f=feature/<slug>; b=<base>; n=; h="refs/heads/$f"
+   f=feature/<slug>; n=; h="refs/heads/$f"
+   a=$(git rev-parse --git-path expx-f1-base); b=$(awk 'NR == 1 { l = $0; sub(/\r$/, "", l) } END { if (NR == 1) print l }' "$a" 2>/dev/null); rm -f "$a"
    c=$(git symbolic-ref -q --short HEAD); m=$(git config "branch.$c.remote"); [ -n "$m" ] && [ "$m" != . ] || m=origin
-   case $b in
-     refs/heads/*|refs/remotes/*) r=$b ;;
-     refs/*) r= ;;
-     *) for r in "refs/heads/$b" "refs/remotes/$m/$b" "refs/remotes/$b"; do git show-ref -q --verify "$r" && break; done ;;
-   esac
+   resolve_base() { case $1 in refs/heads/*|refs/remotes/*) printf '%s\n' "$1" ;; refs/*|'') return 1 ;;
+     *) for x in "refs/heads/$1" "refs/remotes/$m/$1" "refs/remotes/$1"; do git show-ref -q --verify "$x" && { printf '%s\n' "$x"; return; }; done; return 1 ;; esac; }
+   r=$(resolve_base "$b")
    if ! git rev-parse -q --verify "$h" >/dev/null; then
      n=$(git rev-parse --verify "$r^{commit}") && git worktree add -b "$f" ../<repo>--<slug> "$n"
    else
-     [ "$(git config "branch.$f.expxBase")" = "$b" ] && n=$(git config "branch.$f.expxBaseNascimento")
+     br=$(resolve_base "$(git config "branch.$f.expxBase")")
+     [ "$br" = "$r" ] && n=$(git config "branch.$f.expxBaseNascimento")
      { [ -n "$n" ] && git merge-base --is-ancestor "$n" "$h" && git merge-base --is-ancestor "$n" "$r"; } \
        || { git merge-base --is-ancestor "$r" "$h" && n=$(git reflog show --format=%H "$h" | tail -n 1) \
             && [ -n "$n" ] && git merge-base --is-ancestor "$n" "$r"; }
-   fi && git config "branch.$f.expxBase" "$b" && git config "branch.$f.expxBaseNascimento" "$n"
+   fi && git config "branch.$f.expxBase" "$r" && git config "branch.$f.expxBaseNascimento" "$n"
    ```
 
    A pergunta é se a branch nasceu da linha da base, não se contém a ponta atual: a base que
@@ -327,7 +334,8 @@ Use `assets/TEMPLATE-base-recurso.md` (caminho relativo à raiz da skill). Todo 
 - [ ] `00-BLOQUEIOS.md` e `base/00-INDICE.md` têm frontmatter válido conforme `references/00-schema.md`.
 - [ ] `00-PLANEJAMENTO.md` existe, criado por `scripts/planejamento.sh criar`, com os três tetos que o caller declarou (`max_reprovacoes_f5`, `orcamento_declarado_por`, `max_replanejamentos_f6`) — e `null` em cada um que ele não declarou.
 - [ ] Se `00-PREDECESSORES.md` existe, cada item foi realmente lido e citado pela base, e
-  `bash <raiz-da-skill>/scripts/predecessores.sh --validar <slug>` responde `resultado=ok`.
+  `bash <raiz-da-skill>/scripts/predecessores.sh --validar <slug>` responde `resultado=ok` — ou,
+  com `predecessores: []`, `resultado=n_a` com a prova `sem_predecessor_elegivel`.
 
 ## Quando o critério não é atendido
 

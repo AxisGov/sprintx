@@ -237,7 +237,11 @@ fi
 _ilegivel_do_trabalho() {
   local f c r b; IL_TRAB=""
   for f in ${ILEGIVEIS[@]+"${ILEGIVEIS[@]}"}; do
-    c="${f%% (*}"
+    case "$f" in
+      *" (pasta por link)") c="${f% (pasta por link)}" ;;
+      *" (link)") c="${f% (link)}" ;;
+      *) c="$f" ;;
+    esac
     case "$c" in
       "docs/sprintx/features/$TRABALHO/"*) r="${c#"docs/sprintx/features/$TRABALHO/"}" ;;
       "docs/$TRABALHO/"*) r="${c#"docs/$TRABALHO/"}" ;;

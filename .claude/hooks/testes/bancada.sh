@@ -386,6 +386,12 @@ tem "$ING" 'git rev-parse --git-path info/exclude'; afirma "a-contrato-usa-git-p
 tem "$ING" 'git check-ignore'; afirma "a-contrato-checa-antes" $? "check-ignore antes de escrever"
 . "$H/testes/bancada-base-encadeada.sh"
 t_base_encadeada "$ING"; afirma "a-f1-base-pela-linha-da-base" $? "bloco do item 2 em git real${BX_FALHA:+ — FORA:$BX_FALHA}"
+t_base_encadeada_assinando "$ING"; afirma "a-f1-base-com-assinatura-ligada" $? "commit.gpgsign=true e gpg.program=false no ambiente${BX_FALHA:+ — FORA:$BX_FALHA}"
+# A base do caller nao entra no texto do bloco (por substituicao, uma quebra de linha seguida do
+# delimitador fecharia o heredoc e o resto rodaria): o agente a grava num arquivo pela ferramenta
+# de escrita, e o bloco a le como dado. O caso 11 de t_base_encadeada roda isso em git real.
+tem "$ING" 'git-path expx-f1-base' && tem "$ING" 'pela ferramenta de escrita de arquivo'
+afirma "a-f1-base-por-arquivo" $? "o item 2 da F1 nao manda gravar a base pela ferramenta de escrita"
 
 echo "== B. HISTORICO.md: artefato global de metodo, versionado =="
 # 9. a F6 continua exigindo o arquivo.
