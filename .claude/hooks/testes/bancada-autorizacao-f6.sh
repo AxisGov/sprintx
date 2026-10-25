@@ -172,11 +172,26 @@ al_muta "$AL_M" '      retomada)' '      retomada)
 al_mutante "ds175-mutante-09" $? "$AL_M" l5_checkpoint_e_retomada
 
 # 10 — repeticao com argumentos diferentes e aceita.
+#      As duas trocas formam UM mutante, e o status delas sai antes do cksum da assinatura: lido
+#      depois, seria o do cksum (sempre 0), e um mutante aplicado so em parte chegaria como gerado.
+al_gera_m10() { # al_gera_m10 <arquivo> <segundo-trecho> — status das duas trocas; assinatura em AL_SIG10
+  al_muta "$1" '  [ "$max6" = "$P_MAX6" ] \' '  true \' \
+    && al_muta "$1" "$2" '  true \'
+  local rc=$?
+  AL_SIG10="$(cksum < "$1")"
+  return "$rc"
+}
+# 10c — controle da geracao: com a segunda troca inexistente, o mutante nao passa por gerado.
+#       Vem antes do 10, que e quem deixa a assinatura em AL_SIG10 para a matriz do 18.
+#       A primeira troca precisa ter sido aplicada: sem ela, o rc diferente de 0 nao prova nada.
+AL_M="$(al_copia m10c)" || AL_M=""
+al_gera_m10 "$AL_M" '  trecho que nao existe no planejamento.sh \'
+AL_RC10C=$?
+[ -n "$AL_M" ] && ! cmp -s "$AL_M" "$PL" && [ "$AL_RC10C" -ne 0 ]
+afirma "ds175-mutante-10-geracao-parcial-acusada" $? "primeira troca aplicada, segunda inexistente (rc geracao=$AL_RC10C)"
 AL_M="$(al_copia m10)"
-al_muta "$AL_M" '  [ "$max6" = "$P_MAX6" ] \' '  true \' \
-  && al_muta "$AL_M" '  [ "$por" = "$P_AUT6_POR" ] \' '  true \'
+al_gera_m10 "$AL_M" '  [ "$por" = "$P_AUT6_POR" ] \'
 AL_RC10=$?
-AL_SIG10="$(cksum < "$AL_M")"
 al_mutante "ds175-mutante-10" "$AL_RC10" "$AL_M" l5_checkpoint_e_retomada
 
 # 11 — a autorizacao tardia reatribui o dono ja existente da F5.
