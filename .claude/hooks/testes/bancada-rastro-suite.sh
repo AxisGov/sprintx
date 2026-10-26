@@ -1582,4 +1582,3 @@ ak_muta "$AK_M" DECISOES-DA-SKILL.md 'substitui a parte incompatível da DS-46' 
 ak_mutante "akm-mutante-8-ds172-sem-a-substituicao-explicita" $? "$AK_M" ak_ds_registradas
 
 rm -rf "$AKW"
-

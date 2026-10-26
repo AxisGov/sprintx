@@ -257,4 +257,3 @@ AL_M="$(al_copia m21)"
 al_muta "$AL_M" '  if [ "$P_ESTADO" = aprovado ]; then AUT6_ACAO=fechamento_pendente' '  if [ "$P_ESTADO" = aprovado ]; then AUT6_ACAO=retomada'
 al_mutante "ds175-mutante-21" $? "$AL_M" l5_fechamento_pendente_e_fechado
 rm -rf "$K"
-

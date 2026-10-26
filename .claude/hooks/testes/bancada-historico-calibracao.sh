@@ -1049,4 +1049,3 @@ Z_STRINGS="$(grep -rnE '^[[:space:]]*(desvio|desvio_medio|fator_correcao_aplicad
   $Z_DEFINEM "$Z_TES" | tr '\n' ' ')"
 [ -z "$Z_STRINGS" ]
 afirma "z10b-nenhum-valor-virou-string" $? "ocorrencias=[${Z_STRINGS:-nenhuma}]"
-
