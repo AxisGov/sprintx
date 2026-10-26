@@ -384,8 +384,10 @@ Regras duras deste kind:
   Git prova que nenhum `docs/superpowers/**` elegível existiu em commit estritamente anterior ao
   nascimento do planejamento. `--validar` responde então `resultado=n_a` com a linha
   `prova_n_a sem_predecessor_elegivel <nascimento>` (campos separados por TAB); com
-  predecessor elegível, ou com item depois de `[]`, é contrato inválido. O primeiro
-  `--registrar` converte `[]` em lista em bloco.
+  predecessor elegível, ou com item depois de `[]`, é contrato inválido. Antes do
+  checkpoint da F1 — o `00-PLANEJAMENTO.md` existe e ainda não entrou no Git, nem o
+  manifesto —, a ausência é provada no histórico até `HEAD`, e o terceiro campo é o
+  estado, `pre-checkpoint`. O primeiro `--registrar` converte `[]` em lista em bloco.
 - `trabalho_id` é o slug da pasta.
 - `caminho` é relativo à raiz Git, literal e canônico: sem absoluto, `./`, `.`, `..`, segmento
   vazio, barra invertida ou glob. Precisa estar sob `docs/superpowers/` e ser seguro como scalar

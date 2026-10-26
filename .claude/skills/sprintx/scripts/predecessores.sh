@@ -295,6 +295,17 @@ prova_lista_vazia() {
   nascimentos="$(git -C "$RAIZ" log --format=%H --full-history --diff-filter=A HEAD -- "$PLANEJAMENTO_REL" 2>/dev/null)" \
     || falha "$E_PROVA" 'nao foi possivel ler o nascimento do planejamento'
   n="$(printf '%s\n' "$nascimentos" | sed '/^$/d' | wc -l | tr -d ' ')"
+  # Pre-checkpoint da F1 (o mesmo estado que `prova_nascimento` aceita): o
+  # planejamento ainda nao nasceu, entao todo o historico ate HEAD e anterior a
+  # ele. A prova leva o estado, nao uma revisao.
+  if [ "$n" = 0 ] && estado_pre_nascimento; then
+    git -C "$RAIZ" log --format=%H --full-history HEAD -- docs/superpowers > "$TMP_BASE/elegiveis" 2>/dev/null \
+      || falha "$E_PROVA" 'historico de predecessores elegiveis ilegivel'
+    [ ! -s "$TMP_BASE/elegiveis" ] \
+      || falha "$E_PROVA" 'lista vazia com predecessor elegivel no historico, antes do nascimento do planejamento'
+    P_PROVA_NA=pre-checkpoint
+    return 0
+  fi
   [ "$n" = 1 ] || falha "$E_PROVA" "nascimento do planejamento ambiguo ou ausente ($n)"
   nascimento="$(printf '%s\n' "$nascimentos" | sed -n '1p')"
   linha_pais="$(git -C "$RAIZ" rev-list --parents -n 1 "$nascimento" 2>/dev/null)" \
