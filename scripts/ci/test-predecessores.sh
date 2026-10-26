@@ -545,6 +545,19 @@ fixture_sem_superpowers() {
   git_commit F1; FX_F1_COMMIT="$(git -C "$FX" rev-parse HEAD)"
   MANIFESTO="$FX/docs/sprintx/features/ft-pre/00-PREDECESSORES.md"
 }
+fixture_pre_checkpoint() { # [com-superpowers] — o planejamento existe, mas ainda nao entrou no Git
+  fx_n=$((fx_n + 1)); FX="$K/fx-$fx_n"
+  git init -q -b main "$FX"
+  git -C "$FX" config user.email teste@fixture.invalid; git -C "$FX" config user.name teste
+  printf 'inicio\n' > "$FX/README.md"; git_commit B0
+  if [ "${1:-}" = com-superpowers ]; then
+    mkdir -p "$FX/docs/superpowers/specs"; printf '# spec\n' > "$FX/docs/superpowers/specs/x.md"; git_commit S1
+  fi
+  mkdir -p "$FX/docs/sprintx/features/ft-pre"
+  printf '%s\n' '---' 'expx_schema: 1' 'expx_tool: sprintx' 'kind: planejamento' \
+    'trabalho_id: ft-pre' 'estado: null' '---' > "$FX/docs/sprintx/features/ft-pre/00-PLANEJAMENTO.md"
+  MANIFESTO="$FX/docs/sprintx/features/ft-pre/00-PREDECESSORES.md"
+}
 manifesto_do_template() { # o template da skill, com os marcadores trocados
   sed -e 's/{{trabalho_id}}/ft-pre/g; s/{{data}}/2026-10-25/g' \
     "$RAIZ_SUITE/.claude/skills/sprintx/assets/TEMPLATE-PREDECESSORES.md" > "$MANIFESTO"
@@ -563,6 +576,18 @@ grupo_lista_vazia() {
   awk '{ print } /^predecessores: \[\]$/ { print "  - caminho: docs/superpowers/specs/x.md" }' "$MANIFESTO" > "$MANIFESTO.tmp" \
     && mv "$MANIFESTO.tmp" "$MANIFESTO"
   caso_falha_com 'lista vazia seguida de item e recusada' 'nao aceita itens' pred --validar ft-pre
+  # Pre-checkpoint da F1: o planejamento existe e ainda nao entrou no Git. A ausencia se prova
+  # no historico ate HEAD, e o terceiro campo e o estado, nao uma revisao.
+  fixture_pre_checkpoint; manifesto_do_template
+  saida="$(pred --validar ft-pre 2>&1)"; rc=$?
+  [ "$rc" -eq 0 ] && [ "$(printf '%s\n' "$saida" | sed -n '1p')" = resultado=n_a ] \
+    && printf '%s\n' "$saida" | grep -Fxq "$(printf 'prova_n_a\tsem_predecessor_elegivel\tpre-checkpoint')"
+  afirma 'pre-checkpoint sem predecessor elegivel: n_a, com a prova do estado' $? "rc=$rc: $saida"
+  fixture_pre_checkpoint com-superpowers; manifesto_do_template
+  caso_falha_com 'pre-checkpoint com superpowers no historico falha' 'predecessor elegivel' pred --validar ft-pre
+  # planejamento em preparacao (rastreado, sem commit) nao e o estado pre-checkpoint: falha estrita
+  fixture_pre_checkpoint; manifesto_do_template; git -C "$FX" add docs/sprintx/features/ft-pre/00-PLANEJAMENTO.md
+  caso_falha_com 'planejamento em preparacao sem nascimento falha' 'nascimento' pred --validar ft-pre
   # o template nasce com []: registrar o primeiro documento lido e o caminho normal, mesmo
   # com documento elegivel no historico (e justamente quando se registra). A prova de
   # ausencia nao se aplica a uma lista que vai deixar de ser vazia.

@@ -1626,4 +1626,3 @@ mutante_k "km-mutante-15-legado-inventa-orcamento-na-recusa" $? "$M" k_planejame
 # Registro invalido lido so dentro do subshell: vira "nenhum bloqueio aberto" em vez de contrato.
 M="$(copia_skill_k p)"; muta_lit "$PL" "$M" '  le_bloqueios || falha "$E_CONTRATO" "00-BLOQUEIOS.md invalido"' '  :'
 mutante_k "km-mutante-16-registro-invalido-vira-sem-bloqueio" $? "$M" k_registro_invalido
-

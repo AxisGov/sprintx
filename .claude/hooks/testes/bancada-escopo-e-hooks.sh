@@ -2231,4 +2231,3 @@ t_mutante "tm-mutante-5-rastro-post-grava-caminho-cru" $? "$TMU" "post-write pos
 TMU="$(t_copia m6)"; muta_lit "$H/sprintx/tdd-teste-antes.sh" "$TMU/sprintx/tdd-teste-antes.sh" 'rastro_caminho_em ALVO "$ALVO"' 'ALVO="${ALVO//\\//}"'
 t_mutante "tm-mutante-6-hook-volta-ao-corte-por-barra" $? "$TMU" "tdd-com-teste tdd-artefato-da-skill" estrutura
 rm -rf "$T_DIR"
-

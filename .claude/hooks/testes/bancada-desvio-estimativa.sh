@@ -1327,4 +1327,3 @@ af_mutante "afm-mutante-5-ds167-ds168-apagadas" $? "$AF_M" \
   af_ds167_ds168_registradas
 
 rm -rf "$AFW"
-
