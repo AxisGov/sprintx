@@ -16,6 +16,9 @@ SCH="$SK/references/00-schema.md"
 existe "j0-script-existe" "$BL"
 bash -n "$BL"; afirma "j0-script-sintaxe" $? "bash -n"
 J="$(mktemp -d)"
+# Prazo de toda espera por sinal em arquivo entre processos (tentativas de 1 s): um passo que
+# trave (git, mkdir) faz o caso falhar em vez de travar a suite (conselhos#208, M7).
+ESPERA_MAX=30
 ENUM_J="defeito_de_plano lacuna_de_decisao prerequisito_ausente suite_vermelha task_reivindicada"
 bl() { local s="$1" r="$2"; shift 2; SPRINTX_RAIZ="$r" bash "$s" "$@" 2>/dev/null; }
 barq() { printf '%s/docs/sprintx/features/menu/00-BLOQUEIOS.md' "$1"; }
@@ -1354,9 +1357,15 @@ l_lock_concorrente() {
   ( . "$TRAVA_AUT6" || exit 1
     adquire_trava_autorizacao_f6 "$W" menu || exit 1
     printf pronto > "$q/pronto"
-    while [ ! -f "$q/libera" ]; do sleep 1; done
+    n=0; while [ ! -f "$q/libera" ]; do n=$((n + 1)); [ "$n" -le "$ESPERA_MAX" ] || exit 1; sleep 1; done
   ) & pid=$!
-  while [ ! -f "$q/pronto" ]; do kill -0 "$pid" 2>/dev/null || return 1; sleep 1; done
+  local n=0
+  while [ ! -f "$q/pronto" ]; do
+    kill -0 "$pid" 2>/dev/null || return 1
+    n=$((n + 1))
+    if [ "$n" -gt "$ESPERA_MAX" ]; then kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; return 1; fi
+    sleep 1
+  done
   ( . "$TRAVA_AUT6" && adquire_trava_autorizacao_f6 "$W" menu ) >/dev/null 2>&1 && rc=1
   : > "$q/libera"; wait "$pid" || rc=1
   [ "$rc" -eq 0 ]

@@ -5,6 +5,13 @@
 # auxiliares e o estado dela. Mora aqui porque o CodeAnt pula arquivo acima de 5.000 linhas
 # ou 200 KB (expxdev, docs/superpowers/specs/2026-10-19-limites-do-codeant-emenda.md).
 
+# Carregada fora da bancada.sh, `$SK` fica vazio, e o `cp -R "$SK/."` das copias de mutante
+# copiaria a raiz `/` inteira para o temporario. Sem a skill, nao roda.
+[ -n "${SK:-}" ] && [ -f "$SK/SKILL.md" ] || {
+  echo "bancada-historico-calibracao: carregue pela bancada.sh (SK ausente ou sem SKILL.md)" >&2
+  return 2 2>/dev/null || exit 2
+}
+
 echo "== V. duracao_observada chega a todo contrato do HISTORICO.md (D-05) =="
 # O rastro mede o tempo de parede de cada task (par task_iniciada/task_concluida) e
 # 06-execucao.md / 08-rastro.md mandam persisti-lo no HISTORICO.md como duracao_observada

@@ -5,6 +5,13 @@
 # auxiliares e o estado dela. Mora aqui porque o CodeAnt pula arquivo acima de 5.000 linhas
 # ou 200 KB (expxdev, docs/superpowers/specs/2026-10-19-limites-do-codeant-emenda.md).
 
+# Carregada fora da bancada.sh, `$SK` fica vazio, e o `cp -R "$SK/."` das copias de mutante
+# copiaria a raiz `/` inteira para o temporario. Sem a skill, nao roda.
+[ -n "${SK:-}" ] && [ -f "$SK/SKILL.md" ] || {
+  echo "bancada-rastro-suite: carregue pela bancada.sh (SK ausente ou sem SKILL.md)" >&2
+  return 2 2>/dev/null || exit 2
+}
+
 echo "== AG. suite_executada.detalhe corta em 120 BYTES sem partir UTF-8, com e sem jq (5533410/bb1378f) =="
 # `cut -c1-120` nao serve para cortar o detalhe de `suite_executada`, por dois motivos
 # independentes:

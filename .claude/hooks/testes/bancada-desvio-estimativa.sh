@@ -5,6 +5,13 @@
 # auxiliares e o estado dela. Mora aqui porque o CodeAnt pula arquivo acima de 5.000 linhas
 # ou 200 KB (expxdev, docs/superpowers/specs/2026-10-19-limites-do-codeant-emenda.md).
 
+# Carregada fora da bancada.sh, `$SK` fica vazio, e o `cp -R "$SK/."` das copias de mutante
+# copiaria a raiz `/` inteira para o temporario. Sem a skill, nao roda.
+[ -n "${SK:-}" ] && [ -f "$SK/SKILL.md" ] || {
+  echo "bancada-desvio-estimativa: carregue pela bancada.sh (SK ausente ou sem SKILL.md)" >&2
+  return 2 2>/dev/null || exit 2
+}
+
 echo "== AB. \`desvio_task\` nomeava duas grandezas incompativeis; os dois simbolos sao canonicos (D-11) =="
 # A D-09 fixou o AGREGADOR do numero que calibra e a D-10 a sua PRECISAO. O NOME continuava
 # ambiguo, e no MESMO arquivo: na 07-estimativa.md, `desvio_task` era
@@ -339,7 +346,9 @@ echo "== AC. a calibracao conta so entradas com \`desvio\` numerico; \`desvio: n
 # so sem nenhuma elegivel.
 # Pontos que DEFINEM o conjunto agregado, os que definem o LIMIAR, e os que definem a FORMA.
 AC_REL_DEFINEM="references/00-schema.md references/06-execucao.md assets/TEMPLATE-HISTORICO.md"
-AC_REL_LIMIAR="references/00-schema.md references/06-execucao.md"
+# O 07-estimativa.md tambem fixa o limiar ("3 ou mais entradas elegiveis", no fator de correcao):
+# fora desta lista, a regra podia divergir ali sem a bateria ver (conselhos#208, M14).
+AC_REL_LIMIAR="references/00-schema.md references/06-execucao.md references/07-estimativa.md"
 AC_REL_FORMA="references/00-schema.md assets/TEMPLATE-HISTORICO.md"
 
 # Detectores sobre o texto SEM marcacao, contando linhas em vez de abortar na primeira: mesma
@@ -390,8 +399,11 @@ ac_pol_forma() { # -> por_contador | indefinido  (item presente decidido pelo co
 # de texto cobram cada ponto um a um), mas DOIS pontos discordando da `indefinido` — contrato que se
 # contradiz nao fixa numero nenhum, e e exatamente a forma do defeito B2.
 ac_pol_arvore() { # ac_pol_arvore <dir> <contador|media|base|limiar|forma>
-  local d="$1" dim="$2" f v vals="" u
-  for f in $AC_REL_DEFINEM; do
+  local d="$1" dim="$2" f v vals="" u rel="$AC_REL_DEFINEM"
+  # base e limiar sao lidas tambem onde o limiar e fixado (o 07-estimativa.md), para o oraculo
+  # enxergar a mesma regra que ac_limiar_* confere
+  case "$dim" in base|limiar) rel="$(printf '%s\n' $AC_REL_DEFINEM $AC_REL_LIMIAR | awk '!v[$0]++' | tr '\n' ' ')" ;; esac
+  for f in $rel; do
     [ -f "$d/$f" ] || continue
     case "$dim" in
       contador) v="$(ac_pol_contador "$d/$f")" ;;
@@ -624,6 +636,14 @@ AC_M="$(ac_copia m4)"
 ac_muta "$AC_M" references/00-schema.md 's/3 ou mais entradas elegíveis/2 ou mais entradas elegíveis/g'
 ac_mutante "acm-mutante-4-fator-com-duas-elegiveis" $? "$AC_M" \
   ac_limiar_e_tres ac_oraculo_numerico
+
+# m5 — o mesmo defeito do m4, mas no 07-estimativa.md, que tambem fixa o limiar ("3 ou mais
+#      entradas elegiveis", linhas do fator de correcao): sem ele em AC_REL_LIMIAR, a regra
+#      podia divergir ali sem a bateria ver (katosmv/conselhos-municipais#208, M14).
+AC_M="$(ac_copia m5)"
+ac_muta "$AC_M" references/07-estimativa.md 's/3 ou mais\*\* entradas elegíveis/2 ou mais** entradas elegíveis/g; s/3 ou mais entradas elegíveis/2 ou mais entradas elegíveis/g'
+ac_mutante "acm-mutante-5-limiar-dois-na-estimativa" $? "$AC_M" \
+  ac_limiar_e_tres
 
 # Equivalentes: mudam a marcacao e nao a regra, e por isso NAO podem morrer — um oraculo que
 # dependesse da grafia de uma palavra passaria por discriminante sem ser.
