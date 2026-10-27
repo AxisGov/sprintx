@@ -455,6 +455,34 @@ else
   pula_externo "c-agente-nos-dois-harnesses" "$SEM_FONTE"
 fi
 
+echo "== C2. fatiamento v3 (contrato expx-fatiamento, emenda de 2026-10-19) =="
+# O plano e o auditor cobravam a regra v2 (400 linhas por PR, 300 por task, F4 com
+# tolerancia), que o contrato v3 removeu: nao ha teto de linhas, so L1/L2/L3. Um plano
+# real dividiu trabalho por "400 linhas" sem precisar (katosmv/login, PR #31). DS-189.
+fat_v3() { # fat_v3 <arquivo> -> 0 se cita L1/L2/L3 com os numeros do contrato e nada da v2
+  local f="$1" t
+  for t in 'L1' '40 arquivos revisáveis' 'L2' '5.000 linhas' '204.800 bytes' 'L3' '100 arquivos alterados' 'todos contados'; do
+    grep -qF -- "$t" "$f" || return 1
+  done
+  for t in '300 linhas' '400 linhas' '20 arquivos' '4.000 linhas' '150 KB' '2 KB' 'FATIA_EXCECAO'; do
+    grep -qF -- "$t" "$f" && return 1
+  done
+  return 0
+}
+PLANO="$SK/references/03-plano.md"
+fat_v3 "$PLANO"; afirma "c-fatiamento-v3-plano" $? "03-plano: L1/L2/L3 do contrato, nada da v2"
+tem "$PLANO" 'Não há limite de linhas'; afirma "c-fatiamento-v3-sem-teto" $? "03-plano: sem teto de linhas por task, commit ou PR"
+tem "$PLANO" 'contam em L3'; afirma "c-fatiamento-v3-metodo-em-l3" $? "03-plano: artefatos de metodo contam em L3"
+DS189="$(grep -E '^\| DS-189 ' "$SK/DECISOES-DA-SKILL.md")"
+[ "$(printf '%s' "$DS189" | grep -c .)" = 1 ] && printf '%s' "$DS189" | grep -qF 'DS-182' && printf '%s' "$DS189" | grep -qF 'DS-184'
+afirma "c-fatiamento-v3-ds189" $? "uma DS-189, refinando DS-182 e DS-184"
+if [ -n "$RAIZ_SRC" ]; then
+  fat_v3 "$H/../agents/auditor-plano.md" && fat_v3 "$H/../../.opencode/agent/auditor-plano.md"
+  afirma "c-fatiamento-v3-auditor" $? "item 10 dos dois auditores: L1/L2/L3, nada da v2"
+else
+  pula_externo "c-fatiamento-v3-auditor" "$SEM_FONTE"
+fi
+
 echo "== D. frontmatter dos agentes carrega =="
 # O E2E achou o sprintx-revisor-testes invisivel ao Claude Code: `description:` sem aspas
 # com ": " no meio e YAML invalido, e o agente some sem erro nenhum. Guarda
