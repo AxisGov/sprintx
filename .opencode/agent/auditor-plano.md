@@ -42,7 +42,7 @@ Para cada task, fase e sprint:
 7. **Task que exigiria decisão humana** — "confirmar com o usuário", "decidir depois", "a definir" dentro de uma task. Nenhuma task pode depender de decisão humana em tempo de execução.
 8. **Pré-requisito externo não declarado** — segredo, conta, permissão, serviço ou dado que a execução vai precisar e que nenhum arquivo declara.
 9. **Base ignorada** — limite, cota, erro conhecido ou risco registrado em `base/` que o plano não trata; ou contradição entre plano e base sem uma decisão D-NN que a justifique.
-10. **Granularidade e fatiamento** — se os dois testes de uma task não cabem em uma frase cada, a task está grande demais. Confira também os limites do contrato `expx-fatiamento` v3: nenhuma task declara mais de 40 arquivos revisáveis (L1); nenhum arquivo revisável fica, depois da task, acima de 5.000 linhas ou 204.800 bytes (L2, sem tolerância: uma task anterior divide o arquivo); e o que vira PR — o trabalho, ou cada sprint com `entrega: por_sprint` — fica em até 100 arquivos alterados, todos contados, inclusive os artefatos de método (L3; o PR de planejamento é a exceção). Não há limite de linhas por task, commit ou PR: não aponte tamanho em linhas.
+10. **Granularidade e fatiamento** — se os dois testes de uma task não cabem em uma frase cada, a task está grande demais. Confira também os limites do contrato `expx-fatiamento` v3: nenhuma task declara mais de 40 arquivos revisáveis (L1); nenhum arquivo revisável fica, depois da task, acima de 5.000 linhas ou 204.800 bytes (L2, sem tolerância: uma task anterior divide o arquivo); e o que vira PR — o trabalho, ou cada sprint com `entrega: por_sprint` — fica em até 100 arquivos alterados, todos contados, inclusive os artefatos de método que entram no PR (`docs/sprintx/`, `docs/entregas/`); `docs/eventos/` é rastro local, ignorado pelo Git, e não conta (L3; o PR de planejamento é a exceção). Não há limite de linhas por task, commit ou PR: não aponte tamanho em linhas.
 
 ## O que entregar
 
@@ -70,6 +70,7 @@ Use o caminho relativo do arquivo, e cite o id da task/fase no problema. Um acha
 - `fraco:ausente` — o teste obrigatório não existe.
 - `fraco:criterio` — a implementação errada também satisfaz o `criterio_aceite`, ou nenhuma cláusula autoritativa permite dizer que ela está errada.
 - `fraco:teste` — a implementação errada viola uma cláusula autoritativa já citável (`criterio_aceite`, `D-NN`, `base/<arquivo>`, `origem:<referencia>`), mas o teste declarado não a discrimina. **Sem cláusula citável, o tipo é `criterio`.**
+Achado do item 10 que aponta um limite do contrato traz o limite logo depois do item — `[item 10][limite:L1]`, `[item 10][limite:L2]` ou `[item 10][limite:L3]` — e é sempre ALTA. Só a granularidade dos testes, sem limite do contrato, sai sem marcador e com severidade julgada.
 
 **O veredito**, em uma linha, literalmente em um destes dois formatos:
 
@@ -82,15 +83,16 @@ Regra: existe achado ALTA → `VEREDITO: NÃO`. Nenhum ALTA → `VEREDITO: SIM`.
 
 ## Como julgar a severidade
 
-**No item 2 a severidade não é julgamento — é tabela**, e vale igual para o seu achado e para a linha do `sprintx-revisor-testes`:
+**No item 2 e nos limites do item 10 a severidade não é julgamento — é tabela**, e vale igual para o seu achado e para a linha do `sprintx-revisor-testes`:
 
 | Achado | Severidade |
 |---|---|
 | `[item 2][fraco:ausente]` | ALTA |
 | `[item 2][fraco:criterio]` | ALTA |
 | `[item 2][fraco:teste]` | MÉDIA |
-| `[item 10]` L1 ou L2 acima do contrato | ALTA |
-| `[item 10]` L3 acima do contrato, fora do PR de planejamento | ALTA |
+| `[item 10][limite:L1]` | ALTA |
+| `[item 10][limite:L2]` | ALTA |
+| `[item 10][limite:L3]` | ALTA |
 
 L3 e L2 acima são ALTA porque a mergex recusa abrir um PR assim (E7, Passo 1.5): a execução terminaria sem entrega. L1 acima é ALTA por motivo próprio: a revisão por task não cobre o conjunto declarado inteiro, e a task não fecha. Movimento mecânico não é exceção: o contrato v3 removeu a exceção antiga e as variáveis `FATIA_*` (DS-189). `fraco:teste` é MÉDIA porque o comportamento certo já está numa cláusula autoritativa: não há decisão de produto a inventar, só um teste que ainda não a prova — e a F6 é obrigada a endurecê-lo antes de escrever produto.
 
