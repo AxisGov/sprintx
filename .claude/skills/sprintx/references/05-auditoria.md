@@ -78,6 +78,21 @@ declarado ainda não prova a cláusula — e isso a F6 resolve **antes** de escr
 obrigação de endurecer o teste (`references/06-execucao.md`, Passo 2.0). Sem essa obrigação, o
 MÉDIA não existiria.
 
+## Severidade determinística do item 10
+
+Vale igual para a auditoria do agente e para a feita sem ele (Passo 1): os limites L1, L2 e L3 do
+contrato `expx-fatiamento` v3 não admitem julgamento (DS-189).
+
+| Achado | Severidade |
+|---|---|
+| `[item 10][limite:L1]` | **ALTA** |
+| `[item 10][limite:L2]` | **ALTA** |
+| `[item 10][limite:L3]` | **ALTA** |
+
+L2 e L3 acima são ALTA porque a mergex recusa abrir um PR assim: a execução terminaria sem
+entrega. L1 acima é ALTA porque a revisão por task não cobre o conjunto declarado inteiro, e a
+task não fecha. O PR de planejamento é a exceção a L3, e não é auditado contra ela.
+
 Grave no rastro o `veredito_emitido` pelo escritor — `bash <raiz-da-skill>/scripts/rastro.sh veredito-emitido <slug> <SIM|NAO> "<resumo>"` —, que o registra com `agente: auditor-plano` (`references/08-rastro.md`).
 
 Se o agente não estiver disponível neste harness, faça a auditoria você mesma, seguindo os Passos 3 e 4 — e sabendo que a regra "só aponta, nunca corrige" volta a depender da sua disciplina.
@@ -88,7 +103,7 @@ Leia, nesta ordem: `ORQUESTRADOR.md`, `00-DECISOES.md`, `base/00-INDICE.md` (e o
 
 **Resolva o formato de cada sprint** pela regra única de `references/00-schema.md` ("Como resolver o formato de uma sprint"): no condensado (`tasks.md` com `kind: plano`) leia sprint, fases e tasks do frontmatter do próprio `tasks.md`, e **não cobre** `sprint.md` nem `fases.md` — a ausência deles é o formato, não achado. Nos três arquivos, leia `sprint.md`, `fases.md` e `tasks.md` como sempre.
 
-Os nove itens do Passo 3 valem **iguais** nos dois formatos: o formato muda onde a informação mora, nunca o rigor da auditoria.
+Os dez itens do Passo 3 valem **iguais** nos dois formatos: o formato muda onde a informação mora, nunca o rigor da auditoria.
 
 ## Passo 3 — Verificar cada item desta lista
 
@@ -103,6 +118,7 @@ Para cada task, fase e sprint, procure:
 7. **Task que exigiria decisão humana** — qualquer "confirmar com o usuário", "decidir depois", "a definir" dentro de uma task.
 8. **Pré-requisito externo não declarado** — segredo, conta, permissão, serviço ou dado que a execução vai precisar e que nenhum arquivo declara.
 9. **Base ignorada** — qualquer limite, cota, erro conhecido ou risco registrado em `base/` que o plano não trata; qualquer contradição entre o plano e a base sem decisão D-NN que a justifique.
+10. **Granularidade e fatiamento** — se os dois testes de uma task não cabem em uma frase cada, a task está grande demais. Confira também os limites do contrato `expx-fatiamento` v3: nenhuma task declara mais de 40 arquivos revisáveis (L1); nenhum arquivo revisável fica, depois da task, acima de 5.000 linhas ou 204.800 bytes (L2, sem tolerância: uma task anterior divide o arquivo); e o que vira PR — o trabalho, ou cada sprint com `entrega: por_sprint` — fica em até 100 arquivos alterados, todos contados, inclusive os artefatos de método que entram no PR (`docs/sprintx/`, `docs/entregas/`); `docs/eventos/` é rastro local, ignorado pelo Git, e não conta (L3; o PR de planejamento é a exceção). Não há limite de linhas por task, commit ou PR: não aponte tamanho em linhas.
 
 ## Passo 4 — Escrever o relatório
 
@@ -122,9 +138,8 @@ A coluna `arquivo` traz o **caminho real** do achado. Numa sprint condensada iss
 veio (`sprint`, `fases` ou `tasks`), por exemplo `sprint-02/tasks.md (fases: F-02.1)`. Nunca
 aponte para um `sprint.md` ou `fases.md` que aquela sprint não tem.
 
-**A coluna `problema` começa pelo item** do Passo 3 que gerou o achado: `[item 1]` a `[item 9]`
-(e `[item 10]`, a granularidade que o `auditor-plano` também confere). Achado do item 2 traz o
-tipo logo em seguida e a forma fixa:
+**A coluna `problema` começa pelo item** do Passo 3 que gerou o achado: `[item 1]` a `[item 10]`.
+Achado do item 10 que aponta um limite do contrato traz o limite logo depois do item — `[item 10][limite:L1]`, `[item 10][limite:L2]` ou `[item 10][limite:L3]` — e é sempre ALTA. Só a granularidade dos testes, sem limite do contrato, sai sem marcador e com severidade julgada. Achado do item 2 traz o tipo logo em seguida e a forma fixa:
 
 ```
 [item 2][fraco:ausente] T-02.01 — cláusula: - — passaria com: <implementação errada>
@@ -136,7 +151,7 @@ tipo logo em seguida e a forma fixa:
 reprovação depois e deixa o histórico Git da auditoria legível. A prosa do achado continua
 depois dele, como sempre.
 
-Severidades: **ALTA** (invalida a execução autônoma), **MÉDIA** (risco real, execução ainda possível), **BAIXA** (melhoria). No item 2 a severidade não é julgamento: é a tabela "Severidade determinística do item 2".
+Severidades: **ALTA** (invalida a execução autônoma), **MÉDIA** (risco real, execução ainda possível), **BAIXA** (melhoria). No item 2 a severidade não é julgamento: é a tabela "Severidade determinística do item 2". No item 10 com `[limite:Ln]`, também não: é a tabela "Severidade determinística do item 10".
 Se não houver achados, escreva "Nenhum achado." no lugar da tabela.
 
 3. O veredito, em uma linha, literalmente em um destes dois formatos:
@@ -158,7 +173,7 @@ bash <raiz-da-skill>/scripts/planejamento.sh avanca <slug> f5
 ```
 
 O script confere o relatório (prefixo `[item N]` em todo achado, `[fraco:<tipo>]` e forma fixa no
-item 2, severidade determinística, `fraco:teste` com cláusula citável, veredito coerente com a
+item 2, `[limite:Ln]` em todo achado de limite do item 10, severidade determinística, `fraco:teste` com cláusula citável, veredito coerente com a
 presença de ALTA) — relatório fora do contrato sai com código `4` e **nada** é registrado:
 corrija o relatório, não o plano. Depois ele acrescenta a rodada ao `historico` de
 `00-PLANEJAMENTO.md`, decide o estado e faz o checkpoint (regra única em
@@ -202,7 +217,7 @@ Achado ALTA manda voltar para a F3 — o plano é REGERADO por quem o gerou, end
 - [ ] `00-AUDITORIA.md` existe com tabela (ou "Nenhum achado.") e a linha `VEREDITO:` no formato exato.
 - [ ] Nenhum arquivo do plano foi alterado nesta fase.
 - [ ] O `veredito_emitido` foi gravado no rastro, com o `agente` que o emitiu.
-- [ ] Todo achado da tabela começa por `[item N]`; todo achado do item 2 traz `[fraco:<tipo>]` e a severidade da tabela determinística.
+- [ ] Todo achado da tabela começa por `[item N]`; todo achado do item 2 traz `[fraco:<tipo>]` e a severidade da tabela determinística; todo achado de limite do item 10 traz `[limite:Ln]` e é ALTA.
 - [ ] `scripts/planejamento.sh avanca <slug> f5` rodou: a rodada está no `historico`, o estado é `aprovado`, `replanejar` ou `orcamento_esgotado`, e o checkpoint terminou com código `0`.
 
 ## Quando o veredito é NÃO e o estado é `replanejar`

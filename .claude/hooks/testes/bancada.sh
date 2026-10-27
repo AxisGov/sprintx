@@ -427,10 +427,10 @@ afirma "c13b-f4-sem-exigencia-literal" $? "exigencia dos tres arquivos removida"
 
 # 15/16. F5 audita os dois formatos, sem perder rigor.
 tem "$AUD" 'Resolva o formato de cada sprint'; afirma "c15-f5-resolve-formato" $? "F5 resolve por sprint"
-tem "$AUD" 'nos dois formatos'; afirma "c16-f5-mesmo-rigor" $? "nove itens preservados"
+tem "$AUD" 'nos dois formatos'; afirma "c16-f5-mesmo-rigor" $? "dez itens preservados"
 tem "$AUD" 'Numa sprint condensada isso é sempre'; afirma "c16b-f5-achado-caminho-real" $? "achado aponta caminho real"
 NAUD=$(sed -n '/^## Passo 3 — Verificar cada item desta lista/,/^## Passo 4/p' "$AUD" | grep -cE '^[0-9]+\. \*\*')
-[ "$NAUD" -eq 9 ]; afirma "c16c-f5-nove-itens" $? "$NAUD itens de auditoria (esperado 9)"
+[ "$NAUD" -eq 10 ]; afirma "c16c-f5-dez-itens" $? "$NAUD itens de auditoria (esperado 10, o 10 e o fatiamento)"
 
 # 17/18/19. F6 grava nos dois formatos.
 tem "$EXEC" 'Fechar fase atualiza o item correspondente em `fases`'; afirma "c17-19-f6-grava-condensado" $? "fase e sprint no condensado"
@@ -453,6 +453,51 @@ if [ -n "$RAIZ_SRC" ]; then
   [ "$AGENTE" -eq 2 ]; afirma "c-agente-nos-dois-harnesses" $? "$AGENTE/2 espelhos do auditor corrigidos"
 else
   pula_externo "c-agente-nos-dois-harnesses" "$SEM_FONTE"
+fi
+
+echo "== C2. fatiamento v3 (contrato expx-fatiamento, emenda de 2026-10-19) =="
+# O plano e o auditor cobravam a regra v2 (400 linhas por PR, 300 por task, F4 com
+# tolerancia), que o contrato v3 removeu: nao ha teto de linhas, so L1/L2/L3. Um plano
+# real dividiu trabalho por "400 linhas" sem precisar (katosmv/login, PR #31). DS-189.
+fat_v3() { # fat_v3 <arquivo> -> 0 se cita L1/L2/L3 com os numeros do contrato e nada da v2
+  local f="$1" t
+  for t in 'L1' '40 arquivos revisáveis' 'L2' '5.000 linhas' '204.800 bytes' 'L3' '100 arquivos alterados' 'todos contados'; do
+    grep -qF -- "$t" "$f" || return 1
+  done
+  for t in '300 linhas' '400 linhas' '20 arquivos' '4.000 linhas' '150 KB' '2 KB' 'FATIA_EXCECAO'; do
+    grep -qF -- "$t" "$f" && return 1
+  done
+  return 0
+}
+PLANO="$SK/references/03-plano.md"
+fat_v3 "$PLANO"; afirma "c-fatiamento-v3-plano" $? "03-plano: L1/L2/L3 do contrato, nada da v2"
+tem "$PLANO" 'Não há limite de linhas'; afirma "c-fatiamento-v3-sem-teto" $? "03-plano: sem teto de linhas por task, commit ou PR"
+tem "$PLANO" 'contam em L3'; afirma "c-fatiamento-v3-metodo-em-l3" $? "03-plano: artefatos de metodo contam em L3"
+DS189="$(grep -E '^\| DS-189 ' "$SK/DECISOES-DA-SKILL.md")"
+[ "$(printf '%s' "$DS189" | grep -c .)" = 1 ] && printf '%s' "$DS189" | grep -qF 'DS-182' && printf '%s' "$DS189" | grep -qF 'DS-184'
+afirma "c-fatiamento-v3-ds189" $? "uma DS-189, refinando DS-182 e DS-184"
+tem "$PLANO" '`docs/eventos/` é rastro local' && ! grep -qF 'que o E1 também commita' "$PLANO"
+afirma "c-fatiamento-v3-eventos-fora" $? "03-plano: docs/eventos e local, nao entra no PR; o E1 nao commita metodo"
+# Quem audita conta L3 igual a quem planeja: docs/eventos/ fica fora nos tres.
+EVF=0
+for f in "$AUD" ${RAIZ_SRC:+"$H/../agents/auditor-plano.md" "$H/../../.opencode/agent/auditor-plano.md"}; do
+  grep -qF '`docs/eventos/` é rastro local' "$f" || EVF=1
+done
+[ "$EVF" -eq 0 ]; afirma "c-fatiamento-v3-eventos-fora-auditoria" $? "05-auditoria e auditores: docs/eventos fora de L3"
+# Sem o agente, a F5 audita pela lista do 05-auditoria: o item 10 e a severidade valem la tambem.
+lim_alta() { # lim_alta <arquivo> -> 0 se as tres linhas [limite:Ln] estao como ALTA
+  local n; for n in 1 2 3; do grep -qE -- "^\| \`\[item 10\]\[limite:L$n\]\` \| (\*\*)?ALTA(\*\*)? \|" "$1" || return 1; done
+}
+fat_v3 "$AUD" && lim_alta "$AUD"
+afirma "c-fatiamento-v3-f5-manual" $? "05-auditoria: item 10 com L1/L2/L3 e severidade ALTA fixa"
+if [ -n "$RAIZ_SRC" ]; then
+  fat_v3 "$H/../agents/auditor-plano.md" && fat_v3 "$H/../../.opencode/agent/auditor-plano.md"
+  afirma "c-fatiamento-v3-auditor" $? "item 10 dos dois auditores: L1/L2/L3, nada da v2"
+  lim_alta "$H/../agents/auditor-plano.md" && lim_alta "$H/../../.opencode/agent/auditor-plano.md"
+  afirma "c-fatiamento-v3-auditor-alta" $? "dois auditores: [limite:L1/L2/L3] sempre ALTA"
+else
+  pula_externo "c-fatiamento-v3-auditor" "$SEM_FONTE"
+  pula_externo "c-fatiamento-v3-auditor-alta" "$SEM_FONTE"
 fi
 
 echo "== D. frontmatter dos agentes carrega =="
@@ -1295,6 +1340,21 @@ sev_caso g-achado-sem-item-recusado 4 '| BAIXA | s/tasks.md | contagem errada | 
 sev_caso g-item2-sem-tipo-recusado 4 '| ALTA | s/tasks.md | [item 2] T-01.01 teste fraco | y |' 'NÃO — x'
 sev_caso g-sim-com-alta-recusado 4 '| ALTA | s/tasks.md | [item 1] T-01.01 sem teste | y |' 'SIM — x'
 sev_caso g-nao-sem-alta-recusado 4 '| BAIXA | s/tasks.md | [item 3] T-01.01 adjetivo | y |' 'NÃO — x'
+# Item 10: violacao de L1/L2/L3 carrega [limite:Ln] e e ALTA, sem julgamento (DS-189).
+sev_caso g-limite-l1-como-media-recusado 4 '| MÉDIA | s/tasks.md | [item 10][limite:L1] T-01.01 declara 41 arquivos revisáveis | y |' 'SIM — x'
+sev_caso g-limite-l2-como-baixa-recusado 4 '| BAIXA | s/tasks.md | [item 10][limite:L2] T-01.01 leva src/a.ts a 5.200 linhas | y |' 'SIM — x'
+sev_caso g-limite-l3-como-media-recusado 4 '| MÉDIA | s/tasks.md | [item 10][limite:L3] o trabalho altera 120 arquivos | y |' 'SIM — x'
+sev_caso g-limite-l3-alta-aceito 0 '| ALTA | s/tasks.md | [item 10][limite:L3] o trabalho altera 120 arquivos | y |' 'NÃO — x'
+sev_caso g-limite-sem-marcador-recusado 4 '| MÉDIA | s/tasks.md | [item 10] T-01.01 passa de L1 com 41 arquivos | y |' 'SIM — x'
+sev_caso g-limite-fora-do-item10-recusado 4 '| ALTA | s/tasks.md | [item 9][limite:L2] base/x.md | y |' 'NÃO — x'
+sev_caso g-limite-invalido-recusado 4 '| ALTA | s/tasks.md | [item 10][limite:L4] T-01.01 | y |' 'NÃO — x'
+sev_caso g-limite-marcador-extra-invalido-recusado 4 '| ALTA | s/tasks.md | [item 10][limite:L1] T-01.01 declara 41 arquivos [limite:L4] | y |' 'NÃO — x'
+sev_caso g-limite-marcador-extra-valido-recusado 4 '| ALTA | s/tasks.md | [item 10][limite:L1] T-01.01 declara 41 arquivos [limite:L2] | y |' 'NÃO — x'
+sev_caso g-limite-pipe-escapado-recusado 4 '| ALTA | s/tasks.md | [item 10][limite:L1] T-01.01 41 arquivos \| [limite:L4] | y |' 'NÃO — x'
+sev_caso g-pipe-escapado-na-celula-aceito 0 '| BAIXA | s/tasks.md | [item 3] T-01.01 a \| b | y |' 'SIM — x'
+sev_caso g-limite-coluna-extra-recusado 4 '| ALTA | s/tasks.md | [item 10][limite:L1] T-01.01 41 arquivos | [limite:L4] | y |' 'NÃO — x'
+sev_caso g-tabela-coluna-a-menos-recusado 4 '| ALTA | s/tasks.md | [item 1] T-01.01 sem teste |' 'NÃO — x'
+sev_caso g-item10-granularidade-media-aceito 0 '| MÉDIA | s/tasks.md | [item 10] T-01.01 os testes não cabem em uma frase | y |' 'SIM — x'
 sev_caso gv5-teste-com-clausula-media-aceito 0 '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: D-13 — passaria com: x | y |' 'SIM — x'
 aud_linha '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: D-13 — passaria com: x | y |' 'MAIS OU MENOS'
 pl "$D" avanca menu f5 >/dev/null; rc=$?

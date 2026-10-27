@@ -41,7 +41,7 @@ Para cada task, fase e sprint:
 7. **Task que exigiria decisão humana** — "confirmar com o usuário", "decidir depois", "a definir" dentro de uma task. Nenhuma task pode depender de decisão humana em tempo de execução.
 8. **Pré-requisito externo não declarado** — segredo, conta, permissão, serviço ou dado que a execução vai precisar e que nenhum arquivo declara.
 9. **Base ignorada** — limite, cota, erro conhecido ou risco registrado em `base/` que o plano não trata; ou contradição entre plano e base sem uma decisão D-NN que a justifique.
-10. **Granularidade** — se os dois testes de uma task não cabem em uma frase cada, a task está grande demais. Também é grande demais a task cuja mudança estimada passa de 300 linhas alteradas (F3 do `expx-fatiamento`) ou que acrescenta conteúdo a arquivo acima de 4.000 linhas ou 150 KB além da tolerância de 2 KB e 20 linhas que a F4 dá ao trabalho inteiro (uma linha de tabela cabe; uma seção nova, não); e é grande demais o trabalho cujas tasks, somadas, passam de 400 linhas ou 20 arquivos (F2: o trabalho vira um PR só).
+10. **Granularidade e fatiamento** — se os dois testes de uma task não cabem em uma frase cada, a task está grande demais. Confira também os limites do contrato `expx-fatiamento` v3: nenhuma task declara mais de 40 arquivos revisáveis (L1); nenhum arquivo revisável fica, depois da task, acima de 5.000 linhas ou 204.800 bytes (L2, sem tolerância: uma task anterior divide o arquivo); e o que vira PR — o trabalho, ou cada sprint com `entrega: por_sprint` — fica em até 100 arquivos alterados, todos contados, inclusive os artefatos de método que entram no PR (`docs/sprintx/`, `docs/entregas/`); `docs/eventos/` é rastro local, ignorado pelo Git, e não conta (L3; o PR de planejamento é a exceção). Não há limite de linhas por task, commit ou PR: não aponte tamanho em linhas.
 
 ## O que entregar
 
@@ -69,6 +69,7 @@ Use o caminho relativo do arquivo, e cite o id da task/fase no problema. Um acha
 - `fraco:ausente` — o teste obrigatório não existe.
 - `fraco:criterio` — a implementação errada também satisfaz o `criterio_aceite`, ou nenhuma cláusula autoritativa permite dizer que ela está errada.
 - `fraco:teste` — a implementação errada viola uma cláusula autoritativa já citável (`criterio_aceite`, `D-NN`, `base/<arquivo>`, `origem:<referencia>`), mas o teste declarado não a discrimina. **Sem cláusula citável, o tipo é `criterio`.**
+Achado do item 10 que aponta um limite do contrato traz o limite logo depois do item — `[item 10][limite:L1]`, `[item 10][limite:L2]` ou `[item 10][limite:L3]` — e é sempre ALTA. Só a granularidade dos testes, sem limite do contrato, sai sem marcador e com severidade julgada.
 
 **O veredito**, em uma linha, literalmente em um destes dois formatos:
 
@@ -81,17 +82,18 @@ Regra: existe achado ALTA → `VEREDITO: NÃO`. Nenhum ALTA → `VEREDITO: SIM`.
 
 ## Como julgar a severidade
 
-**No item 2 a severidade não é julgamento — é tabela**, e vale igual para o seu achado e para a linha do `sprintx-revisor-testes`:
+**No item 2 e nos limites do item 10 a severidade não é julgamento — é tabela**, e vale igual para o seu achado e para a linha do `sprintx-revisor-testes`:
 
 | Achado | Severidade |
 |---|---|
 | `[item 2][fraco:ausente]` | ALTA |
 | `[item 2][fraco:criterio]` | ALTA |
 | `[item 2][fraco:teste]` | MÉDIA |
-| `[item 10]` tamanho acima de F2, F3 ou F4 | ALTA |
-| `[item 10]` F2 ou F3 acima num trabalho que é só movimento mecânico | MÉDIA |
+| `[item 10][limite:L1]` | ALTA |
+| `[item 10][limite:L2]` | ALTA |
+| `[item 10][limite:L3]` | ALTA |
 
-Tamanho acima do `expx-fatiamento` é ALTA porque a mergex recusa abrir um PR assim (E7, Passo 1.5): a execução terminaria sem entrega. A exceção é o movimento mecânico (F6 do `expx-fatiamento`): o trabalho que só divide ou renomeia arquivo, sem alterar conteúdo e sem nenhuma outra mudança, passa no E7 com `FATIA_EXCECAO=<motivo>` declarada pelo desenvolvedor, que rebaixa F2 e F3 a aviso; registre MÉDIA e diga que o PR depende dessa declaração. Com qualquer outra mudança no mesmo trabalho, ou com excesso de F4, segue ALTA: a exceção não cobre. `fraco:teste` é MÉDIA porque o comportamento certo já está numa cláusula autoritativa: não há decisão de produto a inventar, só um teste que ainda não a prova — e a F6 é obrigada a endurecê-lo antes de escrever produto.
+L3 e L2 acima são ALTA porque a mergex recusa abrir um PR assim (E7, Passo 1.5): a execução terminaria sem entrega. L1 acima é ALTA por motivo próprio: a revisão por task não cobre o conjunto declarado inteiro, e a task não fecha. Movimento mecânico não é exceção: o contrato v3 removeu a exceção antiga e as variáveis `FATIA_*` (DS-189). `fraco:teste` é MÉDIA porque o comportamento certo já está numa cláusula autoritativa: não há decisão de produto a inventar, só um teste que ainda não a prova — e a F6 é obrigada a endurecê-lo antes de escrever produto.
 
 Nos outros itens, ALTA é o que faz a execução autônoma **falhar ou produzir a coisa errada sem ninguém perceber**: task sem teste, dependência circular, decisão humana embutida, pré-requisito ausente.
 

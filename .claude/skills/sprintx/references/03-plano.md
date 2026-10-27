@@ -70,7 +70,13 @@ Com a base (`base/`) e as decisões (`00-DECISOES.md`) na mão, desenhe Sprints 
 
 **Regra de granularidade:** se `teste_integracao` e `teste_funcional` de uma task não cabem em uma frase cada, a task está grande demais — quebre em duas ou mais.
 
-**Regra de tamanho (F3 do contrato `expx-fatiamento`):** a task fecha em um commit — o E1 da mergex commita por task — e esse commit tem no máximo **300 linhas alteradas**. Estime pelo que a task muda: se passa de 300 linhas, quebre. O mesmo vale para o que vira PR: a mergex abre **um PR por trabalho**, no fechamento da F6, então as tasks do trabalho inteiro, somadas, respeitam F2 (400 linhas, 20 arquivos). A conta é do código: os artefatos de método que o E1 também commita (`docs/sprintx/`, `docs/entregas/`, `docs/eventos/`) ficam fora da medida (DS-184), e não pedem margem no plano. Trabalho que não cabe se divide em trabalhos menores, cada um com o seu PR — não em mais sprints do mesmo trabalho. Arquivo que já passa de 4.000 linhas ou 150 KB não recebe conteúdo novo (F4) além da tolerância de 2 KB e 20 linhas para o trabalho inteiro — a edição inevitável, como uma linha de tabela: fora disso, a task cria arquivo novo ou, antes dela, uma task mecânica divide o existente.
+**Regra de tamanho (contrato `expx-fatiamento` v3, emenda de 2026-10-19; DS-189):** Não há limite de linhas por task, por commit ou por PR — tamanho em linhas não é motivo para quebrar task nem trabalho. O plano respeita os três limites fixos do contrato, que vêm do revisor automático:
+
+- **L1 — task:** no máximo **40 arquivos revisáveis** declarados na task; a revisão por task lê esse conjunto inteiro. Passou, quebre a task.
+- **L2 — arquivo:** cada arquivo revisável, inteiro e no estado depois da task, tem no máximo **5.000 linhas e 204.800 bytes**. Sem tolerância: se a task leva um arquivo além disso, ou ele já passa, uma task anterior o divide (task mecânica), ou a task cria arquivo novo.
+- **L3 — PR:** no máximo **100 arquivos alterados**, todos contados — código, testes, gerados e os artefatos de método que a mergex persiste no PR (`docs/sprintx/`, `docs/entregas/`). `docs/eventos/` é rastro local, ignorado pelo Git: não entra no PR e não conta. Os artefatos de método podem sair de L1, L2 e da revisão por task (DS-184), mas contam em L3. A mergex abre **um PR por trabalho** no fechamento da F6, então as tasks do trabalho inteiro, somadas, cabem em L3; com `entrega: por_sprint` na mergex, a unidade é cada PR de sprint. O PR de planejamento é a única exceção a L3.
+
+Trabalho que não cabe em L3 se divide em trabalhos menores, cada um com o seu PR. Movimento mecânico não é exceção, e não há variável de ambiente a declarar para afrouxar limite.
 
 **Paralelismo declarado:** para CADA task, declare `paralelizavel` e `depende_de`; para CADA fase, declare com qual outra fase pode rodar em paralelo (ou "nenhuma"). A execução nunca decidirá isso — se você não declarar, é sequencial.
 

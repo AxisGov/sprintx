@@ -1053,13 +1053,17 @@ severidade_de() {
 
 trim() { local s="$1"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"; printf '%s' "$s"; }
 
-# linhas_da_tabela — severidade TAB problema, uma por achado de 00-AUDITORIA.md
+# linhas_da_tabela — severidade TAB problema, uma por achado de 00-AUDITORIA.md.
+# `\|` e pipe dentro da celula (Markdown), nunca separador de coluna. Linha que
+# nao tem exatamente as quatro colunas sai como `!colunas`, e a validacao recusa.
 linhas_da_tabela() {
-  tr -d '\r' < "$AUD" | awk -F'|' '
+  tr -d '\r' < "$AUD" | awk '
     /^\|/ {
-      s = $2; gsub(/^[ \t]+|[ \t]+$/, "", s)
+      l = $0; gsub(/\\\|/, "\034", l); n = split(l, c, "|")
+      s = c[2]; gsub(/^[ \t]+|[ \t]+$/, "", s)
       if (s == "severidade" || s ~ /^-+$/) next
-      p = $4; gsub(/^[ \t]+|[ \t]+$/, "", p)
+      if (n != 6 || c[6] !~ /^[ \t]*$/) { print "!colunas\t" $0; next }
+      p = c[4]; gsub(/^[ \t]+|[ \t]+$/, "", p); gsub(/\034/, "\\|", p)
       print s "\t" p
     }'
 }
@@ -1068,7 +1072,7 @@ linhas_da_tabela() {
 valida_auditoria() {
   [ -f "$AUD" ] || falha "$E_CONTRATO" "${PREFIXO}00-AUDITORIA.md nao existe"
   A_ALTAS=0; A_MEDIAS=0; A_BAIXAS=0
-  local sev prob item tipo esperada resto task clausula impl
+  local sev prob item tipo esperada resto task clausula impl lim
   local tabela; tabela="$(linhas_da_tabela)"
   if [ -n "$tabela" ]; then
     while IFS="$(printf '\t')" read -r sev prob; do
@@ -1076,6 +1080,7 @@ valida_auditoria() {
         ALTA) A_ALTAS=$((A_ALTAS + 1)) ;;
         MÉDIA) A_MEDIAS=$((A_MEDIAS + 1)) ;;
         BAIXA) A_BAIXAS=$((A_BAIXAS + 1)) ;;
+        '!colunas') falha "$E_CONTRATO" "linha da tabela fora das quatro colunas: $prob" ;;
         *) falha "$E_CONTRATO" "severidade fora do enum: '$sev'" ;;
       esac
       item="$(printf '%s' "$prob" | sed -n 's/^\[item \([0-9][0-9]*\)\].*/\1/p')"
@@ -1097,6 +1102,17 @@ valida_auditoria() {
         fi
       else
         case "$prob" in *"[fraco:"*) falha "$E_CONTRATO" "[fraco:...] so existe no item 2: $prob" ;; esac
+      fi
+      # Item 10: limite do contrato expx-fatiamento v3 carrega [limite:Ln] e e ALTA (DS-189).
+      lim="$(printf '%s' "$prob" | sed -n 's/^\[item 10\]\[limite:\(L[123]\)\].*/\1/p')"
+      if [ -n "$lim" ]; then
+        [ "$sev" = ALTA ] || falha "$E_CONTRATO" "[limite:$lim] e ALTA, nunca $sev: $prob"
+        case "${prob#\[item 10\]\[limite:$lim\]}" in *"[limite:"*) falha "$E_CONTRATO" "um achado leva um so [limite:Ln]: $prob" ;; esac
+      else
+        case "$prob" in *"[limite:"*) falha "$E_CONTRATO" "[limite:...] so existe no item 10, como L1, L2 ou L3: $prob" ;; esac
+        if [ "$item" = 10 ] && printf '%s' "$prob" | grep -Eq '(^|[^A-Za-z0-9])L[123]([^0-9]|$)'; then
+          falha "$E_CONTRATO" "achado de limite do item 10 sem [limite:Ln]: $prob"
+        fi
       fi
     done <<EOF
 $tabela
