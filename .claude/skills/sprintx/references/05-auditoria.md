@@ -139,7 +139,7 @@ veio (`sprint`, `fases` ou `tasks`), por exemplo `sprint-02/tasks.md (fases: F-0
 aponte para um `sprint.md` ou `fases.md` que aquela sprint não tem.
 
 **A coluna `problema` começa pelo item** do Passo 3 que gerou o achado: `[item 1]` a `[item 10]`.
-Achado do item 10 que aponta um limite do contrato traz o limite logo depois do item — `[item 10][limite:L1]`, `[item 10][limite:L2]` ou `[item 10][limite:L3]` — e é sempre ALTA. Só a granularidade dos testes, sem limite do contrato, sai sem marcador e com severidade julgada. Achado do item 2 traz o tipo logo em seguida e a forma fixa:
+Achado do item 10 que aponta um limite do contrato traz o limite logo depois do item — `[item 10][limite:L1]`, `[item 10][limite:L2]` ou `[item 10][limite:L3]` — e é sempre ALTA. A granularidade dos testes, sem limite do contrato, sai com `[item 10][granularidade]` e com severidade julgada. Todo achado do item 10 leva um dos dois marcadores: sem marcador, a F5 o recusa, para um limite descrito só pela medida não escapar da severidade. Achado do item 2 traz o tipo logo em seguida e a forma fixa:
 
 ```
 [item 2][fraco:ausente] T-02.01 — cláusula: - — passaria com: <implementação errada>

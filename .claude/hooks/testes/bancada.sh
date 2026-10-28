@@ -1164,6 +1164,16 @@ D="$G/s4"; nova_feature "$D" velha; legado "$D" '| severidade | arquivo | proble
 VEREDITO: SIM — o plano está pronto para execução autônoma.'
 pl "$D" criar velha 3 buildx >/dev/null; rc=$?
 [ "$rc" -eq 4 ] && [ ! -f "$(fdir "$D" velha)/00-PLANEJAMENTO.md" ]; afirma "gs4-legado-com-linha-malformada-nao-migra" $? "rc=$rc, nada gravado"
+# ...nem quando muitas linhas validas vem depois dela: o leitor nao pode parar cedo e perder a recusa
+# para um SIGPIPE sob pipefail (revisao do Codex).
+D="$G/s5"; nova_feature "$D" velha
+{ printf '| severidade | arquivo | problema | correção sugerida |\n|---|---|---|---|\n'
+  printf '| ALTA | sprint-01/tasks.md | [item 1] malformada | dividir\n'
+  i=0; while [ "$i" -lt 6000 ]; do printf '| BAIXA | sprint-01/tasks.md | [item 3] linha valida numero %s com texto de enchimento | y |\n' "$i"; i=$((i + 1)); done
+  printf '\nVEREDITO: SIM — o plano está pronto para execução autônoma.\n'; } > "$G/s5-aud.md"
+legado "$D" "$(cat "$G/s5-aud.md")"
+pl "$D" criar velha 3 buildx >/dev/null; rc=$?
+[ "$rc" -eq 4 ] && [ ! -f "$(fdir "$D" velha)/00-PLANEJAMENTO.md" ]; afirma "gs5-legado-malformada-seguida-de-muitas-linhas-nao-migra" $? "rc=$rc, nada gravado"
 
 # Contrato: kind planejamento, dono sprintx, sem expxdev, nao e produto.
 tem "$SCHEMA" '### `00-PLANEJAMENTO.md` → `kind: planejamento`' && tem "$SCHEMA" '**Kind exclusivo da `sprintx`**'
@@ -1362,7 +1372,13 @@ sev_caso g-limite-pipe-escapado-recusado 4 '| ALTA | s/tasks.md | [item 10][limi
 sev_caso g-pipe-escapado-na-celula-aceito 0 '| BAIXA | s/tasks.md | [item 3] T-01.01 a \| b | y |' 'SIM — x'
 sev_caso g-limite-coluna-extra-recusado 4 '| ALTA | s/tasks.md | [item 10][limite:L1] T-01.01 41 arquivos | [limite:L4] | y |' 'NÃO — x'
 sev_caso g-tabela-coluna-a-menos-recusado 4 '| ALTA | s/tasks.md | [item 1] T-01.01 sem teste |' 'NÃO — x'
-sev_caso g-item10-granularidade-media-aceito 0 '| MÉDIA | s/tasks.md | [item 10] T-01.01 os testes não cabem em uma frase | y |' 'SIM — x'
+sev_caso g-item10-granularidade-media-aceito 0 '| MÉDIA | s/tasks.md | [item 10][granularidade] T-01.01 os testes não cabem em uma frase | y |' 'SIM — x'
+# Todo achado do item 10 diz o que e: [limite:Ln] ou [granularidade] (katosmv/login#34). Sem marcador, recusado;
+# a granularidade que cita uma contagem segue aceita, e o marcador so existe no item 10.
+sev_caso g-item10-sem-marcador-recusado 4 '| MÉDIA | s/tasks.md | [item 10] T-01.01 os testes não cabem em uma frase | y |' 'SIM — x'
+sev_caso g-item10-granularidade-com-contagem-aceito 0 '| MÉDIA | s/tasks.md | [item 10][granularidade] T-01.01 os testes cobrem 2 arquivos e misturam 3 linhas de fluxo | y |' 'SIM — x'
+sev_caso g-granularidade-fora-do-item10-recusado 4 '| MÉDIA | s/tasks.md | [item 3][granularidade] T-01.01 x | y |' 'SIM — x'
+sev_caso g-granularidade-que-cita-l1-recusado 4 '| MÉDIA | s/tasks.md | [item 10][granularidade] T-01.01 passa de L1 | y |' 'SIM — x'
 # Limite descrito so pelo numero, sem L1-L3, tambem e achado de limite: sem [limite:Ln], recusado (katosmv/login#34).
 sev_caso g-item10-limite-so-numerico-recusado 4 '| MÉDIA | s/tasks.md | [item 10] T-01.01 tem 101 arquivos alterados; máximo: 100 | y |' 'SIM — x'
 sev_caso g-item10-limite-em-linhas-recusado 4 '| MÉDIA | s/tasks.md | [item 10] src/a.ts fica com 5.200 linhas | y |' 'SIM — x'

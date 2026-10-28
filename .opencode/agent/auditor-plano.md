@@ -70,7 +70,7 @@ Use o caminho relativo do arquivo, e cite o id da task/fase no problema. Um acha
 - `fraco:ausente` — o teste obrigatório não existe.
 - `fraco:criterio` — a implementação errada também satisfaz o `criterio_aceite`, ou nenhuma cláusula autoritativa permite dizer que ela está errada.
 - `fraco:teste` — a implementação errada viola uma cláusula autoritativa já citável (`criterio_aceite`, `D-NN`, `base/<arquivo>`, `origem:<referencia>`), mas o teste declarado não a discrimina. **Sem cláusula citável, o tipo é `criterio`.**
-Achado do item 10 que aponta um limite do contrato traz o limite logo depois do item — `[item 10][limite:L1]`, `[item 10][limite:L2]` ou `[item 10][limite:L3]` — e é sempre ALTA. Só a granularidade dos testes, sem limite do contrato, sai sem marcador e com severidade julgada.
+Achado do item 10 que aponta um limite do contrato traz o limite logo depois do item — `[item 10][limite:L1]`, `[item 10][limite:L2]` ou `[item 10][limite:L3]` — e é sempre ALTA. A granularidade dos testes, sem limite do contrato, sai com `[item 10][granularidade]` e com severidade julgada. Todo achado do item 10 leva um dos dois marcadores: sem marcador, a F5 o recusa, para um limite descrito só pela medida não escapar da severidade.
 
 **O veredito**, em uma linha, literalmente em um destes dois formatos:
 

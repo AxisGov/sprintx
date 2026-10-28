@@ -1113,13 +1113,24 @@ valida_auditoria() {
         case "${prob#\[item 10\]\[limite:$lim\]}" in *"[limite:"*) falha "$E_CONTRATO" "um achado leva um so [limite:Ln]: $prob" ;; esac
       else
         case "$prob" in *"[limite:"*) falha "$E_CONTRATO" "[limite:...] so existe no item 10, como L1, L2 ou L3: $prob" ;; esac
-        # Sem o marcador, o limite tambem se reconhece pela medida: uma contagem de
-        # arquivos, linhas ou bytes e L1, L2 ou L3, nao granularidade de teste
-        # (katosmv/login#34). O falso positivo assumido e reescrever o achado.
-        if [ "$item" = 10 ] && printf '%s' "$prob" | grep -Eiq '(^|[^A-Za-z0-9])L[123]([^0-9]|$)|[0-9][0-9.]*[[:space:]]+(arquivos?|linhas?|bytes)([^A-Za-z]|$)'; then
-          falha "$E_CONTRATO" "achado de limite do item 10 sem [limite:Ln]: $prob"
+        if [ "$item" = 10 ]; then
+          # Todo achado do item 10 diz o que e: [limite:Ln] ou [granularidade]. Sem
+          # marcador, o limite descrito so pela medida escapava da severidade
+          # deterministica (katosmv/login#34); adivinhar pela medida recusaria
+          # granularidade legitima que cita contagem (revisao do Codex).
+          case "$prob" in
+            "[item 10][granularidade]"*) ;;
+            *) falha "$E_CONTRATO" "achado do item 10 sem [limite:Ln] nem [granularidade]: $prob" ;;
+          esac
+          if printf '%s' "$prob" | grep -Eq '(^|[^A-Za-z0-9])L[123]([^0-9]|$)'; then
+            falha "$E_CONTRATO" "achado de limite do item 10 sem [limite:Ln]: $prob"
+          fi
         fi
       fi
+      case "$prob" in
+        "[item 10][granularidade]"*) ;;
+        *"[granularidade]"*) falha "$E_CONTRATO" "[granularidade] so existe no item 10, logo depois dele: $prob" ;;
+      esac
     done <<EOF
 $tabela
 EOF
@@ -1180,7 +1191,9 @@ migra_legado() { # migra_legado [max] [por] [max6] [estado recusa] — sem argum
       v=sim; [ "$E_ESTADO" = replanejar ] && { v=nao; reprov=1; }
       # Linha fora das quatro colunas nao some da contagem: um SIM legado com ela
       # migraria com zero ALTA (katosmv/login#34).
-      if linhas_da_tabela | grep -q '^!colunas'; then
+      # `grep` sem -q le a saida inteira: com -q ele fecha o pipe na primeira linha,
+      # o awk recebe SIGPIPE e, sob pipefail, o `if` nao entra (revisao do Codex).
+      if linhas_da_tabela | grep '^!colunas' >/dev/null; then
         falha "$E_CONTRATO" "auditoria legada com linha da tabela fora das quatro colunas: o veredito nao e lavado"
       fi
       altas="$(conta_severidade ALTA)"; medias="$(conta_severidade 'MÉDIA')"; baixas="$(conta_severidade BAIXA)"
