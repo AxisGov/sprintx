@@ -89,7 +89,7 @@ contrato `expx-fatiamento` v3 não admitem julgamento (DS-189).
 | `[item 10][limite:L2]` | **ALTA** |
 | `[item 10][limite:L3]` | **ALTA** |
 
-L2 e L3 acima são ALTA porque a mergex recusa abrir um PR assim: a execução terminaria sem
+L2 e L3 acima são ALTAS porque a mergex recusa abrir um PR assim: a execução terminaria sem
 entrega. L1 acima é ALTA porque a revisão por task não cobre o conjunto declarado inteiro, e a
 task não fecha. O PR de planejamento é a exceção a L3, e não é auditado contra ela.
 
@@ -118,7 +118,7 @@ Para cada task, fase e sprint, procure:
 7. **Task que exigiria decisão humana** — qualquer "confirmar com o usuário", "decidir depois", "a definir" dentro de uma task.
 8. **Pré-requisito externo não declarado** — segredo, conta, permissão, serviço ou dado que a execução vai precisar e que nenhum arquivo declara.
 9. **Base ignorada** — qualquer limite, cota, erro conhecido ou risco registrado em `base/` que o plano não trata; qualquer contradição entre o plano e a base sem decisão D-NN que a justifique.
-10. **Granularidade e fatiamento** — se os dois testes de uma task não cabem em uma frase cada, a task está grande demais. Confira também os limites do contrato `expx-fatiamento` v3: nenhuma task declara mais de 40 arquivos revisáveis (L1); nenhum arquivo revisável fica, depois da task, acima de 5.000 linhas ou 204.800 bytes (L2, sem tolerância: uma task anterior divide o arquivo); e o que vira PR — o trabalho, ou cada sprint com `entrega: por_sprint` — fica em até 100 arquivos alterados, todos contados, inclusive os artefatos de método que entram no PR (`docs/sprintx/`, `docs/entregas/`); `docs/eventos/` é rastro local, ignorado pelo Git, e não conta (L3; o PR de planejamento é a exceção). Não há limite de linhas por task, commit ou PR: não aponte tamanho em linhas.
+10. **Granularidade e fatiamento** — se os dois testes de uma task não cabem em uma frase cada, a task está grande demais. Confira também os limites do contrato `expx-fatiamento` v3: nenhuma task declara mais de 40 arquivos revisáveis (L1); nenhum arquivo revisável fica, depois da task, acima de 5.000 linhas ou 204.800 bytes (L2, sem tolerância: uma task anterior divide o arquivo); e o que vira PR — o trabalho, ou cada sprint com `entrega: por_sprint` — fica em até 100 arquivos alterados, todos contados, inclusive os artefatos de método que entram no PR (`docs/sprintx/`, `docs/entregas/`); `docs/eventos/` é rastro local, ignorado pelo Git, e não conta (L3; o PR de planejamento é a exceção). Não há teto para a soma de linhas de uma task, de um commit ou de um PR: não aponte essa soma. O L2, por arquivo, continua valendo: um arquivo que já passa de 5.000 linhas ou 204.800 bytes, ou que a task levaria além disso, é achado `[limite:L2]`.
 
 ## Passo 4 — Escrever o relatório
 
@@ -139,7 +139,7 @@ veio (`sprint`, `fases` ou `tasks`), por exemplo `sprint-02/tasks.md (fases: F-0
 aponte para um `sprint.md` ou `fases.md` que aquela sprint não tem.
 
 **A coluna `problema` começa pelo item** do Passo 3 que gerou o achado: `[item 1]` a `[item 10]`.
-Achado do item 10 que aponta um limite do contrato traz o limite logo depois do item — `[item 10][limite:L1]`, `[item 10][limite:L2]` ou `[item 10][limite:L3]` — e é sempre ALTA. Só a granularidade dos testes, sem limite do contrato, sai sem marcador e com severidade julgada. Achado do item 2 traz o tipo logo em seguida e a forma fixa:
+Achado do item 10 que aponta um limite do contrato traz o limite logo depois do item — `[item 10][limite:L1]`, `[item 10][limite:L2]` ou `[item 10][limite:L3]` — e é sempre ALTA. A granularidade dos testes, sem limite do contrato, sai com `[item 10][granularidade]` e com severidade julgada. Todo achado do item 10 leva um dos dois marcadores: sem marcador, a F5 o recusa, para um limite descrito só pela medida não escapar da severidade. Achado do item 2 traz o tipo logo em seguida e a forma fixa:
 
 ```
 [item 2][fraco:ausente] T-02.01 — cláusula: - — passaria com: <implementação errada>

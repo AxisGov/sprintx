@@ -1054,16 +1054,19 @@ severidade_de() {
 trim() { local s="$1"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"; printf '%s' "$s"; }
 
 # linhas_da_tabela — severidade TAB problema, uma por achado de 00-AUDITORIA.md.
-# `\|` e pipe dentro da celula (Markdown), nunca separador de coluna. Linha que
-# nao tem exatamente as quatro colunas sai como `!colunas`, e a validacao recusa.
+# `\|` e pipe dentro da celula (Markdown), nunca separador de coluna. A barra
+# invertida dupla `\\` e uma barra literal: as duplas saem antes, e so a barra
+# impar que sobra escapa o pipe (`\\|` e barra seguida do delimitador;
+# katosmv/login#34). Linha que nao tem exatamente as quatro colunas sai como
+# `!colunas`, e a validacao recusa.
 linhas_da_tabela() {
   tr -d '\r' < "$AUD" | awk '
     /^\|/ {
-      l = $0; gsub(/\\\|/, "\034", l); n = split(l, c, "|")
+      l = $0; gsub(/\\\\/, "\035", l); gsub(/\\\|/, "\034", l); n = split(l, c, "|")
       s = c[2]; gsub(/^[ \t]+|[ \t]+$/, "", s)
       if (s == "severidade" || s ~ /^-+$/) next
       if (n != 6 || c[6] !~ /^[ \t]*$/) { print "!colunas\t" $0; next }
-      p = c[4]; gsub(/^[ \t]+|[ \t]+$/, "", p); gsub(/\034/, "\\|", p)
+      p = c[4]; gsub(/^[ \t]+|[ \t]+$/, "", p); gsub(/\034/, "\\|", p); gsub(/\035/, "\\\\", p)
       print s "\t" p
     }'
 }
@@ -1083,7 +1086,9 @@ valida_auditoria() {
         '!colunas') falha "$E_CONTRATO" "linha da tabela fora das quatro colunas: $prob" ;;
         *) falha "$E_CONTRATO" "severidade fora do enum: '$sev'" ;;
       esac
-      item="$(printf '%s' "$prob" | sed -n 's/^\[item \([0-9][0-9]*\)\].*/\1/p')"
+      # Sem zero a esquerda: `[item 010]` passava na faixa e escapava das regras que comparam
+      # o texto `[item 10]` (CodeAnt no sprintx#56).
+      item="$(printf '%s' "$prob" | sed -n 's/^\[item \([1-9][0-9]*\)\].*/\1/p')"
       [ -n "$item" ] && [ "$item" -ge 1 ] && [ "$item" -le 10 ] \
         || falha "$E_CONTRATO" "achado sem prefixo [item N]: $prob"
       tipo="$(printf '%s' "$prob" | sed -n 's/^\[item [0-9]*\]\[fraco:\([a-z]*\)\].*/\1/p')"
@@ -1110,10 +1115,24 @@ valida_auditoria() {
         case "${prob#\[item 10\]\[limite:$lim\]}" in *"[limite:"*) falha "$E_CONTRATO" "um achado leva um so [limite:Ln]: $prob" ;; esac
       else
         case "$prob" in *"[limite:"*) falha "$E_CONTRATO" "[limite:...] so existe no item 10, como L1, L2 ou L3: $prob" ;; esac
-        if [ "$item" = 10 ] && printf '%s' "$prob" | grep -Eq '(^|[^A-Za-z0-9])L[123]([^0-9]|$)'; then
-          falha "$E_CONTRATO" "achado de limite do item 10 sem [limite:Ln]: $prob"
+        if [ "$item" = 10 ]; then
+          # Todo achado do item 10 diz o que e: [limite:Ln] ou [granularidade]. Sem
+          # marcador, o limite descrito so pela medida escapava da severidade
+          # deterministica (katosmv/login#34); adivinhar pela medida recusaria
+          # granularidade legitima que cita contagem (revisao do Codex).
+          case "$prob" in
+            "[item 10][granularidade]"*) ;;
+            *) falha "$E_CONTRATO" "achado do item 10 sem [limite:Ln] nem [granularidade]: $prob" ;;
+          esac
+          if printf '%s' "$prob" | grep -Eq '(^|[^A-Za-z0-9])L[123]([^0-9]|$)'; then
+            falha "$E_CONTRATO" "achado de limite do item 10 sem [limite:Ln]: $prob"
+          fi
         fi
       fi
+      case "$prob" in
+        "[item 10][granularidade]"*) ;;
+        *"[granularidade]"*) falha "$E_CONTRATO" "[granularidade] so existe no item 10, logo depois dele: $prob" ;;
+      esac
     done <<EOF
 $tabela
 EOF
@@ -1172,6 +1191,13 @@ migra_legado() { # migra_legado [max] [por] [max6] [estado recusa] — sem argum
   case "$E_ESTADO" in
     aprovado|replanejar)
       v=sim; [ "$E_ESTADO" = replanejar ] && { v=nao; reprov=1; }
+      # Linha fora das quatro colunas nao some da contagem: um SIM legado com ela
+      # migraria com zero ALTA (katosmv/login#34).
+      # `grep` sem -q le a saida inteira: com -q ele fecha o pipe na primeira linha,
+      # o awk recebe SIGPIPE e, sob pipefail, o `if` nao entra (revisao do Codex).
+      if linhas_da_tabela | grep '^!colunas' >/dev/null; then
+        falha "$E_CONTRATO" "auditoria legada com linha da tabela fora das quatro colunas: o veredito nao e lavado"
+      fi
       altas="$(conta_severidade ALTA)"; medias="$(conta_severidade 'MÉDIA')"; baixas="$(conta_severidade BAIXA)"
       if [ "$v" = sim ] && [ "$altas" -gt 0 ]; then
         falha "$E_CONTRATO" "auditoria legada diz VEREDITO: SIM com $altas achado(s) ALTA — o veredito nao e lavado"

@@ -1156,6 +1156,24 @@ D="$G/s3"; nova_feature "$D" velha; legado "$D" '| severidade | arquivo | proble
 VEREDITO: SIM — o plano está pronto para execução autônoma.'
 pl "$D" criar velha 3 buildx >/dev/null; rc=$?
 [ "$rc" -eq 4 ] && [ ! -f "$(fdir "$D" velha)/00-PLANEJAMENTO.md" ]; afirma "gs3-sim-com-alta-nao-e-lavado" $? "rc=$rc, nada gravado"
+# Linha fora das quatro colunas nao some da contagem: um SIM legado com ela nao migra (katosmv/login#34).
+D="$G/s4"; nova_feature "$D" velha; legado "$D" '| severidade | arquivo | problema | correção sugerida |
+|---|---|---|---|
+| ALTA | sprint-01/tasks.md | [item 10][limite:L1] T-01.01 tem 41 arquivos | dividir
+
+VEREDITO: SIM — o plano está pronto para execução autônoma.'
+pl "$D" criar velha 3 buildx >/dev/null; rc=$?
+[ "$rc" -eq 4 ] && [ ! -f "$(fdir "$D" velha)/00-PLANEJAMENTO.md" ]; afirma "gs4-legado-com-linha-malformada-nao-migra" $? "rc=$rc, nada gravado"
+# ...nem quando muitas linhas validas vem depois dela: o leitor nao pode parar cedo e perder a recusa
+# para um SIGPIPE sob pipefail (revisao do Codex).
+D="$G/s5"; nova_feature "$D" velha
+{ printf '| severidade | arquivo | problema | correção sugerida |\n|---|---|---|---|\n'
+  printf '| ALTA | sprint-01/tasks.md | [item 1] malformada | dividir\n'
+  i=0; while [ "$i" -lt 6000 ]; do printf '| BAIXA | sprint-01/tasks.md | [item 3] linha valida numero %s com texto de enchimento | y |\n' "$i"; i=$((i + 1)); done
+  printf '\nVEREDITO: SIM — o plano está pronto para execução autônoma.\n'; } > "$G/s5-aud.md"
+legado "$D" "$(cat "$G/s5-aud.md")"
+pl "$D" criar velha 3 buildx >/dev/null; rc=$?
+[ "$rc" -eq 4 ] && [ ! -f "$(fdir "$D" velha)/00-PLANEJAMENTO.md" ]; afirma "gs5-legado-malformada-seguida-de-muitas-linhas-nao-migra" $? "rc=$rc, nada gravado"
 
 # Contrato: kind planejamento, dono sprintx, sem expxdev, nao e produto.
 tem "$SCHEMA" '### `00-PLANEJAMENTO.md` → `kind: planejamento`' && tem "$SCHEMA" '**Kind exclusivo da `sprintx`**'
@@ -1354,7 +1372,24 @@ sev_caso g-limite-pipe-escapado-recusado 4 '| ALTA | s/tasks.md | [item 10][limi
 sev_caso g-pipe-escapado-na-celula-aceito 0 '| BAIXA | s/tasks.md | [item 3] T-01.01 a \| b | y |' 'SIM — x'
 sev_caso g-limite-coluna-extra-recusado 4 '| ALTA | s/tasks.md | [item 10][limite:L1] T-01.01 41 arquivos | [limite:L4] | y |' 'NÃO — x'
 sev_caso g-tabela-coluna-a-menos-recusado 4 '| ALTA | s/tasks.md | [item 1] T-01.01 sem teste |' 'NÃO — x'
-sev_caso g-item10-granularidade-media-aceito 0 '| MÉDIA | s/tasks.md | [item 10] T-01.01 os testes não cabem em uma frase | y |' 'SIM — x'
+sev_caso g-item10-granularidade-media-aceito 0 '| MÉDIA | s/tasks.md | [item 10][granularidade] T-01.01 os testes não cabem em uma frase | y |' 'SIM — x'
+# Todo achado do item 10 diz o que e: [limite:Ln] ou [granularidade] (katosmv/login#34). Sem marcador, recusado;
+# a granularidade que cita uma contagem segue aceita, e o marcador so existe no item 10.
+sev_caso g-item10-sem-marcador-recusado 4 '| MÉDIA | s/tasks.md | [item 10] T-01.01 os testes não cabem em uma frase | y |' 'SIM — x'
+sev_caso g-item10-granularidade-com-contagem-aceito 0 '| MÉDIA | s/tasks.md | [item 10][granularidade] T-01.01 os testes cobrem 2 arquivos e misturam 3 linhas de fluxo | y |' 'SIM — x'
+sev_caso g-granularidade-fora-do-item10-recusado 4 '| MÉDIA | s/tasks.md | [item 3][granularidade] T-01.01 x | y |' 'SIM — x'
+# O numero do item nao tem zero a esquerda: `[item 010]` passava na faixa e escapava das regras do
+# item 10 (CodeAnt no sprintx#56).
+sev_caso g-item-com-zero-a-esquerda-recusado 4 '| MÉDIA | s/tasks.md | [item 010] T-01.01 tem 101 arquivos | y |' 'SIM — x'
+sev_caso g-item-zero-recusado 4 '| MÉDIA | s/tasks.md | [item 0] T-01.01 x | y |' 'SIM — x'
+sev_caso g-granularidade-que-cita-l1-recusado 4 '| MÉDIA | s/tasks.md | [item 10][granularidade] T-01.01 passa de L1 | y |' 'SIM — x'
+# Limite descrito so pelo numero, sem L1-L3, tambem e achado de limite: sem [limite:Ln], recusado (katosmv/login#34).
+sev_caso g-item10-limite-so-numerico-recusado 4 '| MÉDIA | s/tasks.md | [item 10] T-01.01 tem 101 arquivos alterados; máximo: 100 | y |' 'SIM — x'
+sev_caso g-item10-limite-em-linhas-recusado 4 '| MÉDIA | s/tasks.md | [item 10] src/a.ts fica com 5.200 linhas | y |' 'SIM — x'
+sev_caso g-item10-limite-em-bytes-recusado 4 '| MÉDIA | s/tasks.md | [item 10] src/a.ts passa de 204.800 bytes | y |' 'SIM — x'
+# Duas barras antes do pipe: barra literal seguida do delimitador, nao pipe escapado (katosmv/login#34).
+sev_caso g-duas-barras-antes-do-delimitador-aceito 0 '| BAIXA | s/tasks.md | [item 3] termina com duas barras \\| y |' 'SIM — x'
+sev_caso g-tres-barras-pipe-escapado-aceito 0 '| BAIXA | s/tasks.md | [item 3] a \\\| b | y |' 'SIM — x'
 sev_caso gv5-teste-com-clausula-media-aceito 0 '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: D-13 — passaria com: x | y |' 'SIM — x'
 aud_linha '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: D-13 — passaria com: x | y |' 'MAIS OU MENOS'
 pl "$D" avanca menu f5 >/dev/null; rc=$?
@@ -1363,6 +1398,13 @@ AUDF="$SK/references/05-auditoria.md"
 [ -z "$(grep -rlF 'a severidade é sua' "$SK" ${RAIZ_SRC:+"$H/../agents" "$H/../../.opencode/agent"} | grep -vF 'DECISOES-DA-SKILL.md')" ]; afirma "g-frase-severidade-e-sua-removida" $? "nenhuma sessao escolhe"
 tem "$AUDF" '| `fraco:teste` | **MÉDIA** |' && tem "$AUDF" '| `fraco:ausente` | **ALTA** |' && tem "$AUDF" '| `fraco:criterio` | **ALTA** |'
 afirma "g-f5-tabela-deterministica" $? "05-auditoria.md"
+# Redacao (katosmv/login#34): a soma de linhas nao tem teto, mas o L2 por arquivo vale; "sao ALTAS".
+for f in "$AUDF" ${RAIZ_SRC:+"$H/../agents/auditor-plano.md"}; do
+  i_nome="g-redacao-l2-e-altas-$(basename "$f" .md)"
+  tem "$f" 'soma de linhas' && tem "$f" 'O L2, por arquivo, continua valendo' && tem "$f" 'acima são ALTAS porque' \
+    && ! grep -qF 'não aponte tamanho em linhas' "$f"; i_rc=$?
+  afirma "$i_nome" "$i_rc" "soma sem teto, L2 por arquivo, concordancia"
+done
 [ -n "$RAIZ_SRC" ] || pula_externo "g-agente-tabela-da-fonte" "$SEM_FONTE"
 for ag in ${RAIZ_SRC:+"$H/../agents/auditor-plano.md" "$H/../agents/sprintx-revisor-testes.md"}; do
   i_nome="g-agente-tabela-$(basename "$ag" .md)"
