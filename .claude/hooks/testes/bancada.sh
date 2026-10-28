@@ -1378,6 +1378,10 @@ sev_caso g-item10-granularidade-media-aceito 0 '| MÉDIA | s/tasks.md | [item 10
 sev_caso g-item10-sem-marcador-recusado 4 '| MÉDIA | s/tasks.md | [item 10] T-01.01 os testes não cabem em uma frase | y |' 'SIM — x'
 sev_caso g-item10-granularidade-com-contagem-aceito 0 '| MÉDIA | s/tasks.md | [item 10][granularidade] T-01.01 os testes cobrem 2 arquivos e misturam 3 linhas de fluxo | y |' 'SIM — x'
 sev_caso g-granularidade-fora-do-item10-recusado 4 '| MÉDIA | s/tasks.md | [item 3][granularidade] T-01.01 x | y |' 'SIM — x'
+# O numero do item nao tem zero a esquerda: `[item 010]` passava na faixa e escapava das regras do
+# item 10 (CodeAnt no sprintx#56).
+sev_caso g-item-com-zero-a-esquerda-recusado 4 '| MÉDIA | s/tasks.md | [item 010] T-01.01 tem 101 arquivos | y |' 'SIM — x'
+sev_caso g-item-zero-recusado 4 '| MÉDIA | s/tasks.md | [item 0] T-01.01 x | y |' 'SIM — x'
 sev_caso g-granularidade-que-cita-l1-recusado 4 '| MÉDIA | s/tasks.md | [item 10][granularidade] T-01.01 passa de L1 | y |' 'SIM — x'
 # Limite descrito so pelo numero, sem L1-L3, tambem e achado de limite: sem [limite:Ln], recusado (katosmv/login#34).
 sev_caso g-item10-limite-so-numerico-recusado 4 '| MÉDIA | s/tasks.md | [item 10] T-01.01 tem 101 arquivos alterados; máximo: 100 | y |' 'SIM — x'

@@ -1086,7 +1086,9 @@ valida_auditoria() {
         '!colunas') falha "$E_CONTRATO" "linha da tabela fora das quatro colunas: $prob" ;;
         *) falha "$E_CONTRATO" "severidade fora do enum: '$sev'" ;;
       esac
-      item="$(printf '%s' "$prob" | sed -n 's/^\[item \([0-9][0-9]*\)\].*/\1/p')"
+      # Sem zero a esquerda: `[item 010]` passava na faixa e escapava das regras que comparam
+      # o texto `[item 10]` (CodeAnt no sprintx#56).
+      item="$(printf '%s' "$prob" | sed -n 's/^\[item \([1-9][0-9]*\)\].*/\1/p')"
       [ -n "$item" ] && [ "$item" -ge 1 ] && [ "$item" -le 10 ] \
         || falha "$E_CONTRATO" "achado sem prefixo [item N]: $prob"
       tipo="$(printf '%s' "$prob" | sed -n 's/^\[item [0-9]*\]\[fraco:\([a-z]*\)\].*/\1/p')"
