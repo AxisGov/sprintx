@@ -1054,16 +1054,19 @@ severidade_de() {
 trim() { local s="$1"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"; printf '%s' "$s"; }
 
 # linhas_da_tabela — severidade TAB problema, uma por achado de 00-AUDITORIA.md.
-# `\|` e pipe dentro da celula (Markdown), nunca separador de coluna. Linha que
-# nao tem exatamente as quatro colunas sai como `!colunas`, e a validacao recusa.
+# `\|` e pipe dentro da celula (Markdown), nunca separador de coluna. A barra
+# invertida dupla `\\` e uma barra literal: as duplas saem antes, e so a barra
+# impar que sobra escapa o pipe (`\\|` e barra seguida do delimitador;
+# katosmv/login#34). Linha que nao tem exatamente as quatro colunas sai como
+# `!colunas`, e a validacao recusa.
 linhas_da_tabela() {
   tr -d '\r' < "$AUD" | awk '
     /^\|/ {
-      l = $0; gsub(/\\\|/, "\034", l); n = split(l, c, "|")
+      l = $0; gsub(/\\\\/, "\035", l); gsub(/\\\|/, "\034", l); n = split(l, c, "|")
       s = c[2]; gsub(/^[ \t]+|[ \t]+$/, "", s)
       if (s == "severidade" || s ~ /^-+$/) next
       if (n != 6 || c[6] !~ /^[ \t]*$/) { print "!colunas\t" $0; next }
-      p = c[4]; gsub(/^[ \t]+|[ \t]+$/, "", p); gsub(/\034/, "\\|", p)
+      p = c[4]; gsub(/^[ \t]+|[ \t]+$/, "", p); gsub(/\034/, "\\|", p); gsub(/\035/, "\\\\", p)
       print s "\t" p
     }'
 }
@@ -1110,7 +1113,10 @@ valida_auditoria() {
         case "${prob#\[item 10\]\[limite:$lim\]}" in *"[limite:"*) falha "$E_CONTRATO" "um achado leva um so [limite:Ln]: $prob" ;; esac
       else
         case "$prob" in *"[limite:"*) falha "$E_CONTRATO" "[limite:...] so existe no item 10, como L1, L2 ou L3: $prob" ;; esac
-        if [ "$item" = 10 ] && printf '%s' "$prob" | grep -Eq '(^|[^A-Za-z0-9])L[123]([^0-9]|$)'; then
+        # Sem o marcador, o limite tambem se reconhece pela medida: uma contagem de
+        # arquivos, linhas ou bytes e L1, L2 ou L3, nao granularidade de teste
+        # (katosmv/login#34). O falso positivo assumido e reescrever o achado.
+        if [ "$item" = 10 ] && printf '%s' "$prob" | grep -Eiq '(^|[^A-Za-z0-9])L[123]([^0-9]|$)|[0-9][0-9.]*[[:space:]]+(arquivos?|linhas?|bytes)([^A-Za-z]|$)'; then
           falha "$E_CONTRATO" "achado de limite do item 10 sem [limite:Ln]: $prob"
         fi
       fi
@@ -1172,6 +1178,11 @@ migra_legado() { # migra_legado [max] [por] [max6] [estado recusa] — sem argum
   case "$E_ESTADO" in
     aprovado|replanejar)
       v=sim; [ "$E_ESTADO" = replanejar ] && { v=nao; reprov=1; }
+      # Linha fora das quatro colunas nao some da contagem: um SIM legado com ela
+      # migraria com zero ALTA (katosmv/login#34).
+      if linhas_da_tabela | grep -q '^!colunas'; then
+        falha "$E_CONTRATO" "auditoria legada com linha da tabela fora das quatro colunas: o veredito nao e lavado"
+      fi
       altas="$(conta_severidade ALTA)"; medias="$(conta_severidade 'MÉDIA')"; baixas="$(conta_severidade BAIXA)"
       if [ "$v" = sim ] && [ "$altas" -gt 0 ]; then
         falha "$E_CONTRATO" "auditoria legada diz VEREDITO: SIM com $altas achado(s) ALTA — o veredito nao e lavado"

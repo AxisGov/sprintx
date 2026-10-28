@@ -85,7 +85,7 @@ Você não escreve severidade. Ela sai do tipo, sempre igual, para qualquer sess
 | `criterio` | ALTA |
 | `teste` | MÉDIA |
 
-`teste` pode ser MÉDIA porque o comportamento certo já está escrito numa cláusula — não há decisão de produto a inventar, só um teste que ainda não a prova. A F6 é obrigada a endurecer esse teste antes de escrever produto.
+`teste` pode ser MÉDIA porque o comportamento certo já está escrito numa cláusula — não há decisão de produto a inventar, só um teste que ainda não prova a cláusula. A F6 é obrigada a endurecer esse teste antes de escrever produto.
 
 ## Na F6
 
