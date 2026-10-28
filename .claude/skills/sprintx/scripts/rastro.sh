@@ -141,15 +141,10 @@ elif [ "$EXIGE_IDENTIDADE" = 1 ]; then
 else
   EXTRAS='"sessao":null,"harness":null'
 fi
-# O snapshot do executor (DS-186). O harness so decide se o frontmatter Claude completa o
-# snapshot de um SUBAGENTE: para o principal nao e derivado. Reusa o da identidade; sem ela
-# (identidade instavel), sai da mesma derivacao dos hooks.
-HARNESS_EXEC=""
-if [ "$RASTRO_AGENTE" != principal ]; then
-  HARNESS_EXEC="${HARNESS:-}"
-  [ -n "$HARNESS_EXEC" ] || rastro_harness_em HARNESS_EXEC
-fi
-execucao_extras_em EXECUCAO "$RAIZ" "$RASTRO_AGENTE" "$HARNESS_EXEC"
+# O executor observado e a resolucao (DS-186, DS-190). O harness decide se o $CLAUDE_EFFORT
+# vale para o principal e se a linha de um subagente leva a resolucao: o da identidade, quando
+# ela existe; sem ela, o helper detecta pela regra do escritor comum (EXPX_HARNESS, CLAUDECODE).
+execucao_extras_em EXECUCAO "$RAIZ" "$RASTRO_AGENTE" "${HARNESS:-}"
 EXTRAS="$EXTRAS,$EXECUCAO"
 
 # ------------------------------------------------------------ fechar e do dono
