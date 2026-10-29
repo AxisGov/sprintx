@@ -27,16 +27,29 @@ RAIZ="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.claude" && pwd)}"
 varre() {
   awk '
     # limpa(s, isolada): sem `isolada`, o estado das aspas atravessa as linhas (simples, dupla)
-    function limpa(s, isolada,   r, i, j, c, ant, sq, dq) {
+    function limpa(s, isolada,   r, i, j, c, d, ant, sq, dq, w) {
       r = ""; ant = " "
       sq = isolada ? 0 : simples; dq = isolada ? 0 : dupla
       for (i = 1; i <= length(s); i++) {
         c = substr(s, i, 1)
         if (sq) { if (c == "\047") sq = 0; continue }
         if (c == "\\") { r = r c substr(s, i + 1, 1); i++; ant = "x"; continue }
-        # o delimitador de heredoc entre aspas (`<<\047FIM\047`) fica: e nome, nao texto
-        if (c == "\047" && !dq && r ~ /<<-?[ \t]*$/ && (j = index(substr(s, i + 1), "\047"))) {
-          r = r substr(s, i, j + 1); i += j; ant = "\047"; continue
+        # heredoc: `<<` fora de aspa e de `((...))`, que nao seja `<<<` nem o fim de um. So o
+        # primeiro da linha.
+        if (!isolada && !dq && fim_hd == "" && substr(s, i, 2) == "<<" && substr(s, i + 2, 1) != "<" && ant != "<" && r !~ /\(\([^)]*$/) {
+          j = i + 2; hd_tab = 0; hd_literal = 0
+          if (substr(s, j, 1) == "-") { hd_tab = 1; j++ }
+          while (substr(s, j, 1) ~ /[ \t]/) j++
+          d = substr(s, j, 1); w = ""
+          if (d == "\047" || d == "\"") {
+            hd_literal = 1; j++
+            while (j <= length(s) && substr(s, j, 1) != d) { w = w substr(s, j, 1); j++ }
+            j++
+          } else {
+            while (j <= length(s) && substr(s, j, 1) !~ /[ \t;&|()<>]/) { w = w substr(s, j, 1); j++ }
+            if (w ~ /^[0-9]/ && w !~ /[^0-9]/) w = ""   # $((1<<2)): deslocamento, nao heredoc
+          }
+          if (w != "") { fim_hd = w; r = r substr(s, i, j - i); i = j - 1; ant = "x"; continue }
         }
         if (c == "\047" && !dq) { sq = 1; r = r "\047\047"; ant = c; continue }
         if (c == "\"") dq = !dq
@@ -57,12 +70,6 @@ varre() {
     }
     {
       l = limpa($0, 0)
-      # abre heredoc (`<<FIM`, `<<-FIM`, `<<\047FIM\047`, `<<"FIM"`), nao here-string (`<<<`)
-      if (match(l, /<<-?[ \t]*[\047"]?[A-Za-z_][A-Za-z0-9_]*[\047"]?/) && (RSTART == 1 || substr(l, RSTART - 1, 1) != "<")) {
-        m = substr(l, RSTART, RLENGTH); hd_tab = (m ~ /^<<-/)
-        hd_literal = (m ~ /[\047"]/)
-        sub(/^<<-?[ \t]*/, "", m); gsub(/[\047"]/, "", m); fim_hd = m
-      }
       if (cmd == "") ini = NR
       cont = 0
       if (l ~ /\\[ \t]*$/) { sub(/\\[ \t]*$/, " ", l); cont = 1 }
