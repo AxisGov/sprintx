@@ -27,30 +27,33 @@ RAIZ="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.claude" && pwd)}"
 varre() {
   awk '
     # limpa(s, isolada): sem `isolada`, o estado das aspas atravessa as linhas (simples, dupla)
-    function limpa(s, isolada,   r, i, j, c, d, ant, sq, dq, w) {
+    function limpa(s, isolada,   r, i, j, c, d, ant, sq, dq, w, lit, tab) {
       r = ""; ant = " "
       sq = isolada ? 0 : simples; dq = isolada ? 0 : dupla
       for (i = 1; i <= length(s); i++) {
         c = substr(s, i, 1)
         if (sq) { if (c == "\047") sq = 0; continue }
-        # heredoc: `<<` fora de aspa e de `((...))`, que nao seja `<<<` nem o fim de um. So o
-        # primeiro da linha. O delimitador e lido como o bash le a palavra: pedacos entre aspas e
+        # heredoc: `<<` fora de aspa e de `((...))`, que nao seja `<<<` nem o fim de um. Uma
+        # linha pode abrir varios: os corpos vem na ordem, numa fila. O delimitador e lido como o bash le a palavra: pedacos entre aspas e
         # barras se juntam (`<<\047FIM\047x` e `FIMx`), e qualquer aspa ou barra o torna literal.
-        if (!isolada && !dq && fim_hd == "" && substr(s, i, 2) == "<<" && substr(s, i + 2, 1) != "<" && ant != "<" && r !~ /\(\([^)]*$/) {
-          j = i + 2; hd_tab = 0; hd_literal = 0; w = ""
-          if (substr(s, j, 1) == "-") { hd_tab = 1; j++ }
+        if (!isolada && !dq && substr(s, i, 2) == "<<" && substr(s, i + 2, 1) != "<" && ant != "<" && r !~ /\(\([^)]*$/) {
+          j = i + 2; tab = 0; lit = 0; w = ""
+          if (substr(s, j, 1) == "-") { tab = 1; j++ }
           while (substr(s, j, 1) ~ /[ \t]/) j++
           while (j <= length(s) && substr(s, j, 1) !~ /[ \t;&|()<>]/) {
             d = substr(s, j, 1)
             if (d == "\047" || d == "\"") {
-              hd_literal = 1; j++
+              lit = 1; j++
               while (j <= length(s) && substr(s, j, 1) != d) { w = w substr(s, j, 1); j++ }
               j++
-            } else if (d == "\\") { hd_literal = 1; w = w substr(s, j + 1, 1); j += 2 }
+            } else if (d == "\\") { lit = 1; w = w substr(s, j + 1, 1); j += 2 }
             else { w = w d; j++ }
           }
-          if (w ~ /^[0-9]+$/ && !hd_literal) w = ""   # $((1<<2)): deslocamento, nao heredoc
-          if (w != "") { fim_hd = w; hd_linha = NR; r = r substr(s, i, j - i); i = j - 1; ant = "x"; continue }
+          if (w ~ /^[0-9]+$/ && !lit) w = ""   # $((1<<2)): deslocamento, nao heredoc
+          if (w != "") {
+            hd_n++; hd_w[hd_n] = w; hd_lit[hd_n] = lit; hd_tab[hd_n] = tab; hd_lin[hd_n] = NR
+            r = r substr(s, i, j - i); i = j - 1; ant = "x"; continue
+          }
         }
         if (c == "\\") { r = r c substr(s, i + 1, 1); i++; ant = "x"; continue }
         if (c == "\047" && !dq) { sq = 1; r = r "\047\047"; ant = c; continue }
@@ -61,17 +64,18 @@ varre() {
       if (!isolada) { simples = sq; dupla = dq }
       return r
     }
-    # dentro do corpo de um heredoc: so a linha que fecha encerra
-    fim_hd != "" {
-      t = $0; if (hd_tab) sub(/^\t+/, "", t)
-      if (t == fim_hd) { fim_hd = ""; next }
-      if (hd_literal) next
+    # dentro do corpo de um heredoc da fila: so a linha que fecha passa ao proximo
+    hd_i <= hd_n && hd_n > 0 && corpo {
+      t = $0; if (hd_tab[hd_i]) sub(/^\t+/, "", t)
+      if (t == hd_w[hd_i]) { hd_i++; if (hd_i > hd_n) { hd_n = 0; hd_i = 1; corpo = 0 }; next }
+      if (hd_lit[hd_i]) next
       l = limpa($0, 1)
       if (l ~ /(^|[^|])\|[ \t]*(grep[ \t][^|]*(-[A-Za-z]*q|--quiet)|head([ \t]|$))/) print NR ":" l
       next
     }
     {
       l = limpa($0, 0)
+      if (hd_n > 0) { hd_i = 1; corpo = 1 }
       if (cmd == "") ini = NR
       cont = 0
       if (l ~ /\\[ \t]*$/) { sub(/\\[ \t]*$/, " ", l); cont = 1 }
@@ -82,7 +86,7 @@ varre() {
       cmd = ""
     }
     # Heredoc que nunca fecha esconderia o resto do arquivo: e achado, nao silencio.
-    END { if (fim_hd != "") print hd_linha ":heredoc sem a linha de fechamento " fim_hd
+    END { if (hd_n > 0 && corpo) print hd_lin[hd_i] ":heredoc sem a linha de fechamento " hd_w[hd_i]
       if (cmd != "" && cmd ~ /(^|[^|])\|[ \t]*(grep[ \t][^|]*(-[A-Za-z]*q|--quiet)|head([ \t]|$))/) print ini ":" cmd }
   ' "$1"
 }
