@@ -92,7 +92,7 @@ while IFS= read -r caminho; do
   case "$caminho" in
     tests/*|test/*|*_test.*|*.test.*|*.spec.*|*Test.*|*Spec.*) continue ;;
   esac
-  if printf '%s\n' "$DECLARADOS" | grep -qxF "$caminho"; then
+  if grep -qxF "$caminho" <<<"$DECLARADOS"; then
     continue
   fi
   FORA_ESCOPO="$FORA_ESCOPO $caminho"

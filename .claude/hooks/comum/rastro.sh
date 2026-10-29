@@ -436,14 +436,15 @@ rastro_trabalho_da_sessao() { local _t; rastro_trabalho_da_sessao_em _t "$@"; pr
 # disco em volta. Vazio quando a chave nao esta la ou o valor nao e um slug.
 rastro_trabalho_do_texto() {
   local tid
-  tid="$(printf '%s' "$1" | tr -d '\r' | awk '
+  tid="$(awk '
+    { gsub(/\r/, "") }
     NR == 1 && $0 != "---" { exit }
     NR == 1 { next }
     $0 == "---" { exit }
     /^trabalho_id:[ \t]*/ {
       sub(/^trabalho_id:[ \t]*/, ""); sub(/[ \t]+$/, "")
       gsub(/^"|"$/, ""); print; exit
-    }')"
+    }' <<<"$1")"
   rastro_trabalho_valido "$tid" || return 0
   printf '%s' "$tid"
 }

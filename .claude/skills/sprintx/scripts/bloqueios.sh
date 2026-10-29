@@ -58,7 +58,7 @@ resolve_raiz() {
 
 contexto() { # contexto <slug>
   SLUG="$1"
-  printf '%s' "$SLUG" | grep -Eq '^[a-z0-9]+(-[a-z0-9]+)*$' \
+  grep -Eq '^[a-z0-9]+(-[a-z0-9]+)*$' <<<"$SLUG" \
     || falha "$E_USO" "slug invalido: '$SLUG' (a-z, 0-9 e hifen)"
   RAIZ="$(resolve_raiz)"
   PASTA="$RAIZ/docs/sprintx/features/$SLUG"
@@ -97,7 +97,10 @@ classe_valida() { case " $CLASSES " in *" $1 "*) [ -n "$1" ] ;; *) return 1 ;; e
 # Valor vazio sai como "-" (o read junta tabs vazios); quem diz se a chave classe
 # existe e n_classe, nunca o valor. Linha fora da forma sai como LIXO.
 entradas() {
-  tr -d '\r' < "$1" | awk '
+  # O awk le o arquivo e tira o \r ele mesmo: com `tr | awk`, o `exit` no fim do frontmatter
+  # levava o tr a SIGPIPE num arquivo acima de 64 KB, e o pipefail virava a leitura em falha.
+  awk '
+    { gsub(/\r/, "") }
     function v0(x) { return x == "" ? "-" : x }
     function sai() { if (id != "") print id "\t" v0(t) "\t" v0(c) "\t" v0(r) "\t" nc; id = "" }
     NR == 1 { next }
@@ -113,15 +116,14 @@ entradas() {
     /^    resolvido_em:/ { r = $2; next }
     /^    [a-z_]+:/      { next }
     { print "LIXO\t" $0 }
-    END { sai() }'
+    END { sai() }' "$1"
 }
 
 # classe_lida <classe> <n_classe> — o que o consumidor recebe: a chave gravada, ou `legado` sem ela.
 classe_lida() { if [ "$2" -eq 0 ]; then printf 'legado'; else printf '%s' "$1"; fi; }
 
 tem_frontmatter() {
-  [ "$(tr -d '\r' < "$1" | head -1)" = "---" ] \
-    && tr -d '\r' < "$1" | awk 'NR == 1 { next } $0 == "---" { exit } $0 == "kind: bloqueios" { achou = 1 } END { exit !achou }'
+  awk '{ gsub(/\r/, "") } NR == 1 { abre = ($0 == "---"); if (!abre) exit; next } $0 == "---" { exit } $0 == "kind: bloqueios" { achou = 1 } END { exit !(abre && achou) }' "$1"
 }
 
 # valida — o arquivo inteiro. Legado (sem classe) so antes da primeira entrada tipada.
@@ -132,7 +134,7 @@ valida() {
   while IFS=$'\t' read -r id task classe resolvido nc; do
     [ -n "$id" ] || continue
     [ "$id" = LIXO ] && falha "$E_CONTRATO" "linha fora da forma no frontmatter: $task"
-    printf '%s' "$id" | grep -Eq '^B-[0-9]{2,}$' || falha "$E_CONTRATO" "id invalido: '$id' (B-NN)"
+    grep -Eq '^B-[0-9]{2,}$' <<<"$id" || falha "$E_CONTRATO" "id invalido: '$id' (B-NN)"
     case "$vistos" in *" $id "*) falha "$E_CONTRATO" "$id repetido" ;; esac
     vistos="$vistos$id "
     [ "$nc" -gt 1 ] && falha "$E_CONTRATO" "$id tem a chave classe $nc vezes"
@@ -176,7 +178,7 @@ cmd_registrar() { # <task|null> <classe> <descricao> <destravaria>
   local task="$1" classe="$2" desc="$3" dest="$4"
   [ -n "$classe" ] || falha "$E_CONTRATO" "bloqueio novo sem classe: escolha pelo caminho de criacao ($CLASSES)"
   classe_valida "$classe" || falha "$E_CONTRATO" "classe '$classe' fora do enum ($CLASSES)"
-  [ "$task" = null ] || printf '%s' "$task" | grep -Eq '^T-[0-9]{2}\.[0-9]{2}$' \
+  [ "$task" = null ] || grep -Eq '^T-[0-9]{2}\.[0-9]{2}$' <<<"$task" \
     || falha "$E_CONTRATO" "task invalida: '$task' (T-NN.MM ou null)"
   uma_linha descricao "$desc"; uma_linha "o que destravaria" "$dest"
 
@@ -233,7 +235,7 @@ cmd_registrar() { # <task|null> <classe> <descricao> <destravaria>
 
 cmd_resolver() { # <B-NN>
   local alvo="$1" linha task classe resolvido nc lida tmp="$ARQ.tmp.$$"
-  printf '%s' "$alvo" | grep -Eq '^B-[0-9]{2,}$' || falha "$E_USO" "id invalido: '$alvo' (B-NN)"
+  grep -Eq '^B-[0-9]{2,}$' <<<"$alvo" || falha "$E_USO" "id invalido: '$alvo' (B-NN)"
   valida
   linha="$(entradas "$ARQ" | awk -F'\t' -v b="$alvo" '$1 == b')"
   [ -n "$linha" ] || falha "$E_CONTRATO" "$alvo nao existe em 00-BLOQUEIOS.md"

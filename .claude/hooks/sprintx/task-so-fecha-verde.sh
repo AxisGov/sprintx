@@ -43,7 +43,9 @@ NOVO="$(rastro_tool_input_get "$ENTRADA" content)"
 [ -n "$NOVO" ] || exit 0
 
 # Nada virando `concluida` nesta gravacao => nada a verificar.
-printf '%s' "$NOVO" | grep -q 'status: concluida' || exit 0
+# `case`, sem `printf | grep -q`: sob pipefail, num Write acima de 64 KB o printf levava SIGPIPE
+# e a regra era pulada.
+case "$NOVO" in *'status: concluida'*) ;; *) exit 0 ;; esac
 
 # ------------------------------------------------------ achar as violacoes
 # Percorre os blocos de task do texto novo; para cada um que esta `concluida`,

@@ -50,11 +50,13 @@ case "$FERRAMENTA" in
         RES="ok"
         # Cuidado com "0 failed", que e o caso VERDE e aparece em quase toda
         # saida de suite: o [1-9] no inicio do numero e o que separa os dois.
-        if printf '%s' "$SAIDA" | grep -qE '(^|[^0-9])[1-9][0-9]* (failed|failing|error)'; then
+        # O texto vai por here-string, sem `printf | grep -q`: sob pipefail, saida acima de 64 KB
+        # com o padrao no comeco levava o printf a SIGPIPE, e a suite vermelha saia `ok`.
+        if grep -qE '(^|[^0-9])[1-9][0-9]* (failed|failing|error)' <<<"$SAIDA"; then
           RES="falha"
-        elif printf '%s' "$SAIDA" | grep -qE '(^|[[:space:]])(FAILED|FAIL)([[:space:]]|$)'; then
+        elif grep -qE '(^|[[:space:]])(FAILED|FAIL)([[:space:]]|$)' <<<"$SAIDA"; then
           RES="falha"
-        elif printf '%s' "$SAIDA" | grep -qE '(^|[[:space:]])(\[ERROR\]|BUILD[[:space:]]+FAILURE)([[:space:]]|$)'; then
+        elif grep -qE '(^|[[:space:]])(\[ERROR\]|BUILD[[:space:]]+FAILURE)([[:space:]]|$)' <<<"$SAIDA"; then
           RES="falha"
         fi
         # `detalhe` e uma linha pelo contrato. Normalize quebras antes de cortar em 120 BYTES,
