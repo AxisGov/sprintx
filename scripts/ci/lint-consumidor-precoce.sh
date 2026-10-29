@@ -33,24 +33,26 @@ varre() {
       for (i = 1; i <= length(s); i++) {
         c = substr(s, i, 1)
         if (sq) { if (c == "\047") sq = 0; continue }
-        if (c == "\\") { r = r c substr(s, i + 1, 1); i++; ant = "x"; continue }
         # heredoc: `<<` fora de aspa e de `((...))`, que nao seja `<<<` nem o fim de um. So o
-        # primeiro da linha.
+        # primeiro da linha. O delimitador e lido como o bash le a palavra: pedacos entre aspas e
+        # barras se juntam (`<<\047FIM\047x` e `FIMx`), e qualquer aspa ou barra o torna literal.
         if (!isolada && !dq && fim_hd == "" && substr(s, i, 2) == "<<" && substr(s, i + 2, 1) != "<" && ant != "<" && r !~ /\(\([^)]*$/) {
-          j = i + 2; hd_tab = 0; hd_literal = 0
+          j = i + 2; hd_tab = 0; hd_literal = 0; w = ""
           if (substr(s, j, 1) == "-") { hd_tab = 1; j++ }
           while (substr(s, j, 1) ~ /[ \t]/) j++
-          d = substr(s, j, 1); w = ""
-          if (d == "\047" || d == "\"") {
-            hd_literal = 1; j++
-            while (j <= length(s) && substr(s, j, 1) != d) { w = w substr(s, j, 1); j++ }
-            j++
-          } else {
-            while (j <= length(s) && substr(s, j, 1) !~ /[ \t;&|()<>]/) { w = w substr(s, j, 1); j++ }
-            if (w ~ /^[0-9]/ && w !~ /[^0-9]/) w = ""   # $((1<<2)): deslocamento, nao heredoc
+          while (j <= length(s) && substr(s, j, 1) !~ /[ \t;&|()<>]/) {
+            d = substr(s, j, 1)
+            if (d == "\047" || d == "\"") {
+              hd_literal = 1; j++
+              while (j <= length(s) && substr(s, j, 1) != d) { w = w substr(s, j, 1); j++ }
+              j++
+            } else if (d == "\\") { hd_literal = 1; w = w substr(s, j + 1, 1); j += 2 }
+            else { w = w d; j++ }
           }
-          if (w != "") { fim_hd = w; r = r substr(s, i, j - i); i = j - 1; ant = "x"; continue }
+          if (w ~ /^[0-9]+$/ && !hd_literal) w = ""   # $((1<<2)): deslocamento, nao heredoc
+          if (w != "") { fim_hd = w; hd_linha = NR; r = r substr(s, i, j - i); i = j - 1; ant = "x"; continue }
         }
+        if (c == "\\") { r = r c substr(s, i + 1, 1); i++; ant = "x"; continue }
         if (c == "\047" && !dq) { sq = 1; r = r "\047\047"; ant = c; continue }
         if (c == "\"") dq = !dq
         if (c == "#" && !dq && ant ~ /[ \t;&|(]/) break
@@ -79,7 +81,9 @@ varre() {
       if (cmd ~ /(^|[^|])\|[ \t]*(grep[ \t][^|]*(-[A-Za-z]*q|--quiet)|head([ \t]|$))/) print ini ":" cmd
       cmd = ""
     }
-    END { if (cmd != "" && cmd ~ /(^|[^|])\|[ \t]*(grep[ \t][^|]*(-[A-Za-z]*q|--quiet)|head([ \t]|$))/) print ini ":" cmd }
+    # Heredoc que nunca fecha esconderia o resto do arquivo: e achado, nao silencio.
+    END { if (fim_hd != "") print hd_linha ":heredoc sem a linha de fechamento " fim_hd
+      if (cmd != "" && cmd ~ /(^|[^|])\|[ \t]*(grep[ \t][^|]*(-[A-Za-z]*q|--quiet)|head([ \t]|$))/) print ini ":" cmd }
   ' "$1"
 }
 

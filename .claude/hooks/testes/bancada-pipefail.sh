@@ -134,9 +134,21 @@ texto | grep -q de heredoc com hifen
 FIM-1
 produtor | grep -q depois-do-hifen
 echo $((a<<b)) | grep -q deslocamento
+cat <<'FIM'x
+texto | grep -q de heredoc com delimitador colado
+FIMx
+produtor | grep -q depois-do-delimitador-colado
+cat <<\FIM
+$x | grep -q texto de heredoc com barra
+FIM
 AN_CASOS
   an_linhas="$(bash "$AN_LINT" "$AN_T/lint" 2>/dev/null | sed -n 's/^consumidor precoce: hooks\/x\/casos\.sh:\([0-9]*\):.*/\1/p' | tr '\n' ' ')"
-  [ "$an_linhas" = "1 3 5 6 19 22 24 28 29 " ]
-  afirma "an6-lint-acusa-o-pipeline-e-nao-o-texto" $? "linhas acusadas: ${an_linhas:-nenhuma} (esperado 1 3 5 6 19 22 24 28 29)"
+  [ "$an_linhas" = "1 3 5 6 19 22 24 28 29 33 " ]
+  afirma "an6-lint-acusa-o-pipeline-e-nao-o-texto" $? "linhas acusadas: ${an_linhas:-nenhuma} (esperado 1 3 5 6 19 22 24 28 29 33)"
+  # Heredoc que nunca fecha esconderia o resto do arquivo: o lint falha, nao silencia.
+  rm -f "$AN_T/lint/hooks/x/casos.sh"
+  printf 'cat <<FIM\nsem a linha de fechamento\nprodutor | grep -q escondido\n' > "$AN_T/lint/hooks/x/aberto.sh"
+  bash "$AN_LINT" "$AN_T/lint" 2>/dev/null | grep -qF 'aberto.sh:1:heredoc sem a linha de fechamento FIM'
+  afirma "an6b-lint-falha-no-heredoc-sem-fechamento" $? "heredoc aberto ate o fim do arquivo vira achado"
 fi
 rm -rf "$AN_T"
