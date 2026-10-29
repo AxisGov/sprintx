@@ -100,4 +100,36 @@ elif [ -z "$RAIZ_SRC" ]; then
 else
   afirma "an5-lint-sem-consumidor-precoce" 1 "lint ausente: $AN_LINT"
 fi
+
+# 6. O proprio lint: acusa o pipeline em qualquer forma, e nao o texto que so parece um.
+if [ -f "$AN_LINT" ]; then
+  mkdir -p "$AN_T/lint/hooks/x" "$AN_T/lint/skills"
+  cat > "$AN_T/lint/hooks/x/casos.sh" <<'AN_CASOS'
+produtor |
+  grep -Eq 'a'
+produtor | \
+  grep -q a
+x="$(printf '%s' "$y" | grep -q z)"
+cat f | head -1
+msg='use | grep -q aqui'
+echo ok # nao use | grep -q
+:;# produtor | grep -q x
+mensagem='inicio
+produtor | grep -q x
+fim'
+[ -n "$a" ] || grep -q x f
+grep -q x <<<"$y"
+cat <<'FIM'
+don't | grep -q isto e texto
+FIM
+cat <<FIM
+$(produtor | grep -q y)
+it's texto
+FIM
+echo $((1<<2)) | grep -q 4
+AN_CASOS
+  an_linhas="$(bash "$AN_LINT" "$AN_T/lint" 2>/dev/null | sed -n 's/^consumidor precoce: hooks\/x\/casos\.sh:\([0-9]*\):.*/\1/p' | tr '\n' ' ')"
+  [ "$an_linhas" = "1 3 5 6 19 22 " ]
+  afirma "an6-lint-acusa-o-pipeline-e-nao-o-texto" $? "linhas acusadas: ${an_linhas:-nenhuma} (esperado 1 3 5 6 19 22)"
+fi
 rm -rf "$AN_T"
