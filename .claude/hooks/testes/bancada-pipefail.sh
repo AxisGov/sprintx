@@ -154,13 +154,17 @@ AN_CASOS
   # Heredoc que nunca fecha esconderia o resto do arquivo: o lint falha, nao silencia.
   rm -f "$AN_T/lint/hooks/x/casos.sh"
   printf 'cat <<FIM\nsem a linha de fechamento\nprodutor | grep -q escondido\n' > "$AN_T/lint/hooks/x/aberto.sh"
-  bash "$AN_LINT" "$AN_T/lint" 2>/dev/null | grep -qF 'aberto.sh:1:heredoc sem a linha de fechamento FIM'
+  # A saida vai para a variavel antes: o lint sai 1 quando acha, e sob pipefail `lint | grep`
+  # sairia 1 mesmo com o grep casando.
+  an_saida="$(bash "$AN_LINT" "$AN_T/lint" 2>/dev/null)"
+  grep -qF 'aberto.sh:1:heredoc sem a linha de fechamento FIM' <<<"$an_saida"
   afirma "an6b-lint-falha-no-heredoc-sem-fechamento" $? "heredoc aberto ate o fim do arquivo vira achado"
   # Dois heredocs na mesma linha: o corpo do segundo vem depois do primeiro, e o que parece
   # abrir um terceiro dentro dele e texto (rodada 5 do Codex).
   rm -f "$AN_T/lint/hooks/x/aberto.sh"
   printf '%s\n' 'cat <<A <<'"'"'B'"'"'' 'corpo-A' 'A' 'cat <<'"'"'C'"'"'' 'B' 'produtor | grep -q x' 'C' > "$AN_T/lint/hooks/x/dois.sh"
-  bash "$AN_LINT" "$AN_T/lint" 2>/dev/null | grep -qF 'dois.sh:6:produtor | grep -q x'
+  an_saida="$(bash "$AN_LINT" "$AN_T/lint" 2>/dev/null)"
+  grep -qF 'dois.sh:6:produtor | grep -q x' <<<"$an_saida"
   afirma "an6c-lint-segue-a-fila-de-heredocs-da-linha" $? "o pipeline depois do segundo heredoc e acusado"
 fi
 rm -rf "$AN_T"
