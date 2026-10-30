@@ -26,12 +26,11 @@ RAIZ="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.claude" && pwd)}"
 # Um `|` so: o `||` nao e pipe.
 varre() {
   awk '
-    # O consumidor depois de um `|` so, com o que pode vir antes dele no comando: atribuicoes
-    # (`LC_ALL=C`), `env`, `command`, `builtin` ou `exec`, e caminho (`/usr/bin/grep`).
+    # O consumidor em qualquer palavra do trecho depois de um `|` so: atras de atribuicao,
+    # `env`, `command`, caminho ou qualquer cadeia deles (`| /usr/bin/env A=1 grep -q`). Mais
+    # largo que o shell exige: um falso positivo falha fechado, e o autor reescreve.
     BEGIN {
-      A = "([A-Za-z_][A-Za-z0-9_]*=[^ \t|]*[ \t]+)*"
-      P = "(^|[^|])[|][ \t]*" A "((command|env|builtin|exec)[ \t]+" A ")?([^ \t|]*/)?" \
-          "([ef]?grep[ \t][^|]*(-[A-Za-z]*q|--quiet)|head([ \t]|$))"
+      P = "(^|[^|])[|]([^|]*[ \t/])?([ef]?grep[ \t][^|]*(-[A-Za-z]*q|--quiet)|head([ \t]|$))"
     }
     # limpa(s, isolada): sem `isolada`, o estado das aspas atravessa as linhas (simples, dupla)
     function limpa(s, isolada,   r, i, j, c, d, ant, sq, dq, w, lit, tab) {
