@@ -1380,11 +1380,15 @@ sev_caso g-item10-granularidade-com-contagem-aceito 0 '| MÉDIA | s/tasks.md | [
 # `L1` colado a uma palavra (`L1Cache`) nao e o limite L1 (CodeAnt no conselhos#217).
 sev_caso g-item10-granularidade-l1cache-aceito 0 '| MÉDIA | s/tasks.md | [item 10][granularidade] T-01.01 a camada L1Cache mistura duas responsabilidades | y |' 'SIM — x'
 sev_caso g-item10-granularidade-l1-acentuado-aceito 0 '| MÉDIA | s/tasks.md | [item 10][granularidade] T-01.01 a L1Árvore mistura duas responsabilidades | y |' 'SIM — x'
+# O travessao colado nao e letra: `L1—acima` e o limite (CodeAnt no sprintx#58).
+sev_caso g-item10-granularidade-l1-travessao-recusado 4 '| MÉDIA | s/tasks.md | [item 10][granularidade] T-01.01 passa do L1—acima dele | y |' 'SIM — x'
 sev_caso g-item10-granularidade-l1-solto-recusado 4 '| MÉDIA | s/tasks.md | [item 10][granularidade] T-01.01 passa do L1 | y |' 'SIM — x'
 # O fato da base com espaco ou acento no nome e citavel; `..` nao e (conselhos#217).
 sev_caso gv8-clausula-base-com-espaco-media 0 '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: base/meu fato.md — passaria com: x | y |' 'SIM — x'
 sev_caso gv9-clausula-base-com-acento-media 0 '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: base/decisão.md — passaria com: x | y |' 'SIM — x'
 sev_caso gv10-clausula-base-com-ponto-ponto-recusada 4 '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: base/../segredo.md — passaria com: x | y |' 'SIM — x'
+# A barra invertida e separador no Windows: `base/..\segredo.md` sairia da base (CodeAnt no sprintx#58).
+sev_caso gv11-clausula-base-com-barra-invertida-recusada 4 '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: base/..\segredo.md — passaria com: x | y |' 'SIM — x'
 sev_caso g-granularidade-fora-do-item10-recusado 4 '| MÉDIA | s/tasks.md | [item 3][granularidade] T-01.01 x | y |' 'SIM — x'
 # O numero do item nao tem zero a esquerda: `[item 010]` passava na faixa e escapava das regras do
 # item 10 (CodeAnt no sprintx#56).

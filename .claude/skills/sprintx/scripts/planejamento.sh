@@ -1050,10 +1050,10 @@ $prosa" awk '
 # base (base/<arquivo>) ou um contrato de origem ingerido (origem:<ref>).
 # Fora desta gramatica nao ha clausula — e o tipo e `criterio`. O nome do fato da base
 # pode ter espaco e acento (`base/meu fato.md`); nao pode ter `|`, que separa a linha,
-# controle, nem um segmento `..`, que sairia da base.
+# controle, `\`, que e separador no Windows, nem um segmento `..`, que sairia da base.
 clausula_citavel() {
   case "/$1/" in */../*) return 1 ;; esac
-  grep -Eq '^(criterio_aceite|D-[0-9]{2,}|base/[^|[:cntrl:]]+|origem:[^[:space:]]+)$' <<<"$1"
+  grep -Eq '^(criterio_aceite|D-[0-9]{2,}|base/[^|\\[:cntrl:]]+|origem:[^[:space:]]+)$' <<<"$1"
 }
 
 severidade_de() {
@@ -1138,8 +1138,9 @@ valida_auditoria() {
             *) falha "$E_CONTRATO" "achado do item 10 sem [limite:Ln] nem [granularidade]: $prob" ;;
           esac
           # `L1` solto e o limite; colado a uma palavra (`L1Cache`, `L1Árvore`) nao e. A
-          # letra acentuada vira `a` antes: a classe do grep so conhece ASCII.
-          local ascii; ascii="$(LC_ALL=C tr '\200-\377' 'a' <<<"$prob")"
+          # letra acentuada (U+00C0 a U+00FF, em UTF-8) vira `a` antes, porque a classe do
+          # grep so conhece ASCII. Travessao e outros simbolos continuam separando.
+          local ascii; ascii="$(LC_ALL=C; printf '%s' "${prob//$'\303'[$'\200'-$'\277']/a}")"
           if grep -Eq '(^|[^A-Za-z0-9])L[123]([^A-Za-z0-9]|$)' <<<"$ascii"; then
             falha "$E_CONTRATO" "achado de limite do item 10 sem [limite:Ln]: $prob"
           fi
