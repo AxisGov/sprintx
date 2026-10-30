@@ -83,12 +83,12 @@ varre() {
     {
       l = limpa($0, 0)
       if (cmd == "") ini = NR
-      cont = 0; barra = 0
-      if (l ~ /\\[ \t]*$/) { sub(/\\[ \t]*$/, " ", l); cont = 1; barra = 1 }
+      cont = 0
+      if (l ~ /\\[ \t]*$/) { sub(/\\[ \t]*$/, " ", l); cont = 1 }
       else if (l ~ /(^|[^|])\|[ \t]*$/) cont = 1
-      # O corpo do heredoc comeca depois da linha logica: a barra no fim emenda a linha seguinte
-      # ao comando, e so o fim de linha de verdade (inclusive depois de `|`) abre o corpo.
-      if (hd_n > 0 && !barra) { hd_i = 1; corpo = 1 }
+      # O corpo do heredoc comeca depois do comando completo: a linha que termina em `\` ou em
+      # `|` ainda e o comando, e so a que o fecha abre o corpo.
+      if (hd_n > 0 && !cont) { hd_i = 1; corpo = 1 }
       cmd = cmd l
       if (cont) next
       if (cmd ~ P) print ini ":" cmd
