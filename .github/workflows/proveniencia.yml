@@ -17,8 +17,10 @@ jobs:
           persist-credentials: false
       - run: bash scripts/ci/test-proveniencia.sh
       - run: bash scripts/ci/test-proveniencia-contrato.sh
-      # consumidor que sai cedo (| grep -q, | head) sob pipefail: secao AN da bancada
+      # consumidor que sai cedo (| grep -q, | head) sob pipefail (DS-192): o lint impede a volta
+      # do padrao, e a secao AN da bancada prova as conversoes com entrada de 1 MB
       - run: bash scripts/ci/lint-consumidor-precoce.sh
+      - run: bash scripts/ci/test-pipefail.sh
       # espaço e linha em branco no fim de arquivo, na árvore inteira: o `git diff --check`
       # do consumidor acusava as bancadas que a skill instala (relato do Login na 0.12.3)
       - run: git diff --check "$(git hash-object -t tree /dev/null)" HEAD

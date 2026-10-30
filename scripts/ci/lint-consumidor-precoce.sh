@@ -10,7 +10,9 @@
 #
 #   bash scripts/ci/lint-consumidor-precoce.sh [raiz do .claude]
 #
-# Sem allowlist: o padrao e simples de evitar, e excecao viraria o caminho de volta.
+# Varre .claude/hooks e .claude/skills, menos hooks/testes: a bancada nao e instalada, e os
+# casos do proprio lint moram nela. Sem allowlist: o padrao e simples de evitar, e excecao
+# viraria o caminho de volta.
 #
 # Alcance (forma literal): `grep` com -q, --quiet, --silent, -m ou --max-count (e as abreviacoes
 # GNU, como --qu; a opcao inclusive entre aspas inteiras), e `head`, atras de atribuicao,
