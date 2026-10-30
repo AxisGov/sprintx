@@ -1138,9 +1138,9 @@ valida_auditoria() {
             *) falha "$E_CONTRATO" "achado do item 10 sem [limite:Ln] nem [granularidade]: $prob" ;;
           esac
           # `L1` solto e o limite; colado a uma palavra (`L1Cache`, `L1Árvore`) nao e. A
-          # letra acentuada (U+00C0 a U+00FF, em UTF-8) vira `a` antes, porque a classe do
-          # grep so conhece ASCII. Travessao e outros simbolos continuam separando.
-          local ascii; ascii="$(LC_ALL=C; printf '%s' "${prob//$'\303'[$'\200'-$'\277']/a}")"
+          # letra acentuada (U+00C0 a U+00FF, em UTF-8, menos `×` e `÷`) vira `a` antes,
+          # porque a classe do grep so conhece ASCII. Os simbolos continuam separando.
+          local ascii; ascii="$(LC_ALL=C; printf '%s' "${prob//$'\303'[$'\200'-$'\226'$'\230'-$'\266'$'\270'-$'\277']/a}")"
           if grep -Eq '(^|[^A-Za-z0-9])L[123]([^A-Za-z0-9]|$)' <<<"$ascii"; then
             falha "$E_CONTRATO" "achado de limite do item 10 sem [limite:Ln]: $prob"
           fi

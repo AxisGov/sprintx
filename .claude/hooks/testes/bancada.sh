@@ -1382,6 +1382,7 @@ sev_caso g-item10-granularidade-l1cache-aceito 0 '| MÉDIA | s/tasks.md | [item 
 sev_caso g-item10-granularidade-l1-acentuado-aceito 0 '| MÉDIA | s/tasks.md | [item 10][granularidade] T-01.01 a L1Árvore mistura duas responsabilidades | y |' 'SIM — x'
 # O travessao colado nao e letra: `L1—acima` e o limite (CodeAnt no sprintx#58).
 sev_caso g-item10-granularidade-l1-travessao-recusado 4 '| MÉDIA | s/tasks.md | [item 10][granularidade] T-01.01 passa do L1—acima dele | y |' 'SIM — x'
+sev_caso g-item10-granularidade-l1-vezes-recusado 4 '| MÉDIA | s/tasks.md | [item 10][granularidade] T-01.01 passa do L1×acima dele | y |' 'SIM — x'
 sev_caso g-item10-granularidade-l1-solto-recusado 4 '| MÉDIA | s/tasks.md | [item 10][granularidade] T-01.01 passa do L1 | y |' 'SIM — x'
 # O fato da base com espaco ou acento no nome e citavel; `..` nao e (conselhos#217).
 sev_caso gv8-clausula-base-com-espaco-media 0 '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: base/meu fato.md — passaria com: x | y |' 'SIM — x'
