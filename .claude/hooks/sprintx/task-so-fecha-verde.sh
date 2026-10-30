@@ -46,7 +46,8 @@ NOVO="$(rastro_tool_input_get "$ENTRADA" content)"
 # Sem `printf | grep -q`: sob pipefail, num Write acima de 64 KB o printf levava SIGPIPE e a regra
 # era pulada. O espaco depois de `status:` e o mesmo que o awk abaixo aceita: com `status:  concluida`
 # (dois espacos) a regra tambem era pulada (CodeAnt no sprintx#57).
-[[ $NOVO =~ status:[[:space:]]*concluida ]] || exit 0
+RE_CONCLUIDA=$'status:[ \t]*concluida'
+[[ $NOVO =~ $RE_CONCLUIDA ]] || exit 0
 
 # ------------------------------------------------------ achar as violacoes
 # Percorre os blocos de task do texto novo; para cada um que esta `concluida`,
