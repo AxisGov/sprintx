@@ -11,6 +11,14 @@
 #   bash scripts/ci/lint-consumidor-precoce.sh [raiz do .claude]
 #
 # Sem allowlist: o padrao e simples de evitar, e excecao viraria o caminho de volta.
+#
+# Alcance: `grep` com -q, --quiet, --silent, -m ou --max-count, e `head`, atras de atribuicao,
+# wrapper, caminho, `(`, barra ou aspas, em pipeline de uma ou varias linhas, fora de texto entre
+# aspas simples, de comentario e de corpo de heredoc literal. E uma guarda por texto, nao um
+# parser de shell. Fica de fora, e e da revisao: o nome montado em pedacos (`g\rep`, `$'grep'`),
+# o comando dinamico (`eval`, `bash -c`, `"$cmd"`), e os outros consumidores que saem cedo
+# (`awk` com `exit`, `sed q`, `read` com `break`) — os desses que havia foram convertidos na
+# DS-192.
 set -uo pipefail
 
 RAIZ="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.claude" && pwd)}"
@@ -29,11 +37,12 @@ varre() {
     # O consumidor em qualquer palavra do trecho depois de um `|` so: atras de atribuicao,
     # `env`, `command`, caminho ou qualquer cadeia deles (`| /usr/bin/env A=1 grep -q`), e o
     # `head` colado a operador (`| head;`), e o nome escapado ou entre aspas (`\\grep`, `"head"`,
-    # `\047grep\047`), que o shell executa igual. Mais largo que o shell exige: um falso positivo
+    # `\047grep\047`), que o shell executa igual, inclusive dentro de `(...)` e com redirecao
+    # colada (`grep>/dev/null -q`). Mais largo que o shell exige: um falso positivo
     # falha fechado, e o autor reescreve.
     BEGIN {
       Q = "[\\\\\"\047]*"
-      P = "(^|[^|])[|]([^|]*[ \t/])?" Q "([ef]?grep" Q "[ \t][^|]*(-[A-Za-z]*q|--quiet)|head" Q "([^A-Za-z0-9_.-]|$))"
+      P = "(^|[^|])[|]([^|]*[ \t/(])?" Q "([ef]?grep" Q "([^A-Za-z0-9_.-][^|]*)?[ \t](-[A-Za-z]*[qm]|--quiet|--silent|--max-count)|head" Q "([^A-Za-z0-9_.-]|$))"
     }
     # limpa(s, isolada): sem `isolada`, o estado das aspas atravessa as linhas (simples, dupla)
     function limpa(s, isolada,   r, i, j, c, d, ant, sq, dq, w, lit, tab) {
