@@ -12,13 +12,16 @@
 #
 # Sem allowlist: o padrao e simples de evitar, e excecao viraria o caminho de volta.
 #
-# Alcance: `grep` com -q, --quiet, --silent, -m ou --max-count (a opcao inclusive entre
-# aspas), e `head`, atras de atribuicao, wrapper, caminho, `.exe` (Git Bash), `(`, barra ou
-# aspas, em pipeline de uma ou varias linhas, fora de texto entre aspas simples, de comentario e
-# de corpo de heredoc literal. E uma guarda por texto, nao um parser de shell. Fica de fora, e e
-# da revisao: o nome montado em pedacos (`g\rep`, `$'grep'`), o comando dinamico (`eval`,
-# `bash -c`, `"$cmd"`), e os outros consumidores que saem cedo (`awk` com `exit`, `sed q`, `read`
-# com `break`) — os desses que havia foram convertidos na DS-192.
+# Alcance (forma literal): `grep` com -q, --quiet, --silent, -m ou --max-count (e as abreviacoes
+# GNU, como --qu; a opcao inclusive entre aspas inteiras), e `head`, atras de atribuicao,
+# wrapper, caminho, `.exe` (Git Bash), `(`, barra ou aspas, em pipeline de uma ou varias linhas
+# (com linha em branco ou comentario depois do `|`), fora de texto entre aspas simples, de
+# comentario e de corpo de heredoc literal; no corpo de heredoc nao literal, linha a linha. E uma
+# guarda por texto, nao um parser de shell. Fica de fora, e e da revisao: o nome ou a opcao
+# montados em pedacos (`g\rep`, `-\047q\047`, `--qu"iet"`, `$'grep'`), a opcao vinda de expansao
+# (`"$opt"`), o `$(...)` de varias linhas dentro de heredoc, o comando dinamico (`eval`,
+# `bash -c`, `"$cmd"`), e os outros consumidores que saem cedo (`awk` com `exit`, `sed q`,
+# `read` com `break`) — os desses que havia foram convertidos na DS-192.
 set -uo pipefail
 
 RAIZ="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.claude" && pwd)}"
@@ -42,7 +45,7 @@ varre() {
     # falha fechado, e o autor reescreve.
     BEGIN {
       Q = "[\\\\\"\047]*"
-      P = "(^|[^|])[|]([^|]*[ \t/(])?" Q "([ef]?grep([.][Ee][Xx][Ee])?" Q "([^A-Za-z0-9_.-][^|]*)?[ \t]" Q "(-[A-Za-z]*[qm]|--quiet|--silent|--max-count)|head([.][Ee][Xx][Ee])?" Q "([^A-Za-z0-9_.-]|$))"
+      P = "(^|[^|])[|]([^|]*[ \t/(])?" Q "([ef]?grep([.][Ee][Xx][Ee])?" Q "([^A-Za-z0-9_.-][^|]*)?[ \t]" Q "(-[A-Za-z]*[qm]|--(q(u(i(e(t)?)?)?)?|s(i(l(e(n(t)?)?)?)?)?|m(a(x(-(c(o(u(n(t)?)?)?)?)?)?)?)?)([^A-Za-z-]|$))|head([.][Ee][Xx][Ee])?" Q "([^A-Za-z0-9_.-]|$))"
     }
     # limpa(s, isolada): sem `isolada`, o estado das aspas atravessa as linhas (simples, dupla)
     function limpa(s, isolada,   r, i, j, c, d, ant, sq, dq, w, lit, tab) {
@@ -98,6 +101,9 @@ varre() {
     }
     {
       l = limpa($0, 0)
+      # Depois de um `|` no fim da linha, o Bash aceita linha em branco e comentario antes do
+      # consumidor: o pipeline segue pendente.
+      if (cmd ~ /(^|[^|])\|[ \t]*$/ && l ~ /^[ \t]*$/) next
       if (cmd == "") ini = NR
       cont = 0
       if (l ~ /\\[ \t]*$/) { sub(/\\[ \t]*$/, " ", l); cont = 1 }
