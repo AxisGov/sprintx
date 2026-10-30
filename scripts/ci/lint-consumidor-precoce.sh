@@ -27,10 +27,11 @@ RAIZ="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.claude" && pwd)}"
 varre() {
   awk '
     # O consumidor em qualquer palavra do trecho depois de um `|` so: atras de atribuicao,
-    # `env`, `command`, caminho ou qualquer cadeia deles (`| /usr/bin/env A=1 grep -q`). Mais
-    # largo que o shell exige: um falso positivo falha fechado, e o autor reescreve.
+    # `env`, `command`, caminho ou qualquer cadeia deles (`| /usr/bin/env A=1 grep -q`), e o
+    # `head` colado a operador (`| head;`). Mais largo que o shell exige: um falso positivo
+    # falha fechado, e o autor reescreve.
     BEGIN {
-      P = "(^|[^|])[|]([^|]*[ \t/])?([ef]?grep[ \t][^|]*(-[A-Za-z]*q|--quiet)|head([ \t]|$))"
+      P = "(^|[^|])[|]([^|]*[ \t/])?([ef]?grep[ \t][^|]*(-[A-Za-z]*q|--quiet)|head([^A-Za-z0-9_.-]|$))"
     }
     # limpa(s, isolada): sem `isolada`, o estado das aspas atravessa as linhas (simples, dupla)
     function limpa(s, isolada,   r, i, j, c, d, ant, sq, dq, w, lit, tab) {
@@ -81,11 +82,13 @@ varre() {
     }
     {
       l = limpa($0, 0)
-      if (hd_n > 0) { hd_i = 1; corpo = 1 }
       if (cmd == "") ini = NR
-      cont = 0
-      if (l ~ /\\[ \t]*$/) { sub(/\\[ \t]*$/, " ", l); cont = 1 }
+      cont = 0; barra = 0
+      if (l ~ /\\[ \t]*$/) { sub(/\\[ \t]*$/, " ", l); cont = 1; barra = 1 }
       else if (l ~ /(^|[^|])\|[ \t]*$/) cont = 1
+      # O corpo do heredoc comeca depois da linha logica: a barra no fim emenda a linha seguinte
+      # ao comando, e so o fim de linha de verdade (inclusive depois de `|`) abre o corpo.
+      if (hd_n > 0 && !barra) { hd_i = 1; corpo = 1 }
       cmd = cmd l
       if (cont) next
       if (cmd ~ P) print ini ":" cmd
