@@ -12,13 +12,13 @@
 #
 # Sem allowlist: o padrao e simples de evitar, e excecao viraria o caminho de volta.
 #
-# Alcance: `grep` com -q, --quiet, --silent, -m ou --max-count, e `head`, atras de atribuicao,
-# wrapper, caminho, `.exe` (Git Bash), `(`, barra ou aspas, em pipeline de uma ou varias
-# linhas, fora de texto entre aspas simples, de comentario e de corpo de heredoc literal. E uma
-# guarda por texto, nao um parser de shell. Fica de fora, e e da revisao: o nome montado em
-# pedacos (`g\rep`, `$'grep'`), o comando dinamico (`eval`, `bash -c`, `"$cmd"`), e os outros
-# consumidores que saem cedo (`awk` com `exit`, `sed q`, `read` com `break`) — os desses que
-# havia foram convertidos na DS-192.
+# Alcance: `grep` com -q, --quiet, --silent, -m ou --max-count (a opcao inclusive entre
+# aspas), e `head`, atras de atribuicao, wrapper, caminho, `.exe` (Git Bash), `(`, barra ou
+# aspas, em pipeline de uma ou varias linhas, fora de texto entre aspas simples, de comentario e
+# de corpo de heredoc literal. E uma guarda por texto, nao um parser de shell. Fica de fora, e e
+# da revisao: o nome montado em pedacos (`g\rep`, `$'grep'`), o comando dinamico (`eval`,
+# `bash -c`, `"$cmd"`), e os outros consumidores que saem cedo (`awk` com `exit`, `sed q`, `read`
+# com `break`) — os desses que havia foram convertidos na DS-192.
 set -uo pipefail
 
 RAIZ="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.claude" && pwd)}"
@@ -42,7 +42,7 @@ varre() {
     # falha fechado, e o autor reescreve.
     BEGIN {
       Q = "[\\\\\"\047]*"
-      P = "(^|[^|])[|]([^|]*[ \t/(])?" Q "([ef]?grep([.][Ee][Xx][Ee])?" Q "([^A-Za-z0-9_.-][^|]*)?[ \t](-[A-Za-z]*[qm]|--quiet|--silent|--max-count)|head([.][Ee][Xx][Ee])?" Q "([^A-Za-z0-9_.-]|$))"
+      P = "(^|[^|])[|]([^|]*[ \t/(])?" Q "([ef]?grep([.][Ee][Xx][Ee])?" Q "([^A-Za-z0-9_.-][^|]*)?[ \t]" Q "(-[A-Za-z]*[qm]|--quiet|--silent|--max-count)|head([.][Ee][Xx][Ee])?" Q "([^A-Za-z0-9_.-]|$))"
     }
     # limpa(s, isolada): sem `isolada`, o estado das aspas atravessa as linhas (simples, dupla)
     function limpa(s, isolada,   r, i, j, c, d, ant, sq, dq, w, lit, tab) {

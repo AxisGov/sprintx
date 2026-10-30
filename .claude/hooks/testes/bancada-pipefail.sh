@@ -168,10 +168,13 @@ produtor | grep>/dev/null -q x
 produtor | grep -c x
 produtor | grep.exe -q x
 produtor | /usr/bin/head.exe -1
+produtor | grep "-q" x
+produtor | grep '--quiet' x
+produtor | grep "-m1" x
 AN_CASOS
   an_linhas="$(bash "$AN_LINT" "$AN_T/lint" 2>/dev/null | sed -n 's/^consumidor precoce: hooks\/x\/casos\.sh:\([0-9]*\):.*/\1/p' | tr '\n' ' ')"
-  [ "$an_linhas" = "1 3 5 6 19 22 24 28 29 33 37 38 39 40 41 43 44 48 52 53 54 55 56 57 58 59 60 62 63 " ]
-  afirma "an6-lint-acusa-o-pipeline-e-nao-o-texto" $? "linhas acusadas: ${an_linhas:-nenhuma} (esperado 1 3 5 6 19 22 24 28 29 33 37 38 39 40 41 43 44 48 52 53 54 55 56 57 58 59 60 62 63)"
+  [ "$an_linhas" = "1 3 5 6 19 22 24 28 29 33 37 38 39 40 41 43 44 48 52 53 54 55 56 57 58 59 60 62 63 64 65 66 " ]
+  afirma "an6-lint-acusa-o-pipeline-e-nao-o-texto" $? "linhas acusadas: ${an_linhas:-nenhuma} (esperado 1 3 5 6 19 22 24 28 29 33 37 38 39 40 41 43 44 48 52 53 54 55 56 57 58 59 60 62 63 64 65 66)"
   # Heredoc que nunca fecha esconderia o resto do arquivo: o lint falha, nao silencia.
   rm -f "$AN_T/lint/hooks/x/casos.sh"
   printf 'cat <<FIM\nsem a linha de fechamento\nprodutor | grep -q escondido\n' > "$AN_T/lint/hooks/x/aberto.sh"
