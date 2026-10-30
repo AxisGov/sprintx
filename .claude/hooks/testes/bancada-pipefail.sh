@@ -210,4 +210,22 @@ AN_CASOS
   grep -qF 'dois.sh:6:produtor | grep -q x' <<<"$an_saida"
   afirma "an6c-lint-segue-a-fila-de-heredocs-da-linha" $? "o pipeline depois do segundo heredoc e acusado"
 fi
+
+# 8. Raiz relativa que comeca com `-` (SPRINTX_RAIZ=-hx): com os hooks no projeto, o `. "$LIB"`
+# e o `grep "$f"` liam o caminho como opcao (CodeAnt no conselhos#217). O escritor grava.
+mkdir -p "$AN_T/-hx/.claude/hooks" "$AN_T/-hx/docs"
+cp -R "$AN_FX/docs/sprintx" "$AN_T/-hx/docs/" && cp -R "$AN_H/comum" "$AN_T/-hx/.claude/hooks/"
+git init -q --template= "$AN_T/-hx" >/dev/null 2>&1
+(cd "$AN_T" && env -u EXPX_SESSAO -u EXPX_HARNESS CLAUDECODE=1 CLAUDE_CODE_SESSION_ID=an7 SPRINTX_RAIZ=-hx \
+  bash "$SK/scripts/rastro.sh" task-iniciada fx T-01.01 >/dev/null 2>&1) \
+  && grep -q '"task":"T-01.01"' "$AN_T/-hx/docs/eventos/fx.jsonl"
+afirma "raiz-com-hifen-rastro-grava" $? "SPRINTX_RAIZ=-hx: o escritor acha a biblioteca e a task"
+# Os outros leitores de SPRINTX_RAIZ fazem o mesmo (revisao do Codex): o bloqueio grava, e o
+# plano le a feature.
+(cd "$AN_T" && SPRINTX_RAIZ=-hx bash "$SK/scripts/bloqueios.sh" registrar fx T-01.01 prerequisito_ausente 'raiz com hifen' 'x' >/dev/null 2>&1) \
+  && [ -f "$AN_T/-hx/docs/sprintx/features/fx/00-BLOQUEIOS.md" ]
+afirma "raiz-com-hifen-bloqueios-grava" $? "SPRINTX_RAIZ=-hx: registrar grava o 00-BLOQUEIOS.md"
+(cd "$AN_T" && SPRINTX_RAIZ=-hx bash "$SK/scripts/planejamento.sh" criar fx >/dev/null 2>&1) \
+  && [ -f "$AN_T/-hx/docs/sprintx/features/fx/00-PLANEJAMENTO.md" ]
+afirma "raiz-com-hifen-planejamento-grava" $? "SPRINTX_RAIZ=-hx: criar grava o 00-PLANEJAMENTO.md"
 rm -rf "$AN_T"

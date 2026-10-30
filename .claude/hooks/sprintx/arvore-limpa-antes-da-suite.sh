@@ -92,7 +92,8 @@ while IFS= read -r caminho; do
   case "$caminho" in
     tests/*|test/*|*_test.*|*.test.*|*.spec.*|*Test.*|*Spec.*) continue ;;
   esac
-  if grep -qxF "$caminho" <<<"$DECLARADOS"; then
+  # `--`: um caminho declarado que comeca com `-` e caminho, nao opcao do grep.
+  if grep -qxF -- "$caminho" <<<"$DECLARADOS"; then
     continue
   fi
   FORA_ESCOPO="$FORA_ESCOPO $caminho"

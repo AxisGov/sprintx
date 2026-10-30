@@ -1377,6 +1377,14 @@ sev_caso g-item10-granularidade-media-aceito 0 '| MÉDIA | s/tasks.md | [item 10
 # a granularidade que cita uma contagem segue aceita, e o marcador so existe no item 10.
 sev_caso g-item10-sem-marcador-recusado 4 '| MÉDIA | s/tasks.md | [item 10] T-01.01 os testes não cabem em uma frase | y |' 'SIM — x'
 sev_caso g-item10-granularidade-com-contagem-aceito 0 '| MÉDIA | s/tasks.md | [item 10][granularidade] T-01.01 os testes cobrem 2 arquivos e misturam 3 linhas de fluxo | y |' 'SIM — x'
+# `L1` colado a uma palavra (`L1Cache`) nao e o limite L1 (CodeAnt no conselhos#217).
+sev_caso g-item10-granularidade-l1cache-aceito 0 '| MÉDIA | s/tasks.md | [item 10][granularidade] T-01.01 a camada L1Cache mistura duas responsabilidades | y |' 'SIM — x'
+sev_caso g-item10-granularidade-l1-acentuado-aceito 0 '| MÉDIA | s/tasks.md | [item 10][granularidade] T-01.01 a L1Árvore mistura duas responsabilidades | y |' 'SIM — x'
+sev_caso g-item10-granularidade-l1-solto-recusado 4 '| MÉDIA | s/tasks.md | [item 10][granularidade] T-01.01 passa do L1 | y |' 'SIM — x'
+# O fato da base com espaco ou acento no nome e citavel; `..` nao e (conselhos#217).
+sev_caso gv8-clausula-base-com-espaco-media 0 '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: base/meu fato.md — passaria com: x | y |' 'SIM — x'
+sev_caso gv9-clausula-base-com-acento-media 0 '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: base/decisão.md — passaria com: x | y |' 'SIM — x'
+sev_caso gv10-clausula-base-com-ponto-ponto-recusada 4 '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: base/../segredo.md — passaria com: x | y |' 'SIM — x'
 sev_caso g-granularidade-fora-do-item10-recusado 4 '| MÉDIA | s/tasks.md | [item 3][granularidade] T-01.01 x | y |' 'SIM — x'
 # O numero do item nao tem zero a esquerda: `[item 010]` passava na faixa e escapava das regras do
 # item 10 (CodeAnt no sprintx#56).

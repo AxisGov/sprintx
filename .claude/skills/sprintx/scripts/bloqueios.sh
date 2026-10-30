@@ -51,7 +51,12 @@ falha() { local c="$1"; shift; printf 'bloqueios: %s\n' "$*" >&2; exit "$c"; }
 . "$SK/scripts/lib/execucao.sh" || falha "$E_USO" "scripts/lib/execucao.sh ausente"
 
 resolve_raiz() {
-  if [ -n "${SPRINTX_RAIZ:-}" ]; then printf '%s' "$SPRINTX_RAIZ"; return; fi
+  # A raiz relativa que comeca com `-` ganha `./`: sem isso, mkdir, grep e awk a leriam
+  # como opcao.
+  if [ -n "${SPRINTX_RAIZ:-}" ]; then
+    case "$SPRINTX_RAIZ" in -*) printf './%s' "$SPRINTX_RAIZ" ;; *) printf '%s' "$SPRINTX_RAIZ" ;; esac
+    return
+  fi
   local t; t="$(git rev-parse --show-toplevel 2>/dev/null)" && [ -n "$t" ] && { caminho_git "$t"; return; }
   printf '%s' "$PWD"
 }
@@ -178,7 +183,8 @@ cmd_registrar() { # <task|null> <classe> <descricao> <destravaria>
   local task="$1" classe="$2" desc="$3" dest="$4"
   [ -n "$classe" ] || falha "$E_CONTRATO" "bloqueio novo sem classe: escolha pelo caminho de criacao ($CLASSES)"
   classe_valida "$classe" || falha "$E_CONTRATO" "classe '$classe' fora do enum ($CLASSES)"
-  [ "$task" = null ] || grep -Eq '^T-[0-9]{2}\.[0-9]{2}$' <<<"$task" \
+  # A mesma forma de id que o plano aceita (planejamento.sh): T-100.01 tambem e task.
+  [ "$task" = null ] || grep -Eq '^T-[0-9]{2,}\.[0-9]{2,}$' <<<"$task" \
     || falha "$E_CONTRATO" "task invalida: '$task' (T-NN.MM ou null)"
   uma_linha descricao "$desc"; uma_linha "o que destravaria" "$dest"
 
