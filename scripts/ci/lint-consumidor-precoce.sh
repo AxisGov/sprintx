@@ -47,7 +47,7 @@ varre() {
     # falha fechado, e o autor reescreve.
     BEGIN {
       Q = "[\\\\\"\047]*"
-      P = "(^|[^|])[|]([^|]*[ \t/(])?" Q "([ef]?grep([.][Ee][Xx][Ee])?" Q "([^A-Za-z0-9_.-][^|]*)?[ \t]" Q "(-[A-Za-z]*[qm]|--(q(u(i(e(t)?)?)?)?|s(i(l(e(n(t)?)?)?)?)?|m(a(x(-(c(o(u(n(t)?)?)?)?)?)?)?)?)([^A-Za-z-]|$))|head([.][Ee][Xx][Ee])?" Q "([^A-Za-z0-9_.-]|$))"
+      P = "(^|[^|])[|]([^|]*[ \t/(])?" Q "([ef]?grep([.][Ee][Xx][Ee])?" Q "([^A-Za-z0-9_.-][^|]*)?[ \t]" Q "(-[A-Za-z]*[qm][A-Za-z0-9]*|--(q(u(i(e(t)?)?)?)?|s(i(l(e(n(t)?)?)?)?)?|m(a(x(-(c(o(u(n(t)?)?)?)?)?)?)?)?)([^A-Za-z-]|$))|head([.][Ee][Xx][Ee])?" Q "([^A-Za-z0-9_.-]|$))"
     }
     # limpa(s, isolada): sem `isolada`, o estado das aspas atravessa as linhas (simples, dupla)
     function limpa(s, isolada,   r, i, j, c, d, ant, sq, dq, w, lit, tab) {
