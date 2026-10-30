@@ -79,6 +79,16 @@ done
 [ "$an_falhas" -eq 0 ]
 afirma "an3-fecha-verde-avisa-no-write-grande" $? "$AN_N Writes de 1 MB concluindo sem suite: $an_falhas sem aviso"
 
+# 3b. O mesmo aviso com mais de um espaco depois de `status:` (CodeAnt no sprintx#57).
+sed 's/    status: concluida/    status:   concluida/' "$AN_T/tasks-novo.md" > "$AN_T/tasks-espaco.md"
+python3 -c "
+import json, sys
+print(json.dumps({'cwd': sys.argv[1], 'tool_name': 'Write', 'tool_input': {'file_path': sys.argv[1] + '/docs/sprintx/features/fx/sprint-01/tasks.md', 'content': open(sys.argv[2]).read()}}))
+" "$AN_W" "$AN_T/tasks-espaco.md" > "$AN_T/write-espaco.json"
+(cd "$AN_W" && bash "$AN_H/sprintx/task-so-fecha-verde.sh") < "$AN_T/write-espaco.json" > "$AN_T/saida" 2>&1
+grep -qF 'task nao pode ir para concluida' "$AN_T/saida"
+afirma "an3b-fecha-verde-avisa-com-mais-de-um-espaco" $? "status:   concluida sem suite"
+
 # 4. O escritor de bloqueios le o frontmatter de um 00-BLOQUEIOS.md grande (`tr | awk` com exit).
 AN_B="$AN_T/b"; mkdir -p "$AN_B/docs/sprintx/features/fb"; git init -q --template= "$AN_B" >/dev/null 2>&1
 { printf -- '---\nexpx_schema: 1\nexpx_tool: sprintx\nkind: bloqueios\ntrabalho_id: fb\nbloqueios: []\n---\n\n# Bloqueios\n\n'
@@ -178,10 +188,12 @@ produtor |
 produtor | grep --qu x
 produtor | grep --max-c=1 x
 produtor | grep --s x
+produtor | grep -qE x
+produtor | grep -iqE x
 AN_CASOS
   an_linhas="$(bash "$AN_LINT" "$AN_T/lint" 2>/dev/null | sed -n 's/^consumidor precoce: hooks\/x\/casos\.sh:\([0-9]*\):.*/\1/p' | tr '\n' ' ')"
-  [ "$an_linhas" = "1 3 5 6 19 22 24 28 29 33 37 38 39 40 41 43 44 48 52 53 54 55 56 57 58 59 60 62 63 64 65 66 67 71 72 73 " ]
-  afirma "an6-lint-acusa-o-pipeline-e-nao-o-texto" $? "linhas acusadas: ${an_linhas:-nenhuma} (esperado 1 3 5 6 19 22 24 28 29 33 37 38 39 40 41 43 44 48 52 53 54 55 56 57 58 59 60 62 63 64 65 66 67 71 72 73)"
+  [ "$an_linhas" = "1 3 5 6 19 22 24 28 29 33 37 38 39 40 41 43 44 48 52 53 54 55 56 57 58 59 60 62 63 64 65 66 67 71 72 73 74 75 " ]
+  afirma "an6-lint-acusa-o-pipeline-e-nao-o-texto" $? "linhas acusadas: ${an_linhas:-nenhuma} (esperado 1 3 5 6 19 22 24 28 29 33 37 38 39 40 41 43 44 48 52 53 54 55 56 57 58 59 60 62 63 64 65 66 67 71 72 73 74 75)"
   # Heredoc que nunca fecha esconderia o resto do arquivo: o lint falha, nao silencia.
   rm -f "$AN_T/lint/hooks/x/casos.sh"
   printf 'cat <<FIM\nsem a linha de fechamento\nprodutor | grep -q escondido\n' > "$AN_T/lint/hooks/x/aberto.sh"
