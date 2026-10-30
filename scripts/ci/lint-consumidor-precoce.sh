@@ -26,6 +26,13 @@ RAIZ="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.claude" && pwd)}"
 # Um `|` so: o `||` nao e pipe.
 varre() {
   awk '
+    # O consumidor depois de um `|` so, com o que pode vir antes dele no comando: atribuicoes
+    # (`LC_ALL=C`), `env`, `command`, `builtin` ou `exec`, e caminho (`/usr/bin/grep`).
+    BEGIN {
+      A = "([A-Za-z_][A-Za-z0-9_]*=[^ \t|]*[ \t]+)*"
+      P = "(^|[^|])[|][ \t]*" A "((command|env|builtin|exec)[ \t]+" A ")?([^ \t|]*/)?" \
+          "([ef]?grep[ \t][^|]*(-[A-Za-z]*q|--quiet)|head([ \t]|$))"
+    }
     # limpa(s, isolada): sem `isolada`, o estado das aspas atravessa as linhas (simples, dupla)
     function limpa(s, isolada,   r, i, j, c, d, ant, sq, dq, w, lit, tab) {
       r = ""; ant = " "
@@ -70,7 +77,7 @@ varre() {
       if (t == hd_w[hd_i]) { hd_i++; if (hd_i > hd_n) { hd_n = 0; hd_i = 1; corpo = 0 }; next }
       if (hd_lit[hd_i]) next
       l = limpa($0, 1)
-      if (l ~ /(^|[^|])\|[ \t]*(grep[ \t][^|]*(-[A-Za-z]*q|--quiet)|head([ \t]|$))/) print NR ":" l
+      if (l ~ P) print NR ":" l
       next
     }
     {
@@ -82,12 +89,12 @@ varre() {
       else if (l ~ /(^|[^|])\|[ \t]*$/) cont = 1
       cmd = cmd l
       if (cont) next
-      if (cmd ~ /(^|[^|])\|[ \t]*(grep[ \t][^|]*(-[A-Za-z]*q|--quiet)|head([ \t]|$))/) print ini ":" cmd
+      if (cmd ~ P) print ini ":" cmd
       cmd = ""
     }
     # Heredoc que nunca fecha esconderia o resto do arquivo: e achado, nao silencio.
     END { if (hd_n > 0 && corpo) print hd_lin[hd_i] ":heredoc sem a linha de fechamento " hd_w[hd_i]
-      if (cmd != "" && cmd ~ /(^|[^|])\|[ \t]*(grep[ \t][^|]*(-[A-Za-z]*q|--quiet)|head([ \t]|$))/) print ini ":" cmd }
+      if (cmd != "" && cmd ~ P) print ini ":" cmd }
   ' "$1"
 }
 
