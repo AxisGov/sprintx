@@ -26,7 +26,8 @@ resolve_raiz() {
   if [ -n "${SPRINTX_RAIZ:-}" ]; then
     git -C "$SPRINTX_RAIZ" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
       || falha "$E_PROVA" 'SPRINTX_RAIZ nao aponta para repositorio Git'
-    printf '%s' "$SPRINTX_RAIZ"
+    # a raiz relativa que comeca com `-` ganha `./`, como nos outros leitores
+    case "$SPRINTX_RAIZ" in -*) printf './%s' "$SPRINTX_RAIZ" ;; *) printf '%s' "$SPRINTX_RAIZ" ;; esac
     return 0
   fi
   raiz="$(git rev-parse --show-toplevel 2>/dev/null)" || falha "$E_PROVA" 'fora de um repositorio Git'

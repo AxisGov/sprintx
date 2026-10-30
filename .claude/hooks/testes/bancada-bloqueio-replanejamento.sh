@@ -160,6 +160,15 @@ for par in j_novo_aceito:j1-novo-com-classe-aceito j_sem_classe_recusado:j2-novo
   j_resolvido:j7-defeito-de-plano-resolvido-mantem j_prosa_nao_classifica:j8-prosa-nao-classifica; do
   roda_caso "${par%%:*}" "$BL"; afirma "${par#*:}" $? "${par%%:*}"
 done
+# O plano aceita T-NNN.MM (planejamento.sh, `{2,}`): o bloqueio da task de tres digitos e
+# registrado, e o id fora da forma continua recusado (katosmv/login#41, conselhos#217).
+j_tres_digitos() {
+  local s="$1" d="$2"
+  bl "$s" "$d" registrar menu T-100.01 prerequisito_ausente 'tres digitos' 'x' >/dev/null || return 1
+  [ "$(blinha "$s" "$d" B-01)" = "T-100.01|prerequisito_ausente|aberto" ] || return 1
+  bl "$s" "$d" registrar menu T-1.01 prerequisito_ausente 'um digito' 'x' >/dev/null; [ $? -eq 4 ]
+}
+roda_caso j_tres_digitos "$BL"; afirma "bloqueio-task-de-tres-digitos-registrada" $? "T-100.01 aceita, T-1.01 recusada"
 D="$J/tpl"; bl "$BL" "$D" registrar menu T-01.01 lacuna_de_decisao 'x' 'y' >/dev/null
 tr -d '\r' < "$(barq "$D")" | awk 'NR==1{next} $0=="---"{exit} {print}' | grep -q '{{'; [ $? -ne 0 ]
 afirma "j9-arquivo-novo-sem-placeholder-no-yaml" $? "criado do template, frontmatter preenchido"

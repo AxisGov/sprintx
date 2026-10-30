@@ -68,7 +68,12 @@ falha() { local c="$1"; shift; printf 'planejamento: %s\n' "$*" >&2; exit "$c"; 
 # ------------------------------------------------------------------ contexto
 
 resolve_raiz() {
-  if [ -n "${SPRINTX_RAIZ:-}" ]; then printf '%s' "$SPRINTX_RAIZ"; return; fi
+  # A raiz relativa que comeca com `-` ganha `./`: sem isso, mkdir, grep e awk a leriam
+  # como opcao.
+  if [ -n "${SPRINTX_RAIZ:-}" ]; then
+    case "$SPRINTX_RAIZ" in -*) printf './%s' "$SPRINTX_RAIZ" ;; *) printf '%s' "$SPRINTX_RAIZ" ;; esac
+    return
+  fi
   local t; t="$(git rev-parse --show-toplevel 2>/dev/null)" && [ -n "$t" ] && { caminho_git "$t"; return; }
   printf '%s' "$PWD"
 }
@@ -1043,9 +1048,12 @@ $prosa" awk '
 
 # Clausula autoritativa citavel: criterio_aceite, uma decisao D-NN, um fato da
 # base (base/<arquivo>) ou um contrato de origem ingerido (origem:<ref>).
-# Fora desta gramatica nao ha clausula — e o tipo e `criterio`.
+# Fora desta gramatica nao ha clausula — e o tipo e `criterio`. O nome do fato da base
+# pode ter espaco e acento (`base/meu fato.md`); nao pode ter `|`, que separa a linha,
+# controle, `\`, que e separador no Windows, nem um segmento `..`, que sairia da base.
 clausula_citavel() {
-  grep -Eq '^(criterio_aceite|D-[0-9]{2,}|base/[A-Za-z0-9._/#-]+|origem:[^[:space:]]+)$' <<<"$1"
+  case "/$1/" in */../*) return 1 ;; esac
+  grep -Eq '^(criterio_aceite|D-[0-9]{2,}|base/[^|\\[:cntrl:]]+|origem:[^[:space:]]+)$' <<<"$1"
 }
 
 severidade_de() {
@@ -1129,7 +1137,11 @@ valida_auditoria() {
             "[item 10][granularidade]"*) ;;
             *) falha "$E_CONTRATO" "achado do item 10 sem [limite:Ln] nem [granularidade]: $prob" ;;
           esac
-          if grep -Eq '(^|[^A-Za-z0-9])L[123]([^0-9]|$)' <<<"$prob"; then
+          # `L1` solto e o limite; colado a uma palavra (`L1Cache`, `L1Árvore`) nao e. A
+          # letra acentuada (U+00C0 a U+00FF, em UTF-8, menos `×` e `÷`) vira `a` antes,
+          # porque a classe do grep so conhece ASCII. Os simbolos continuam separando.
+          local ascii; ascii="$(LC_ALL=C; printf '%s' "${prob//$'\303'[$'\200'-$'\226'$'\230'-$'\266'$'\270'-$'\277']/a}")"
+          if grep -Eq '(^|[^A-Za-z0-9])L[123]([^A-Za-z0-9]|$)' <<<"$ascii"; then
             falha "$E_CONTRATO" "achado de limite do item 10 sem [limite:Ln]: $prob"
           fi
         fi

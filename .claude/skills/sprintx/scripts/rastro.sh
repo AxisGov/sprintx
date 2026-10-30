@@ -57,7 +57,12 @@ uso() {
 . "$SK/scripts/lib/execucao.sh" || falha "$E_AMBIENTE" "scripts/lib/execucao.sh ausente"
 
 resolve_raiz() {
-  if [ -n "${SPRINTX_RAIZ:-}" ]; then printf '%s' "$SPRINTX_RAIZ"; return; fi
+  # A raiz relativa que comeca com `-` ganha `./`: sem isso, o `. "$LIB"` e o `grep` a
+  # leriam como opcao.
+  if [ -n "${SPRINTX_RAIZ:-}" ]; then
+    case "$SPRINTX_RAIZ" in -*) printf './%s' "$SPRINTX_RAIZ" ;; *) printf '%s' "$SPRINTX_RAIZ" ;; esac
+    return
+  fi
   local t; t="$(git rev-parse --show-toplevel 2>/dev/null)" && [ -n "$t" ] && { caminho_git "$t"; return; }
   printf '%s' "$PWD"
 }

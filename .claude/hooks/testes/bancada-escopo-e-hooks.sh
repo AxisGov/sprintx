@@ -1199,6 +1199,22 @@ o_j() { # arvore-limpa: o escopo comparado e o do trabalho da SESSAO
   [ "$O_RC" -eq 0 ] && [ -z "$O_SAIDA" ]
 }
 
+o_k() { # arvore-limpa: caminho declarado que comeca com `-` e declarado, nao opcao do grep
+  local d="$OF_DIR/k"
+  o_fx "$d" feature-a
+  # o `.git` vazio da fixture vira repositorio de verdade: este hook roda `git status`
+  git init -q --template= -b main "$d" >/dev/null 2>&1
+  n_plano "$d/docs/sprintx/features/feature-a/sprint-01/tasks.md" feature-a 01 <<EOF
+$(n_task T-01.01 em_andamento -x.txt)
+EOF
+  : > "$d/-x.txt"                   # declarado na T-01.01 de feature-a
+  : > "$d/src/fora-do-plano.ts"     # de task nenhuma
+  O_SAIDA="$(printf '{"cwd":"%s","tool_input":{"command":"npm test"}}' "$d" \
+    | (cd "$d" && EXPX_SESSAO=sessao-a bash "$1/sprintx/arvore-limpa-antes-da-suite.sh") 2>&1)"; O_RC=$?
+  [ "$O_RC" -eq 0 ] && printf '%s' "$O_SAIDA" | grep -qF 'src/fora-do-plano.ts' \
+    && ! printf '%s' "$O_SAIDA" | grep -qF -- ' -x.txt'
+}
+
 OHR="$H"
 bash -n "$H/comum/rastro.sh"; afirma "o0-rastro-sintaxe" $? "bash -n"
 for par in \
@@ -1211,7 +1227,8 @@ for par in \
   o_g:og-sem-reivindicacao-vai-para-sem-trabalho \
   o_h:oh-trabalho-pelo-caminho-do-plano \
   o_i:oi-trabalho-pelo-frontmatter-do-tasks-md \
-  o_j:oj-arvore-limpa-compara-o-escopo-do-trabalho-da-sessao; do
+  o_j:oj-arvore-limpa-compara-o-escopo-do-trabalho-da-sessao \
+  o_k:ok-arvore-limpa-caminho-declarado-com-hifen; do
   "${par%%:*}" "$OHR"; afirma "${par#*:}" $? "${par%%:*}"
 done
 
