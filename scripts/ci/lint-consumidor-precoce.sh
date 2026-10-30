@@ -28,10 +28,12 @@ varre() {
   awk '
     # O consumidor em qualquer palavra do trecho depois de um `|` so: atras de atribuicao,
     # `env`, `command`, caminho ou qualquer cadeia deles (`| /usr/bin/env A=1 grep -q`), e o
-    # `head` colado a operador (`| head;`). Mais largo que o shell exige: um falso positivo
+    # `head` colado a operador (`| head;`), e o nome escapado ou entre aspas (`\\grep`, `"head"`,
+    # `\047grep\047`), que o shell executa igual. Mais largo que o shell exige: um falso positivo
     # falha fechado, e o autor reescreve.
     BEGIN {
-      P = "(^|[^|])[|]([^|]*[ \t/])?([ef]?grep[ \t][^|]*(-[A-Za-z]*q|--quiet)|head([^A-Za-z0-9_.-]|$))"
+      Q = "[\\\\\"\047]*"
+      P = "(^|[^|])[|]([^|]*[ \t/])?" Q "([ef]?grep" Q "[ \t][^|]*(-[A-Za-z]*q|--quiet)|head" Q "([^A-Za-z0-9_.-]|$))"
     }
     # limpa(s, isolada): sem `isolada`, o estado das aspas atravessa as linhas (simples, dupla)
     function limpa(s, isolada,   r, i, j, c, d, ant, sq, dq, w, lit, tab) {
@@ -63,6 +65,11 @@ varre() {
           }
         }
         if (c == "\\") { r = r c substr(s, i + 1, 1); i++; ant = "x"; continue }
+        # palavra simples entre aspas simples (`\047grep\047`) fica: pode ser o nome de um comando
+        if (c == "\047" && !dq && (j = index(substr(s, i + 1), "\047")) > 1 \
+            && substr(s, i + 1, j - 1) ~ /^[A-Za-z0-9_.\/-]+$/) {
+          r = r substr(s, i, j + 1); i += j; ant = "\047"; continue
+        }
         if (c == "\047" && !dq) { sq = 1; r = r "\047\047"; ant = c; continue }
         if (c == "\"") dq = !dq
         if (c == "#" && !dq && ant ~ /[ \t;&|(]/) break
