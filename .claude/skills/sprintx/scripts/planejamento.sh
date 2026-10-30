@@ -200,10 +200,11 @@ fm_carrega() {
     FM_CHAVES="$FM_CHAVES$k "
     eval "FM_$k=\$v"
   done <<EOF
-$(tr -d '\r' < "$1" | awk '
+$(awk '
+    { gsub(/\r/, "") }
     NR == 1 { if ($0 != "---") exit; next }
     $0 == "---" { exit }
-    /^[a-z_][a-z0-9_]*:/ { k = $0; sub(/:.*/, "", k); v = substr($0, length(k) + 2); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v); print k "\t" v }')
+    /^[a-z_][a-z0-9_]*:/ { k = $0; sub(/:.*/, "", k); v = substr($0, length(k) + 2); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v); print k "\t" v }' "$1")
 EOF
 }
 TAB="$(printf '\t')"; FM_CHAVES=""
@@ -211,7 +212,8 @@ fm_em() { eval "$1=\${FM_$2-}"; }   # fm_em <variavel> <chave> — sem subshell
 fm_presente() { case "$FM_CHAVES" in *" $1 "*) return 0 ;; esac; return 1; }
 
 hist_tsv() { # rodada TAB veredito TAB altas TAB medias TAB baixas TAB auditado_em
-  tr -d '\r' < "$1" | awk '
+  awk '
+    { gsub(/\r/, "") }
     function sai() { if (r != "") print r "\t" v "\t" a "\t" m "\t" b "\t" d; r = "" }
     NR == 1 { next }
     $0 == "---" { exit }
@@ -225,7 +227,7 @@ hist_tsv() { # rodada TAB veredito TAB altas TAB medias TAB baixas TAB auditado_
     /^    baixas:/     { b = $2; next }
     /^    auditado_em:/ { d = $2; next }
     { print "LIXO\t" $0 }
-    END { sai() }'
+    END { sai() }' "$1"
 }
 
 # lista_em <variavel> <valor> — "[a, b]" -> "a b"; "[]" -> "". Outra forma: LIXO.
@@ -386,7 +388,10 @@ arquivos_tasks() {
 
 # tasks_tsv <arquivo> — id TAB status de cada item da chave `tasks:` do frontmatter.
 tasks_tsv() {
-  tr -d '\r' < "$1" | awk '
+  # O awk le o arquivo e tira o \r ele mesmo: com `tr | awk`, o `exit` no fim do frontmatter
+  # levava o tr a SIGPIPE num tasks.md acima de 64 KB, e o pipefail virava a leitura em falha.
+  awk '
+    { gsub(/\r/, "") }
     NR == 1 { if ($0 != "---") exit; next }
     $0 == "---" { exit }
     /^tasks:/ { t = 1; next }
@@ -394,7 +399,7 @@ tasks_tsv() {
     !t { next }
     /^  - id:/ { if (id != "") print id "\t" st; id = $3; st = ""; next }
     /^    status:/ { st = $2; next }
-    END { if (id != "") print id "\t" st }'
+    END { if (id != "") print id "\t" st }' "$1"
 }
 
 # status_da_task <id> — arquivo TAB status, ou nada se a task nao existe no plano.
@@ -1040,7 +1045,7 @@ $prosa" awk '
 # base (base/<arquivo>) ou um contrato de origem ingerido (origem:<ref>).
 # Fora desta gramatica nao ha clausula — e o tipo e `criterio`.
 clausula_citavel() {
-  printf '%s' "$1" | grep -Eq '^(criterio_aceite|D-[0-9]{2,}|base/[A-Za-z0-9._/#-]+|origem:[^[:space:]]+)$'
+  grep -Eq '^(criterio_aceite|D-[0-9]{2,}|base/[A-Za-z0-9._/#-]+|origem:[^[:space:]]+)$' <<<"$1"
 }
 
 severidade_de() {
@@ -1124,7 +1129,7 @@ valida_auditoria() {
             "[item 10][granularidade]"*) ;;
             *) falha "$E_CONTRATO" "achado do item 10 sem [limite:Ln] nem [granularidade]: $prob" ;;
           esac
-          if printf '%s' "$prob" | grep -Eq '(^|[^A-Za-z0-9])L[123]([^0-9]|$)'; then
+          if grep -Eq '(^|[^A-Za-z0-9])L[123]([^0-9]|$)' <<<"$prob"; then
             falha "$E_CONTRATO" "achado de limite do item 10 sem [limite:Ln]: $prob"
           fi
         fi
@@ -1990,7 +1995,7 @@ cmd_revisor() {
     [ -n "$(trim "$linha")" ] || continue
     n=$((n + 1))
     task="$(trim "${linha%%|*}")"
-    printf '%s' "$task" | grep -Eq '^T-[0-9]{2,}\.[0-9]{2,}$' || falha "$E_CONTRATO" "linha $n: id de task invalido: $linha"
+    grep -Eq '^T-[0-9]{2,}\.[0-9]{2,}$' <<<"$task" || falha "$E_CONTRATO" "linha $n: id de task invalido: $linha"
     resto="${linha#*|}"
     case "$resto" in
       *"|"*) juizo="$(trim "${resto%%|*}")"; resto="${resto#*|}" ;;

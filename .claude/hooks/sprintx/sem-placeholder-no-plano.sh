@@ -44,7 +44,7 @@ case "$ALVO" in
   */assets/TEMPLATE-*) exit 0 ;;
 esac
 
-ACHADOS="$(grep -o '{{[^}]*}}' "$ALVO" 2>/dev/null | sort -u | head -5 | tr '\n' ' ')"
+ACHADOS="$(grep -o '{{[^}]*}}' "$ALVO" 2>/dev/null | sort -u | awk 'NR <= 5' | tr '\n' ' ')"
 [ -n "$ACHADOS" ] || exit 0
 
 REL="${ALVO#"$RAIZ"/}"

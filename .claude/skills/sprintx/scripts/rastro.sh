@@ -104,7 +104,9 @@ case "$CMD" in
     achou=0; re="${ALVO//./[.]}"
     for f in "$PASTA"/sprint-*/tasks.md; do
       [ -f "$f" ] || continue
-      if tr -d '\r' < "$f" | grep -Eq "^  - id:[[:space:]]*$re[[:space:]]*\$"; then achou=1; break; fi
+      # O grep le o arquivo direto, sem `tr | grep -q`: sob pipefail, num tasks.md acima de 64 KB o
+      # tr levava SIGPIPE e a task do plano saia como ausente. O [[:space:]] final casa o \r do CRLF.
+      if grep -Eq "^  - id:[[:space:]]*$re[[:space:]]*\$" "$f"; then achou=1; break; fi
     done
     [ "$achou" = 1 ] || falha "$E_CONTRATO" "task $ALVO nao esta no plano do trabalho '$SLUG': nada foi gravado"
     EVENTO="${CMD/-/_}"; RASTRO_FASE='"f6"'; RASTRO_TASK="\"$ALVO\""; EXIGE_IDENTIDADE=1
