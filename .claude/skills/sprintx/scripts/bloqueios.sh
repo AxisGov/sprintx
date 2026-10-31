@@ -63,6 +63,8 @@ resolve_raiz() {
 
 contexto() { # contexto <slug>
   SLUG="$1"
+  # O grep julga linha a linha: `ft\nlixo` passaria na linha 1 (DS-195).
+  case "$SLUG" in *$'\n'*|*$'\r'*) falha "$E_USO" "slug invalido: com quebra de linha" ;; esac
   grep -Eq '^[a-z0-9]+(-[a-z0-9]+)*$' <<<"$SLUG" \
     || falha "$E_USO" "slug invalido: '$SLUG' (a-z, 0-9 e hifen)"
   RAIZ="$(resolve_raiz)"
@@ -103,7 +105,7 @@ classe_valida() { case " $CLASSES " in *" $1 "*) [ -n "$1" ] ;; *) return 1 ;; e
 # existe e n_classe, nunca o valor. Linha fora da forma sai como LIXO.
 entradas() {
   # O awk le o arquivo e tira o \r ele mesmo: com `tr | awk`, o `exit` no fim do frontmatter
-  # levava o tr a SIGPIPE num arquivo acima de 64 KB, e o pipefail virava a leitura em falha.
+  # levava o tr a SIGPIPE, e o pipefail virava a leitura em falha.
   awk '
     { gsub(/\r/, "") }
     function v0(x) { return x == "" ? "-" : x }
@@ -184,6 +186,7 @@ cmd_registrar() { # <task|null> <classe> <descricao> <destravaria>
   [ -n "$classe" ] || falha "$E_CONTRATO" "bloqueio novo sem classe: escolha pelo caminho de criacao ($CLASSES)"
   classe_valida "$classe" || falha "$E_CONTRATO" "classe '$classe' fora do enum ($CLASSES)"
   # A mesma forma de id que o plano aceita (planejamento.sh): T-100.01 tambem e task.
+  case "$task" in *$'\n'*|*$'\r'*) falha "$E_CONTRATO" "task invalida: com quebra de linha (T-NN.MM ou null)" ;; esac
   [ "$task" = null ] || grep -Eq '^T-[0-9]{2,}\.[0-9]{2,}$' <<<"$task" \
     || falha "$E_CONTRATO" "task invalida: '$task' (T-NN.MM ou null)"
   uma_linha descricao "$desc"; uma_linha "o que destravaria" "$dest"

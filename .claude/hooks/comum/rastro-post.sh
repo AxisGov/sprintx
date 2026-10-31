@@ -50,7 +50,7 @@ case "$FERRAMENTA" in
         RES="ok"
         # Cuidado com "0 failed", que e o caso VERDE e aparece em quase toda
         # saida de suite: o [1-9] no inicio do numero e o que separa os dois.
-        # O texto vai por here-string, sem `printf | grep -q`: sob pipefail, saida acima de 64 KB
+        # O texto vai por here-string, sem `printf | grep -q`: sob pipefail, a saida
         # com o padrao no comeco levava o printf a SIGPIPE, e a suite vermelha saia `ok`.
         if grep -qE '(^|[^0-9])[1-9][0-9]* (failed|failing|error)' <<<"$SAIDA"; then
           RES="falha"

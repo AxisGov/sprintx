@@ -394,7 +394,7 @@ arquivos_tasks() {
 # tasks_tsv <arquivo> — id TAB status de cada item da chave `tasks:` do frontmatter.
 tasks_tsv() {
   # O awk le o arquivo e tira o \r ele mesmo: com `tr | awk`, o `exit` no fim do frontmatter
-  # levava o tr a SIGPIPE num tasks.md acima de 64 KB, e o pipefail virava a leitura em falha.
+  # levava o tr a SIGPIPE, e o pipefail virava a leitura em falha.
   awk '
     { gsub(/\r/, "") }
     NR == 1 { if ($0 != "---") exit; next }
