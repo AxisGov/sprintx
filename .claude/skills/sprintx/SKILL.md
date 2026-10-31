@@ -151,7 +151,7 @@ discriminar qual sessão está em qual.
 - **Regra 21 — worktree por feature.** Com git, a F1 abre a feature num `git worktree`
   próprio, num diretório irmão do checkout principal, na branch `feature/<slug>`. Cada
   feature vive isolada: `stash` e troca de branch de uma sessão não alcançam a árvore de
-  outra. Sem git, ou com o pedido explícito de "sem worktree", o comportamento é o de sempre.
+  outra. Sem git, ou com o pedido explícito de "sem worktree", o comportamento é o de sempre. A worktree sai depois do merge, no E9 da mergex (`worktrees-entregues.sh`, DM-290).
 - **Reivindicação de task pelo rastro.** A F6 já grava `task_iniciada`/`task_concluida`/
   `task_bloqueada` no rastro. O hook `task-reivindicada` avisa quando uma sessão tenta abrir
   uma task que o rastro mostra aberta por outra sessão sem fechamento.
