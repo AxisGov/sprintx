@@ -97,6 +97,32 @@ elif [ -d "$RAIZ/docs/$SLUG" ]; then PASTA="$RAIZ/docs/$SLUG"
 else falha "$E_CONTRATO" "trabalho '$SLUG' sem pasta (docs/sprintx/features/$SLUG/): nada foi gravado"
 fi
 
+# task_no_plano <tasks.md> <id> — o plano e o bloco `tasks:` do frontmatter: id em exemplo no corpo
+# ou sob outra chave nao e task (DS-195). Sem frontmatter, o arquivo inteiro, como legado. Em bash
+# puro: abrir task nao depende de `awk`, e sem pipe nao ha SIGPIPE (DS-192). O \r do CRLF sai aqui.
+task_no_plano() {
+  local l v n=0 fm=0 bloco=0
+  while IFS= read -r l || [ -n "$l" ]; do
+    l="${l%$'\r'}"; n=$((n + 1))
+    if [ "$n" = 1 ] && [ "$l" = --- ]; then fm=1; continue; fi
+    if [ "$fm" = 1 ]; then
+      [ "$l" != --- ] || return 1
+      case "$l" in
+        tasks:*) bloco=1; continue ;;
+        \#*) continue ;;
+        [!\ $'\t']*) bloco=0; continue ;;
+      esac
+      [ "$bloco" = 1 ] || continue
+    fi
+    case "$l" in
+      "  - id:"*)
+        v="${l#  - id:}"; v="${v%%[[:space:]]#*}"; v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"
+        [ "$v" != "$2" ] || return 0 ;;
+    esac
+  done < "$1"
+  return 1
+}
+
 # ------------------------------------------------------------ o que o agente declarou
 RASTRO_AGENTE=principal
 EXIGE_IDENTIDADE=0
@@ -106,12 +132,10 @@ case "$CMD" in
     case "$ALVO" in T-[0-9]*.[0-9]*) ;; *) falha "$E_USO" "task invalida: '$ALVO' (T-NN.MM)" ;; esac
     case "$ALVO" in *[!A-Za-z0-9.-]*) falha "$E_USO" "task invalida: '$ALVO' (T-NN.MM)" ;; esac
     # A task precisa estar no plano DESTE trabalho: o id e local a feature (DS-153).
-    achou=0; re="${ALVO//./[.]}"
+    achou=0
     for f in "$PASTA"/sprint-*/tasks.md; do
       [ -f "$f" ] || continue
-      # O grep le o arquivo direto, sem `tr | grep -q`: sob pipefail, num tasks.md acima de 64 KB o
-      # tr levava SIGPIPE e a task do plano saia como ausente. O [[:space:]] final casa o \r do CRLF.
-      if grep -Eq "^  - id:[[:space:]]*$re[[:space:]]*\$" "$f"; then achou=1; break; fi
+      if task_no_plano "$f" "$ALVO"; then achou=1; break; fi
     done
     [ "$achou" = 1 ] || falha "$E_CONTRATO" "task $ALVO nao esta no plano do trabalho '$SLUG': nada foi gravado"
     EVENTO="${CMD/-/_}"; RASTRO_FASE='"f6"'; RASTRO_TASK="\"$ALVO\""; EXIGE_IDENTIDADE=1

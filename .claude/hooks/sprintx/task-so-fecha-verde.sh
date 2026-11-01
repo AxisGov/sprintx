@@ -43,7 +43,7 @@ NOVO="$(rastro_tool_input_get "$ENTRADA" content)"
 [ -n "$NOVO" ] || exit 0
 
 # Nada virando `concluida` nesta gravacao => nada a verificar.
-# Sem `printf | grep -q`: sob pipefail, num Write acima de 64 KB o printf levava SIGPIPE e a regra
+# Sem `printf | grep -q`: sob pipefail, o printf levava SIGPIPE e a regra
 # era pulada. O espaco depois de `status:` e o mesmo que o awk abaixo aceita: com `status:  concluida`
 # (dois espacos) a regra tambem era pulada (CodeAnt no sprintx#57).
 RE_CONCLUIDA=$'status:[ \t]*concluida'

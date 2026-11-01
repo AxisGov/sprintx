@@ -1644,3 +1644,17 @@ mutante_k "km-mutante-15-legado-inventa-orcamento-na-recusa" $? "$M" k_planejame
 # Registro invalido lido so dentro do subshell: vira "nenhum bloqueio aberto" em vez de contrato.
 M="$(copia_skill_k p)"; muta_lit "$PL" "$M" '  le_bloqueios || falha "$E_CONTRATO" "00-BLOQUEIOS.md invalido"' '  :'
 mutante_k "km-mutante-16-registro-invalido-vira-sem-bloqueio" $? "$M" k_registro_invalido
+
+# Quebra de linha na task ou no slug: o grep julga linha a linha, e a segunda linha entrava
+# no 00-BLOQUEIOS.md como chave nova (Conselhos, DS-195).
+BLNL="$(mktemp -d)"
+git -C "$BLNL" init -q -b main
+SPRINTX_RAIZ="$BLNL" bash "$BL" registrar menu $'T-01.01\nextra: valor' prerequisito_ausente desc destrava >/dev/null 2>&1
+[ $? = 4 ] && [ ! -f "$BLNL/docs/sprintx/features/menu/00-BLOQUEIOS.md" ]
+afirma "bl-nl1-task-com-quebra-de-linha-recusada" $? "gravou: $(cat "$BLNL/docs/sprintx/features/menu/00-BLOQUEIOS.md" 2>/dev/null | grep -n extra)"
+SPRINTX_RAIZ="$BLNL" bash "$BL" registrar $'menu\nx' null prerequisito_ausente desc destrava >/dev/null 2>&1
+[ $? = 64 ] && [ ! -e "$BLNL/docs/sprintx/features/menu"$'\n'"x" ]
+afirma "bl-nl2-slug-com-quebra-de-linha-recusado" $? "criou pasta com quebra de linha"
+SPRINTX_RAIZ="$BLNL" bash "$BL" registrar menu T-01.01 prerequisito_ausente desc destrava >/dev/null 2>&1
+afirma "bl-nl3-a-forma-valida-grava" $? "registrar com task valida"
+rm -rf "$BLNL"

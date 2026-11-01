@@ -52,10 +52,17 @@ RASTRO_ARQ="$RAIZ/docs/eventos/$TRABALHO.jsonl"
 MINHA_SESSAO="$(rastro_sessao)"
 
 # IDs das tasks que a escrita proposta leva a em_andamento — uma por linha.
-IDS_EM_ANDAMENTO="$(printf '%s' "$NOVO" | awk '
+# So o bloco `tasks:` do frontmatter e plano (DS-195). O trecho de um Edit nao abre com `---`, e
+# vale inteiro. Por here-string, sem pipe: o `exit` do awk nao leva ninguem a SIGPIPE.
+IDS_EM_ANDAMENTO="$(awk '
+  { sub(/\r$/, "") }
+  NR == 1 && $0 == "---" { fm = 1; next }
+  fm && $0 == "---" { exit }
+  fm && /^[^ \t#]/ { t = ($0 ~ /^tasks:/); next }
+  fm && !t { next }
   /^  - id:/ { id = $3; sub(/^[ \t]+/, "", id) }
   /status:[ \t]*em_andamento/ { if (id != "") print id }
-')"
+' <<<"$NOVO")"
 [ -n "$IDS_EM_ANDAMENTO" ] || exit 0
 
 # _sessao_dona <task_id> — sessao que tem a task aberta agora, vazio se ninguem.

@@ -154,10 +154,16 @@ SAIDA="$(SX_SES="$MINHA_SESSAO" SX_RAIZ="$RAIZ" SX_REL="$REL" LC_ALL=C awk "$_RA
     # Porteiro: ate 5 niveis sob docs/ (o glob de 6 niveis so existe para o plano).
     PORT = (barras(substr(FILENAME, length(raiz "/docs/") + 1)) <= 4)
     # Frontmatter so quando o arquivo abre com ---; sem ele, o arquivo inteiro (legado).
-    FM = ($0 == "---"); FORA = 0; AT = ""; EML = 0
+    FM = ($0 == "---"); FORA = 0; AT = ""; EML = 0; TB = 0
   }
   { sub(/\r$/, "") }
   PORT && index($0, "status: em_andamento") { G = 1 }
+  # O plano e o bloco `tasks:` do frontmatter (DS-195): quem reivindicasse um id de exemplo no
+  # corpo teria uma task sem `arquivos`, e toda edicao passaria como "nao da para julgar".
+  FNR > 1 && FM && $0 == "---" { FORA = 1; AT = "" }
+  FORA { next }
+  FM && /^[^ \t#]/ { TB = ($0 ~ /^tasks:/); AT = ""; next }
+  FM && !TB { next }
   /^  - id:/ {
     id = $3; sub(/^[ \t]+/, "", id); EML = 0
     if (id == "") next
@@ -165,8 +171,7 @@ SAIDA="$(SX_SES="$MINHA_SESSAO" SX_RAIZ="$RAIZ" SX_REL="$REL" LC_ALL=C awk "$_RA
     if (!(AT in VISTO)) { VISTO[AT] = 1; NP++; PID[NP] = id; PARQ[NP] = FILENAME }
     next
   }
-  FNR > 1 && FM && $0 == "---" { FORA = 1; AT = "" }
-  FORA || AT == "" { next }
+  AT == "" { next }
   /cria:|altera:/ { emitir($0); next }
   /^[ \t]*arquivos:[ \t]*\[/ { emitir($0); EML = 0; next }
   /^[ \t]*arquivos:[ \t]*$/ { EML = 1; next }

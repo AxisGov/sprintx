@@ -68,6 +68,12 @@ if [ -d "$FEATURE_DIR" ]; then
           linha = substr(linha, ini + fim)
         }
       }
+      # So o bloco `tasks:` do frontmatter declara escopo (DS-195). Sem frontmatter, o arquivo todo.
+      { sub(/\r$/, "") }
+      NR == 1 && $0 == "---" { fm = 1; next }
+      fm && $0 == "---" { exit }
+      fm && /^[^ \t#]/ { t = ($0 ~ /^tasks:/); next }
+      fm && !t { next }
       /cria:|altera:/ { emitir($0); next }
     ' "$f" 2>/dev/null)"
     DECLARADOS="$DECLARADOS
@@ -110,6 +116,11 @@ DONA_ALHEIA=""
 if [ -f "$RASTRO_ARQ" ] && [ -d "$FEATURE_DIR" ]; then
   IDS_EM_ANDAMENTO="$(grep -l 'status:[ \t]*em_andamento' "$FEATURE_DIR"/sprint-*/tasks.md 2>/dev/null \
     | xargs -I{} awk '
+      { sub(/\r$/, "") }
+      NR == 1 && $0 == "---" { fm = 1; next }
+      fm && $0 == "---" { exit }
+      fm && /^[^ \t#]/ { t = ($0 ~ /^tasks:/); next }
+      fm && !t { next }
         /^  - id:/ { id = $3; sub(/^[ \t]+/, "", id) }
         /status:[ \t]*em_andamento/ { if (id != "") print id }
       ' {} 2>/dev/null)"

@@ -1705,8 +1705,13 @@ QMU="$(q_copia m4)"; muta_lit "$QMU/hooks/sprintx/escopo-da-task.sh" "$QMU/e.m" 
   '    case "$DECL" in corrente|vazio|irma) exit 0 ;; esac' && mv "$QMU/e.m" "$QMU/hooks/sprintx/escopo-da-task.sh"
 q_mutante "qm-mutante-4-escopo-muda-semantica-irma-corrente" $? l_c "$QMU/hooks/sprintx/escopo-da-task.sh"
 # 5. A prosa volta a declarar ownership (a leitura de antes).
+# Duas guardas seguram a prosa desde a DS-195, o fim do frontmatter e o bloco `tasks:`: saem as duas.
 QMU="$(q_copia m5)"; muta_lit "$QMU/hooks/sprintx/escopo-da-task.sh" "$QMU/e.m" '  FNR > 1 && FM && $0 == "---" { FORA = 1; AT = "" }' \
-  '  FNR > 1 && FM && $0 == "---" { FORA = 0 }' && mv "$QMU/e.m" "$QMU/hooks/sprintx/escopo-da-task.sh"
+  '  FNR > 1 && FM && $0 == "---" { FORA = 0 }' && mv "$QMU/e.m" "$QMU/hooks/sprintx/escopo-da-task.sh" \
+  && muta_lit "$QMU/hooks/sprintx/escopo-da-task.sh" "$QMU/e.m" '  FM && /^[^ \t#]/ { TB = ($0 ~ /^tasks:/); AT = ""; next }' '' \
+  && mv "$QMU/e.m" "$QMU/hooks/sprintx/escopo-da-task.sh" \
+  && muta_lit "$QMU/hooks/sprintx/escopo-da-task.sh" "$QMU/e.m" '  FM && !TB { next }' '' \
+  && mv "$QMU/e.m" "$QMU/hooks/sprintx/escopo-da-task.sh"
 q_mutante "qm-mutante-5-prosa-volta-a-declarar-ownership" $? l_prosa "$QMU/hooks/sprintx/escopo-da-task.sh"
 fi
 rm -rf "$Q" "$C2"

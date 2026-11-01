@@ -2073,6 +2073,7 @@ rm -rf "$AA_T"
 . "$H/testes/bancada-autorizacao-f6.sh"
 . "$H/testes/bancada-modelo-esforco.sh"
 . "$H/testes/bancada-pipefail.sh"
+. "$H/testes/bancada-plano-so-frontmatter.sh"
 echo "== AM. predecessores verificaveis =="
 PRE_SUITE="$H/../../scripts/ci/test-predecessores.sh"
 if [ -f "$PRE_SUITE" ]; then

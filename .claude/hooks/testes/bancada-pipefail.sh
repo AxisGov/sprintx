@@ -3,8 +3,9 @@
 # Secao AN da bancada: consumidor que sai cedo sob `pipefail`. Carregada por `.` de dentro da
 # bancada.sh, depois da secao AL: usa os auxiliares e o estado dela.
 #
-# `produtor | grep -q`, `| head` e `| awk` com `exit` saem assim que decidem. Com a entrada acima
-# do buffer do pipe (64 KB), o produtor ainda esta escrevendo, leva SIGPIPE (141), e com
+# `produtor | grep -q`, `| head` e `| awk` com `exit` saem assim que decidem. Se o produtor ainda
+# esta escrevendo, leva SIGPIPE (141): nao ha tamanho seguro, e e mais provavel com saida maior
+# (medido a partir de 2 KB no WSL2 sob carga, DS-195). Com
 # `pipefail` o pipeline inteiro sai diferente de zero. A decisao vira o contrario do que o
 # consumidor achou, de forma intermitente (relato do Login na 0.12.7: o escritor do rastro
 # recusou `task_concluida` com "task nao esta no plano", e o tasks.md tinha 76 KB).
@@ -17,7 +18,7 @@
   return 2 2>/dev/null || exit 2
 }
 
-echo "== AN. consumidor que sai cedo sob pipefail, com entrada acima de 64 KB =="
+echo "== AN. consumidor que sai cedo sob pipefail, com entrada grande =="
 AN_T="$(mktemp -d)"
 AN_H="$(cd "$H" && pwd)"
 AN_N=20
