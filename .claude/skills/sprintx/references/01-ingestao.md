@@ -34,7 +34,7 @@ canônico `docs/stack/CONVENCOES.md`.
    se marcada e não `PROPOSTA`) → `git symbolic-ref refs/remotes/origin/HEAD` → a branch atual,
    se `main`/`master`/`develop` ou equivalente detectada.
 2. **Criar ou retomar**: `git worktree list` já lista essa branch → retome nele. Senão:
-   `git worktree add -b feature/<slug> ../<repo>--<slug> <base>`, onde `<repo>` é o nome do
+   `git worktree add -b feature/<slug> --no-track ../<repo>--<slug> <base>`, onde `<repo>` é o nome do
    diretório do checkout principal. Branch já existente sem worktree: `git worktree add
    ../<repo>--<slug> feature/<slug>`. Com base informada pelo caller, grave-a na própria branch
    — `git config branch.feature/<slug>.expxBase <base>` —, que vale para todos os worktrees e

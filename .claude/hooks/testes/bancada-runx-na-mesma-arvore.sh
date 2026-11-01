@@ -103,4 +103,8 @@ rm -rf "$AQS"; aq_limpa
 aq_feature "$AQ/docs/manutencao" manutencao
 aq_hook infra/a.sh; [ "$AQ_RC" = 2 ]; afirma "aq15-feature-legada-com-slug-manutencao" $? "$(aq_mostra)"
 
+# -- o comando da F1 nao faz a branch rastrear a base remota (DS-197)
+grep -Fq 'git worktree add -b feature/<slug> --no-track ../<repo>--<slug> <base>' "$SK/references/01-ingestao.md"
+afirma "aq20-f1-cria-a-branch-sem-rastrear-a-base" $? "01-ingestao.md"
+
 rm -rf "$AQ"
