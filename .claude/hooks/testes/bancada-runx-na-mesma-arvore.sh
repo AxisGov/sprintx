@@ -122,7 +122,7 @@ aq_cria "$AQW/longe/z" b; AQW_RC=$?
 [ "$AQW_RC" = 0 ] && [ -d "$AQW/r--b" ] && [ ! -e "$AQW/longe/r--b" ]
 afirma "aq20b-f1-de-outro-worktree-nasce-irma-do-principal" $? "rc=$AQW_RC (DS-198)"
 rm -rf "$AQW"
-grep -Fq '`git worktree prune` tira o registro' "$SK/references/01-ingestao.md"
-afirma "aq21-f1-tira-o-registro-sem-pasta-antes-de-retomar" $? "01-ingestao.md (DS-198)"
+grep -Fq '`git worktree remove <caminho>` tira só esse registro' "$SK/references/01-ingestao.md"
+afirma "aq21-f1-tira-so-o-registro-sem-pasta-antes-de-retomar" $? "01-ingestao.md (DS-198)"
 
 rm -rf "$AQ"
