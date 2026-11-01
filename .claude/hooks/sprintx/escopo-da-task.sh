@@ -162,7 +162,7 @@ SAIDA="$(SX_SES="$MINHA_SESSAO" SX_RAIZ="$RAIZ" SX_REL="$REL" LC_ALL=C awk "$_RA
   # corpo teria uma task sem `arquivos`, e toda edicao passaria como "nao da para julgar".
   FNR > 1 && FM && $0 == "---" { FORA = 1; AT = "" }
   FORA { next }
-  FM && /^[^ \t]/ { TB = ($0 ~ /^tasks:/); AT = ""; next }
+  FM && /^[^ \t#]/ { TB = ($0 ~ /^tasks:/); AT = ""; next }
   FM && !TB { next }
   /^  - id:/ {
     id = $3; sub(/^[ \t]+/, "", id); EML = 0

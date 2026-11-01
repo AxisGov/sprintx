@@ -1708,7 +1708,7 @@ q_mutante "qm-mutante-4-escopo-muda-semantica-irma-corrente" $? l_c "$QMU/hooks/
 # Duas guardas seguram a prosa desde a DS-195, o fim do frontmatter e o bloco `tasks:`: saem as duas.
 QMU="$(q_copia m5)"; muta_lit "$QMU/hooks/sprintx/escopo-da-task.sh" "$QMU/e.m" '  FNR > 1 && FM && $0 == "---" { FORA = 1; AT = "" }' \
   '  FNR > 1 && FM && $0 == "---" { FORA = 0 }' && mv "$QMU/e.m" "$QMU/hooks/sprintx/escopo-da-task.sh" \
-  && muta_lit "$QMU/hooks/sprintx/escopo-da-task.sh" "$QMU/e.m" '  FM && /^[^ \t]/ { TB = ($0 ~ /^tasks:/); AT = ""; next }' '' \
+  && muta_lit "$QMU/hooks/sprintx/escopo-da-task.sh" "$QMU/e.m" '  FM && /^[^ \t#]/ { TB = ($0 ~ /^tasks:/); AT = ""; next }' '' \
   && mv "$QMU/e.m" "$QMU/hooks/sprintx/escopo-da-task.sh" \
   && muta_lit "$QMU/hooks/sprintx/escopo-da-task.sh" "$QMU/e.m" '  FM && !TB { next }' '' \
   && mv "$QMU/e.m" "$QMU/hooks/sprintx/escopo-da-task.sh"

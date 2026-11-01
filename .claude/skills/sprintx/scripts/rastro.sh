@@ -109,13 +109,14 @@ task_no_plano() {
       [ "$l" != --- ] || return 1
       case "$l" in
         tasks:*) bloco=1; continue ;;
+        \#*) continue ;;
         [!\ $'\t']*) bloco=0; continue ;;
       esac
       [ "$bloco" = 1 ] || continue
     fi
     case "$l" in
       "  - id:"*)
-        v="${l#  - id:}"; v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"
+        v="${l#  - id:}"; v="${v%%[[:space:]]#*}"; v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"
         [ "$v" != "$2" ] || return 0 ;;
     esac
   done < "$1"

@@ -72,7 +72,7 @@ if [ -d "$FEATURE_DIR" ]; then
       { sub(/\r$/, "") }
       NR == 1 && $0 == "---" { fm = 1; next }
       fm && $0 == "---" { exit }
-      fm && /^[^ \t]/ { t = ($0 ~ /^tasks:/); next }
+      fm && /^[^ \t#]/ { t = ($0 ~ /^tasks:/); next }
       fm && !t { next }
       /cria:|altera:/ { emitir($0); next }
     ' "$f" 2>/dev/null)"
@@ -119,7 +119,7 @@ if [ -f "$RASTRO_ARQ" ] && [ -d "$FEATURE_DIR" ]; then
       { sub(/\r$/, "") }
       NR == 1 && $0 == "---" { fm = 1; next }
       fm && $0 == "---" { exit }
-      fm && /^[^ \t]/ { t = ($0 ~ /^tasks:/); next }
+      fm && /^[^ \t#]/ { t = ($0 ~ /^tasks:/); next }
       fm && !t { next }
         /^  - id:/ { id = $3; sub(/^[ \t]+/, "", id) }
         /status:[ \t]*em_andamento/ { if (id != "") print id }

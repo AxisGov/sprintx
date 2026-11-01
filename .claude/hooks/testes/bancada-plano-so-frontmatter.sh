@@ -80,6 +80,13 @@ ap_rastro T-01.01; afirma "ap4-rastro-com-crlf" $? "T-01.01 num tasks.md com CRL
 printf 'tasks:\n  - id: T-01.05\n    status: pendente\n' > "$APT"
 ap_rastro T-01.05; afirma "ap5-rastro-legado-sem-frontmatter" $? "arquivo sem frontmatter e lido por inteiro"
 
+# Comentario YAML na coluna 0 nao fecha o bloco, e o da linha do id nao faz parte dele (CodeAnt no sprintx#60).
+ap_comentado() { # ap_comentado <status>
+  printf -- '---\nkind: tasks\ntrabalho_id: fp\ntasks:\n# as proximas\n  - id: T-01.03 # nota\n    status: %s\n    arquivos:\n      cria: [src/c.ts]\n      altera: []\n---\n' "$1"
+}
+ap_comentado pendente > "$APT"
+ap_rastro T-01.03; afirma "ap5b-rastro-com-comentario-no-bloco" $? "comentario na coluna 0 e na linha do id"
+
 # -- escopo-da-task: quem reivindicou um id do exemplo nao tem task no plano, e nada passa por "task sem arquivos"
 rm -f "$AP/.expx/hooks.json"; ap_plano pendente > "$APT"
 : > "$APR"; ap_evento task_iniciada T-01.09 eu@ap
@@ -91,6 +98,11 @@ ap_hook escopo-da-task.sh "{\"cwd\":\"$AP\",\"tool_input\":{\"file_path\":\"$AP/
 : > "$APR"; ap_evento task_iniciada T-01.02 eu@ap
 ap_hook escopo-da-task.sh "{\"cwd\":\"$AP\",\"tool_input\":{\"file_path\":\"$AP/src/b.ts\"}}"
 [ "$AP_RC" = 0 ]; afirma "ap7-escopo-aceita-o-arquivo-da-task" $? "rc=$AP_RC: $AP_SAIDA"
+
+: > "$APR"; ap_comentado em_andamento > "$APT"; ap_evento task_iniciada T-01.03 eu@ap
+ap_hook escopo-da-task.sh "{\"cwd\":\"$AP\",\"tool_input\":{\"file_path\":\"$AP/src/c.ts\"}}"
+[ "$AP_RC" = 0 ]; afirma "ap7b-escopo-com-comentario-no-bloco" $? "rc=$AP_RC: $AP_SAIDA"
+ap_plano pendente > "$APT"
 
 # -- arvore-limpa: o exemplo nao declara escopo nem reivindicacao
 ap_suite() { ap_hook arvore-limpa-antes-da-suite.sh "{\"cwd\":\"$AP\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"npm test\"}}"; }
@@ -116,6 +128,10 @@ ap_hook task-reivindicada.sh "$(ap_plano pendente | ap_json)"
 : > "$APR"; ap_evento task_iniciada T-01.01 outra@ap
 ap_hook task-reivindicada.sh "$(ap_plano em_andamento | ap_json)"
 [ "$AP_RC" = 2 ]; afirma "ap11-reivindicada-ve-a-task-do-plano" $? "rc=$AP_RC: $AP_SAIDA"
+: > "$APR"; ap_evento task_iniciada T-01.03 outra@ap
+ap_hook task-reivindicada.sh "$(ap_comentado em_andamento | ap_json)"
+[ "$AP_RC" = 2 ]; afirma "ap11b-reivindicada-com-comentario-no-bloco" $? "rc=$AP_RC: $AP_SAIDA"
+: > "$APR"; ap_evento task_iniciada T-01.01 outra@ap
 # Edit manda so o trecho, sem frontmatter: continua lido por inteiro.
 ap_hook task-reivindicada.sh "$(printf '  - id: T-01.01\n    status: em_andamento\n' | ap_json)"
 [ "$AP_RC" = 2 ]; afirma "ap12-reivindicada-le-o-trecho-do-edit" $? "rc=$AP_RC: $AP_SAIDA"
