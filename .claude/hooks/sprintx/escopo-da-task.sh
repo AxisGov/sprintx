@@ -82,6 +82,9 @@ ILEGIVEIS=()
 for f in "$RAIZ"/docs/tasks.md "$RAIZ"/docs/*/tasks.md "$RAIZ"/docs/*/*/tasks.md \
          "$RAIZ"/docs/*/*/*/tasks.md "$RAIZ"/docs/*/*/*/*/tasks.md \
          "$RAIZ"/docs/sprintx/features/*/*/*/tasks.md; do
+  # O plano da ocorrencia e da runx, que tem hooks proprios de escopo e de reivindicacao
+  # (DS-196). Fora do porteiro e do aviso: contar aqui prendia a runx sem escritor possivel.
+  case "$f" in "$RAIZ"/docs/manutencao/OC-*) continue ;; esac
   # Plano por link nao se le (pode apontar para fora do projeto), mas entra no
   # aviso: pular em silencio deixaria a edicao passar sem conferencia nenhuma.
   # Vale para a pasta tambem (docs/<x> por link): sobe ate a raiz so com builtins.

@@ -760,6 +760,8 @@ function _rv_tid(p,   b) {
 function _rv_linha(   task, k, s, d) {
   if (FILENAME != _rv_arq) { _rv_arq = FILENAME; _rv_t = _rv_tid(FILENAME); _rv_r = _rv_rank }
   RV_TAM[FILENAME] += length($0) + 1
+  # A linha da runx nao reivindica task da SprintX, em qualquer forma de JSON (DS-196).
+  if ($0 ~ /"ferramenta"[ \t]*:[ \t]*"runx"/) return
   if (!match($0, /"task":"[^"]*"/)) return
   task = substr($0, RSTART + 8, RLENGTH - 9)
   k = _rv_t SUBSEP task
