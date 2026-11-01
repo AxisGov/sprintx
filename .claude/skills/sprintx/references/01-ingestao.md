@@ -33,10 +33,13 @@ canônico `docs/stack/CONVENCOES.md`.
    e diga — nunca troque por outra base em silêncio) → `CONVENCOES.md` (seção de versionamento,
    se marcada e não `PROPOSTA`) → `git symbolic-ref refs/remotes/origin/HEAD` → a branch atual,
    se `main`/`master`/`develop` ou equivalente detectada.
-2. **Criar ou retomar**: `git worktree list` já lista essa branch → retome nele. Senão:
-   `git worktree add -b feature/<slug> --no-track ../<repo>--<slug> <base>`, onde `<repo>` é o nome do
-   diretório do checkout principal. Branch já existente sem worktree: `git worktree add
-   ../<repo>--<slug> feature/<slug>`. Com base informada pelo caller, grave-a na própria branch
+2. **Criar ou retomar**: `git worktree list --porcelain` marca `prunable` no worktree dessa branch quando
+   a pasta sumiu: `git worktree remove <caminho>` tira só esse registro. `git worktree prune` não serve,
+   porque tira também o de worktree movido, que ainda dá para reparar. Depois, `git worktree list` já lista essa branch → retome nele. Senão:
+   `git worktree add -b feature/<slug> --no-track "$(git worktree list --porcelain | sed -n '1s/^worktree //p')/../<repo>--<slug>" <base>`, a partir do checkout
+   principal, para a pasta nascer irmã dele de qualquer subpasta ou worktree, onde `<repo>` é o nome do diretório do checkout
+   principal. Branch já existente sem worktree: `git worktree add
+   "$(git worktree list --porcelain | sed -n '1s/^worktree //p')/../<repo>--<slug>" feature/<slug>`. Com base informada pelo caller, grave-a na própria branch
    — `git config branch.feature/<slug>.expxBase <base>` —, que vale para todos os worktrees e
    sobrevive à sessão: é dali que a F6 a repassa ao E0 da `mergex` (`references/06-execucao.md`).
    Junto vai o nascimento (`expxBaseNascimento`), o commit da base de onde a branch saiu. Com
@@ -65,7 +68,7 @@ canônico `docs/stack/CONVENCOES.md`.
      *) for x in "refs/heads/$1" "refs/remotes/$m/$1" "refs/remotes/$1"; do git show-ref -q --verify "$x" && { printf '%s\n' "$x"; return; }; done; return 1 ;; esac; }
    r=$(resolve_base "$b")
    if ! git rev-parse -q --verify "$h" >/dev/null; then
-     n=$(git rev-parse --verify "$r^{commit}") && git worktree add -b "$f" ../<repo>--<slug> "$n"
+     n=$(git rev-parse --verify "$r^{commit}") && git worktree add -b "$f" "$(git worktree list --porcelain | sed -n '1s/^worktree //p')/../<repo>--<slug>" "$n"
    else
      br=$(resolve_base "$(git config "branch.$f.expxBase")")
      [ "$br" = "$r" ] && n=$(git config "branch.$f.expxBaseNascimento")
@@ -105,11 +108,11 @@ canônico `docs/stack/CONVENCOES.md`.
    | `composer.lock` | `composer install` |
 
    Nenhum lockfile reconhecido: registre a lacuna em `base/00-LACUNAS.md` e siga.
-5. **Gravar** o caminho (`../<repo>--<slug>`) para uso na F4, quando o `ORQUESTRADOR.md`
+5. **Gravar** o caminho (`../<repo>--<slug>`, relativo ao checkout principal) para uso na F4, quando o `ORQUESTRADOR.md`
    grava a chave `worktree` (`references/00-schema.md`).
 6. **Entrar na área de trabalho.** Se o harness oferecer uma ferramenta de troca para
    worktree, use-a apontando para o diretório criado. Caso contrário — e sempre no OpenCode
-   — anuncie "Área de trabalho: `../<repo>--<slug>`. Continue de dentro desse diretório" e
+   — anuncie "Área de trabalho: `<caminho absoluto>`. Continue de dentro desse diretório" e
    encerre a fase aqui; o próximo comando, rodado de lá, retoma pela máquina de estados
    normalmente.
 

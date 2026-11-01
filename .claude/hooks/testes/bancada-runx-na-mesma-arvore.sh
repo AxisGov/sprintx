@@ -104,7 +104,25 @@ aq_feature "$AQ/docs/manutencao" manutencao
 aq_hook infra/a.sh; [ "$AQ_RC" = 2 ]; afirma "aq15-feature-legada-com-slug-manutencao" $? "$(aq_mostra)"
 
 # -- o comando da F1 nao faz a branch rastrear a base remota (DS-197)
-grep -Fq 'git worktree add -b feature/<slug> --no-track ../<repo>--<slug> <base>' "$SK/references/01-ingestao.md"
-afirma "aq20-f1-cria-a-branch-sem-rastrear-a-base" $? "01-ingestao.md"
+AQW="$(mktemp -d)"
+AQW_CMD="$(grep -o 'git worktree add -b feature/<slug> --no-track [^`]*<base>' "$SK/references/01-ingestao.md" | head -1)"
+aq_cria() { # aq_cria <de onde> <slug> — o comando como esta escrito
+  local c="${AQW_CMD//feature\/<slug>/feature/$2}"; c="${c//<repo>--<slug>/r--$2}"; c="${c//<base>/origin/main}"
+  ( cd "$1" && eval "$c" >/dev/null 2>&1 )
+}
+git init -q --bare "$AQW/o.git"; git clone -q "$AQW/o.git" "$AQW/r" 2>/dev/null
+git -C "$AQW/r" -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q --allow-empty -m i
+git -C "$AQW/r" push -q origin HEAD:refs/heads/main; git -C "$AQW/r" fetch -q
+mkdir -p "$AQW/r/sub/dir" "$AQW/longe"
+aq_cria "$AQW/r/sub/dir" a; AQW_RC=$?
+[ "$AQW_RC" = 0 ] && [ -d "$AQW/r--a" ] && ! git -C "$AQW/r--a" rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1
+afirma "aq20-f1-de-subpasta-nasce-irma-e-sem-upstream" $? "rc=$AQW_RC cmd=$AQW_CMD (DS-197 e DS-198)"
+git -C "$AQW/r" worktree add -q -b y --no-track "$AQW/longe/z" origin/main
+aq_cria "$AQW/longe/z" b; AQW_RC=$?
+[ "$AQW_RC" = 0 ] && [ -d "$AQW/r--b" ] && [ ! -e "$AQW/longe/r--b" ]
+afirma "aq20b-f1-de-outro-worktree-nasce-irma-do-principal" $? "rc=$AQW_RC (DS-198)"
+rm -rf "$AQW"
+grep -Fq '`git worktree remove <caminho>` tira só esse registro' "$SK/references/01-ingestao.md"
+afirma "aq21-f1-tira-so-o-registro-sem-pasta-antes-de-retomar" $? "01-ingestao.md (DS-198)"
 
 rm -rf "$AQ"
