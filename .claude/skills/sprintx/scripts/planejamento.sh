@@ -1129,8 +1129,8 @@ valida_auditoria() {
         item2_tasks="$item2_tasks $task "
       else
         if [ "$item" = 1 ]; then
-          t1="$(printf '%s' "$prob" | sed -n 's/^\[item 1\] *\(T-[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p')"
-          [ -n "$t1" ] && item1_tasks="$item1_tasks $t1 "
+          # a primeira task citada no achado, onde quer que esteja (CodeAnt no sprintx#66)
+          if [[ "$prob" =~ (T-[0-9]+\.[0-9]+) ]]; then item1_tasks="$item1_tasks ${BASH_REMATCH[1]} "; fi
         fi
         case "$prob" in *"[fraco:"*) falha "$E_CONTRATO" "[fraco:...] so existe no item 2: $prob" ;; esac
       fi
