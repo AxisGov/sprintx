@@ -1358,6 +1358,16 @@ sev_caso g-achado-sem-item-recusado 4 '| BAIXA | s/tasks.md | contagem errada | 
 sev_caso g-item2-sem-tipo-recusado 4 '| ALTA | s/tasks.md | [item 2] T-01.01 teste fraco | y |' 'NÃO — x'
 sev_caso g-sim-com-alta-recusado 4 '| ALTA | s/tasks.md | [item 1] T-01.01 sem teste | y |' 'SIM — x'
 sev_caso g-nao-sem-alta-recusado 4 '| BAIXA | s/tasks.md | [item 3] T-01.01 adjetivo | y |' 'NÃO — x'
+# Teste ausente acusado duas vezes na F5: o item 1 do auditor-plano e o [fraco:ausente] do
+# sprintx-revisor-testes, na mesma task (CodeAnt no expxdev#130, revisao do Codex; DS-202).
+sev_caso g-ausente-duplicado-recusado 4 "$(printf '%s\n%s' '| ALTA | s/tasks.md | [item 1] T-01.01 sem teste funcional | y |' '| ALTA | s/tasks.md | [item 2][fraco:ausente] T-01.01 — cláusula: - — passaria com: x | y |')" 'NÃO — x'
+sev_caso g-ausente-de-outra-task-aceito 0 "$(printf '%s\n%s' '| ALTA | s/tasks.md | [item 1] T-01.01 sem teste funcional | y |' '| ALTA | s/tasks.md | [item 2][fraco:ausente] T-02.01 — cláusula: - — passaria com: x | y |')" 'NÃO — x'
+sev_caso g-item1-com-fraco-teste-aceito 0 "$(printf '%s\n%s' '| ALTA | s/tasks.md | [item 1] T-01.01 sem teste de integracao | y |' '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: D-13 — passaria com: x | y |')" 'NÃO — x'
+# ...e dois [item 2] da mesma task: o do auditor-plano e o do revisor (revisao do Codex no DS-202).
+sev_caso g-item2-duplicado-recusado 4 "$(printf '%s\n%s' '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: D-13 — passaria com: x | y |' '| ALTA | s/tasks.md | [item 2][fraco:criterio] T-01.01 — cláusula: - — passaria com: z | y |')" 'NÃO — x'
+sev_caso g-item2-de-tasks-diferentes-aceito 0 "$(printf '%s\n%s' '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: D-13 — passaria com: x | y |' '| ALTA | s/tasks.md | [item 2][fraco:criterio] T-02.01 — cláusula: - — passaria com: z | y |')" 'NÃO — x'
+# A task citada adiante no texto do item 1 tambem conta (CodeAnt no sprintx#66).
+sev_caso g-ausente-duplicado-task-no-meio-recusado 4 "$(printf '%s\n%s' '| ALTA | s/tasks.md | [item 1] teste funcional vazio em T-01.01 | y |' '| ALTA | s/tasks.md | [item 2][fraco:ausente] T-01.01 — cláusula: - — passaria com: x | y |')" 'NÃO — x'
 # Item 10: violacao de L1/L2/L3 carrega [limite:Ln] e e ALTA, sem julgamento (DS-189).
 sev_caso g-limite-l1-como-media-recusado 4 '| MÉDIA | s/tasks.md | [item 10][limite:L1] T-01.01 declara 41 arquivos revisáveis | y |' 'SIM — x'
 sev_caso g-limite-l2-como-baixa-recusado 4 '| BAIXA | s/tasks.md | [item 10][limite:L2] T-01.01 leva src/a.ts a 5.200 linhas | y |' 'SIM — x'
