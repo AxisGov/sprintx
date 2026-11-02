@@ -1091,7 +1091,7 @@ valida_auditoria() {
   local sev prob item tipo esperada resto task clausula impl lim t1
   # O teste ausente e do sprintx-revisor-testes ([item 2][fraco:ausente]); o item 1 do
   # auditor-plano sobre a mesma task duplicava o achado (DS-202).
-  local item1_tasks="" ausente_tasks=""
+  local item1_tasks="" ausente_tasks="" item2_tasks=""
   local tabela; tabela="$(linhas_da_tabela)"
   if [ -n "$tabela" ]; then
     while IFS="$(printf '\t')" read -r sev prob; do
@@ -1122,6 +1122,11 @@ valida_auditoria() {
           falha "$E_CONTRATO" "[fraco:teste] sem clausula citavel ('$clausula') e [fraco:criterio], ALTA: $prob"
         fi
         [ "$tipo" = ausente ] && ausente_tasks="$ausente_tasks $task "
+        # Uma task tem um so achado do item 2: o do revisor, se ele rodou (DS-202).
+        case "$item2_tasks" in *" $task "*)
+          falha "$E_CONTRATO" "dois achados do item 2 para $task: a adequacao dos testes tem um so achado por task, o do sprintx-revisor-testes quando ele roda: $prob" ;;
+        esac
+        item2_tasks="$item2_tasks $task "
       else
         if [ "$item" = 1 ]; then
           t1="$(printf '%s' "$prob" | sed -n 's/^\[item 1\] *\(T-[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p')"
