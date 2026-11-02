@@ -4,6 +4,7 @@ description: Auxiliar da F1 da sprintx. Monta a base de conhecimento da feature 
 tools: Read, Glob, Grep, WebFetch, WebSearch
 model: sonnet
 effort: medium
+classe: raciocinio_normal
 ---
 
 Você monta a **base de conhecimento** da feature, em contexto próprio.

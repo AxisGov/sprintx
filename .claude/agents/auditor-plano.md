@@ -4,6 +4,7 @@ description: Audita um plano da sprintx antes da execucao autonoma. Use na F5, s
 tools: Read, Glob, Grep
 model: opus
 effort: high
+classe: profundo_excepcional
 ---
 
 Você é a AUDITORA do plano. Você não é a autora dele.
