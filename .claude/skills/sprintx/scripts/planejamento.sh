@@ -1088,7 +1088,10 @@ linhas_da_tabela() {
 valida_auditoria() {
   [ -f "$AUD" ] || falha "$E_CONTRATO" "${PREFIXO}00-AUDITORIA.md nao existe"
   A_ALTAS=0; A_MEDIAS=0; A_BAIXAS=0
-  local sev prob item tipo esperada resto task clausula impl lim
+  local sev prob item tipo esperada resto task clausula impl lim t1
+  # O teste ausente e do sprintx-revisor-testes ([item 2][fraco:ausente]); o item 1 do
+  # auditor-plano sobre a mesma task duplicava o achado (DS-202).
+  local item1_tasks="" ausente_tasks=""
   local tabela; tabela="$(linhas_da_tabela)"
   if [ -n "$tabela" ]; then
     while IFS="$(printf '\t')" read -r sev prob; do
@@ -1118,7 +1121,12 @@ valida_auditoria() {
         if [ "$tipo" = teste ] && ! clausula_citavel "$clausula"; then
           falha "$E_CONTRATO" "[fraco:teste] sem clausula citavel ('$clausula') e [fraco:criterio], ALTA: $prob"
         fi
+        [ "$tipo" = ausente ] && ausente_tasks="$ausente_tasks $task "
       else
+        if [ "$item" = 1 ]; then
+          t1="$(printf '%s' "$prob" | sed -n 's/^\[item 1\] *\(T-[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p')"
+          [ -n "$t1" ] && item1_tasks="$item1_tasks $t1 "
+        fi
         case "$prob" in *"[fraco:"*) falha "$E_CONTRATO" "[fraco:...] so existe no item 2: $prob" ;; esac
       fi
       # Item 10: limite do contrato expx-fatiamento v3 carrega [limite:Ln] e e ALTA (DS-189).
@@ -1153,6 +1161,11 @@ valida_auditoria() {
     done <<EOF
 $tabela
 EOF
+    for t1 in $item1_tasks; do
+      case "$ausente_tasks" in *" $t1 "*)
+        falha "$E_CONTRATO" "teste ausente de $t1 acusado duas vezes: o [item 2][fraco:ausente] do sprintx-revisor-testes basta, e o [item 1] da mesma task sai" ;;
+      esac
+    done
   fi
   local ver
   ver="$(tr -d '\r' < "$AUD" | grep -E '^VEREDITO: ' | tail -1)"

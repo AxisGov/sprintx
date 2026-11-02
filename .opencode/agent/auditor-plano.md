@@ -33,7 +33,7 @@ Leia tudo antes de julgar qualquer coisa. Um achado que some depois de ler o arq
 
 Para cada task, fase e sprint:
 
-1. **Task sem teste** — `teste_integracao` ou `teste_funcional` vazio, genérico ou ausente.
+1. **Task sem teste** — `teste_integracao` ou `teste_funcional` vazio, genérico ou ausente. Na F5, o `sprintx-revisor-testes` acusa o mesmo defeito como `[item 2][fraco:ausente]`, e a sessão que consolida fica só com o dele; sem o revisor, o seu achado é o que vale.
 2. **Teste que passaria com implementação errada** — o teste não discrimina: só verifica que "não deu erro", ou valida a fixture em vez do comportamento. Esta é a pergunta mais importante da lista.
 3. **Critério de aceite subjetivo** — adjetivo ou juízo ("rápido", "correto", "bem estruturado") em vez de condição binária verificável.
 4. **Dependência circular** — ciclo em `depende_de`, direto ou transitivo.
