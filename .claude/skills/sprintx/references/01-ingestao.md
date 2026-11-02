@@ -1,6 +1,6 @@
 # F1 — INGESTÃO
 
-Você está na F1. Seu único objetivo é construir a base de conhecimento antes de qualquer plano. Nesta fase você não pergunta nada ao usuário, não planeja nada e não escreve nenhum código de implementação.
+Você está na F1. Seu único objetivo é construir a base de conhecimento antes de qualquer plano. Nesta fase você não pergunta nada ao usuário, salvo as duas perguntas do Passo 0, não planeja nada e não escreve nenhum código de implementação.
 
 ## Pré-requisitos verificáveis
 
@@ -17,7 +17,7 @@ Antes do scaffold: verifique se `docs/sprintx/features/` já tem outra pasta com
 
 - **Com git:** siga adiante neste passo — o worktree resolve a colisão isolando esta feature.
 - **Sem git:** anuncie qual feature está aberta e pergunte se é para continuar nela ou
-  encerrá-la antes. É a única pergunta legítima aqui, porque sem worktree não há como isolar.
+  encerrá-la antes. É pergunta legítima, porque sem worktree não há como isolar.
 
 **Abrir a área de trabalho** só se aplica com git (`git rev-parse --is-inside-work-tree`
 responde `true`). Sem git, ou com "sem worktree" explícito no pedido: `worktree: null` (será
@@ -35,7 +35,7 @@ canônico `docs/stack/CONVENCOES.md`.
    se `main`/`master`/`develop` ou equivalente detectada.
 2. **Criar ou retomar**: `git worktree list --porcelain` marca `prunable` no worktree dessa branch quando
    a pasta não está no caminho registrado. Ela pode ter sido apagada ou movida, e o Git não distingue: pare e pergunte.
-   Movida: `git worktree repair <novo caminho>`, e retome lá. Apagada: `git worktree remove <caminho>` tira só esse registro.
+   Pasta movida: `git worktree repair <novo caminho>`, e retome lá, com esse caminho no item 5. Pasta apagada: `git worktree remove <caminho>` tira só esse registro.
    Remover o registro de um worktree movido o inutiliza, e `git worktree prune` faria isso com todos. Depois, `git worktree list` já lista essa branch → retome nele. Senão:
    `git worktree add -b feature/<slug> --no-track "$(git worktree list --porcelain | sed -n '1s/^worktree //p')/../<repo>--<slug>" <base>`, a partir do checkout
    principal, para a pasta nascer irmã dele de qualquer subpasta ou worktree, onde `<repo>` é o nome do diretório do checkout
@@ -109,7 +109,7 @@ canônico `docs/stack/CONVENCOES.md`.
    | `composer.lock` | `composer install` |
 
    Nenhum lockfile reconhecido: registre a lacuna em `base/00-LACUNAS.md` e siga.
-5. **Gravar** o caminho (`../<repo>--<slug>`, relativo ao checkout principal) para uso na F4, quando o `ORQUESTRADOR.md`
+5. **Gravar** o caminho (`../<repo>--<slug>`, relativo ao checkout principal, ou o da pasta movida do item 2) para uso na F4, quando o `ORQUESTRADOR.md`
    grava a chave `worktree` (`references/00-schema.md`).
 6. **Entrar na área de trabalho.** Se a raiz atual já é o worktree dessa branch, siga para o
    Passo 1. Senão, se o harness oferecer uma ferramenta de troca para worktree, use-a apontando para o diretório criado. Caso contrário — e sempre no OpenCode
