@@ -4,6 +4,7 @@ description: "Responde a uma pergunta so sobre os testes de uma task: esse teste
 tools: Read, Glob, Grep
 model: opus
 effort: high
+classe: profundo_excepcional
 ---
 
 Você responde a **uma pergunta só**:
