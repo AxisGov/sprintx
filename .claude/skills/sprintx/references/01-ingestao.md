@@ -34,8 +34,9 @@ canônico `docs/stack/CONVENCOES.md`.
    se marcada e não `PROPOSTA`) → `git symbolic-ref refs/remotes/origin/HEAD` → a branch atual,
    se `main`/`master`/`develop` ou equivalente detectada.
 2. **Criar ou retomar**: `git worktree list --porcelain` marca `prunable` no worktree dessa branch quando
-   a pasta sumiu: `git worktree remove <caminho>` tira só esse registro. `git worktree prune` não serve,
-   porque tira também o de worktree movido, que ainda dá para reparar. Depois, `git worktree list` já lista essa branch → retome nele. Senão:
+   a pasta não está no caminho registrado. Ela pode ter sido apagada ou movida, e o Git não distingue: pare e pergunte.
+   Movida: `git worktree repair <novo caminho>`, e retome lá. Apagada: `git worktree remove <caminho>` tira só esse registro.
+   Remover o registro de um worktree movido o inutiliza, e `git worktree prune` faria isso com todos. Depois, `git worktree list` já lista essa branch → retome nele. Senão:
    `git worktree add -b feature/<slug> --no-track "$(git worktree list --porcelain | sed -n '1s/^worktree //p')/../<repo>--<slug>" <base>`, a partir do checkout
    principal, para a pasta nascer irmã dele de qualquer subpasta ou worktree, onde `<repo>` é o nome do diretório do checkout
    principal. Branch já existente sem worktree: `git worktree add
@@ -110,8 +111,8 @@ canônico `docs/stack/CONVENCOES.md`.
    Nenhum lockfile reconhecido: registre a lacuna em `base/00-LACUNAS.md` e siga.
 5. **Gravar** o caminho (`../<repo>--<slug>`, relativo ao checkout principal) para uso na F4, quando o `ORQUESTRADOR.md`
    grava a chave `worktree` (`references/00-schema.md`).
-6. **Entrar na área de trabalho.** Se o harness oferecer uma ferramenta de troca para
-   worktree, use-a apontando para o diretório criado. Caso contrário — e sempre no OpenCode
+6. **Entrar na área de trabalho.** Se a raiz atual já é o worktree dessa branch, siga para o
+   Passo 1. Senão, se o harness oferecer uma ferramenta de troca para worktree, use-a apontando para o diretório criado. Caso contrário — e sempre no OpenCode
    — anuncie "Área de trabalho: `<caminho absoluto>`. Continue de dentro desse diretório" e
    encerre a fase aqui; o próximo comando, rodado de lá, retoma pela máquina de estados
    normalmente.

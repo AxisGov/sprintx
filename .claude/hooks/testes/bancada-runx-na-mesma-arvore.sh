@@ -121,8 +121,21 @@ git -C "$AQW/r" worktree add -q -b y --no-track "$AQW/longe/z" origin/main
 aq_cria "$AQW/longe/z" b; AQW_RC=$?
 [ "$AQW_RC" = 0 ] && [ -d "$AQW/r--b" ] && [ ! -e "$AQW/longe/r--b" ]
 afirma "aq20b-f1-de-outro-worktree-nasce-irma-do-principal" $? "rc=$AQW_RC (DS-198)"
+git -C "$AQW/r" worktree add -q -b ma --no-track "$AQW/ma" origin/main
+git -C "$AQW/r" worktree add -q -b mb --no-track "$AQW/mb" origin/main
+mv "$AQW/ma" "$AQW/ma2"; mv "$AQW/mb" "$AQW/mb2"
+git -C "$AQW/r" worktree repair "$AQW/ma2" >/dev/null 2>&1; git -C "$AQW/ma2" status >/dev/null 2>&1
+AQW_REPARA=$?
+git -C "$AQW/r" worktree remove "$AQW/mb"; git -C "$AQW/mb2" status >/dev/null 2>&1
+AQW_DEPOIS=$?
+[ "$AQW_REPARA" = 0 ] && [ "$AQW_DEPOIS" != 0 ]
+afirma "aq20c-worktree-movido-so-se-repara-antes-de-remover" $? "repara=$AQW_REPARA (DS-199)"
 rm -rf "$AQW"
 grep -Fq '`git worktree remove <caminho>` tira só esse registro' "$SK/references/01-ingestao.md"
 afirma "aq21-f1-tira-so-o-registro-sem-pasta-antes-de-retomar" $? "01-ingestao.md (DS-198)"
+grep -Fq 'pare e pergunte.' "$SK/references/01-ingestao.md" && grep -Fq 'Movida: `git worktree repair <novo caminho>`, e retome lá. Apagada:' "$SK/references/01-ingestao.md"
+afirma "aq22-f1-pergunta-antes-de-remover-o-registro" $? "01-ingestao.md (DS-199)"
+grep -Fq 'Se a raiz atual já é o worktree dessa branch, siga para o' "$SK/references/01-ingestao.md"
+afirma "aq23-f1-ja-no-worktree-nao-encerra-de-novo" $? "01-ingestao.md (DS-199)"
 
 rm -rf "$AQ"
