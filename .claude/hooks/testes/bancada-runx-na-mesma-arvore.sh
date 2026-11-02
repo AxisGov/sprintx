@@ -135,7 +135,7 @@ afirma "aq20c-worktree-movido-so-se-repara-antes-de-remover" $? "repara=$AQW_REP
 rm -rf "$AQW"
 grep -Fq '`git worktree remove <caminho>` tira só esse registro' "$SK/references/01-ingestao.md"
 afirma "aq21-f1-tira-so-o-registro-sem-pasta-antes-de-retomar" $? "01-ingestao.md (DS-198)"
-grep -Fq 'pare e pergunte.' "$SK/references/01-ingestao.md" && grep -Fq 'Pasta movida: `git worktree repair <novo caminho>`, e retome lá, com esse caminho no item 5. Pasta apagada:' "$SK/references/01-ingestao.md"
+grep -Fq 'pare e pergunte.' "$SK/references/01-ingestao.md" && grep -Fq 'Pasta movida: `git worktree repair <novo caminho>`, e retome lá, com esse caminho, relativo ao checkout principal, no item 5. Pasta apagada:' "$SK/references/01-ingestao.md"
 afirma "aq22-f1-pergunta-antes-de-remover-o-registro" $? "01-ingestao.md (DS-199)"
 grep -Fq 'Se a raiz atual já é o worktree dessa branch, siga para o' "$SK/references/01-ingestao.md"
 afirma "aq23-f1-ja-no-worktree-nao-encerra-de-novo" $? "01-ingestao.md (DS-199)"
