@@ -59,7 +59,7 @@ Exatamente duas coisas, nesta ordem.
 
 Severidades: **ALTA** (invalida a execução autônoma), **MÉDIA** (risco real, execução ainda possível), **BAIXA** (melhoria). Sem achados, escreva `Nenhum achado.` no lugar da tabela.
 
-Use o caminho relativo do arquivo, e cite o id da task/fase no problema. Um achado que não diz onde está não é acionável.
+Use o caminho relativo do arquivo, e cite o id da task/fase no problema. Um achado que não diz onde está não é acionável. O `[item 1]` sempre cita a task (`T-NN.MM`): sem ela, numa tabela com `[fraco:ausente]`, a F5 recusa a tabela.
 
 **Todo problema começa pelo item** da lista acima que o gerou: `[item 1]` a `[item 10]`. Achado do item 2 — seu ou vindo do `sprintx-revisor-testes` — traz o tipo do teste fraco e a forma fixa:
 

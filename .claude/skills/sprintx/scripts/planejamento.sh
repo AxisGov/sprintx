@@ -1091,7 +1091,7 @@ valida_auditoria() {
   local sev prob item tipo esperada resto task clausula impl lim t1
   # O teste ausente e do sprintx-revisor-testes ([item 2][fraco:ausente]); o item 1 do
   # auditor-plano sobre a mesma task duplicava o achado (DS-202).
-  local item1_tasks="" ausente_tasks="" item2_tasks="" teste_impls="" chave
+  local item1_tasks="" ausente_tasks="" item2_tasks="" teste_impls="" chave resto1 cita item1_sem_task=""
   local tabela; tabela="$(linhas_da_tabela)"
   if [ -n "$tabela" ]; then
     while IFS="$(printf '\t')" read -r sev prob; do
@@ -1142,8 +1142,16 @@ valida_auditoria() {
 "
       else
         if [ "$item" = 1 ]; then
-          # a primeira task citada no achado, onde quer que esteja (CodeAnt no sprintx#66)
-          if [[ "$prob" =~ (T-[0-9]+\.[0-9]+) ]]; then item1_tasks="$item1_tasks ${BASH_REMATCH[1]} "; fi
+          # toda task citada no achado, onde quer que esteja (CodeAnt no sprintx#66 e no
+          # katosmv/login#50; DS-204); sem nenhuma, o achado fica guardado para a conferencia
+          # com o [fraco:ausente], no fim da tabela
+          resto1="$prob"; cita=""
+          # com o id do contrato, dois digitos em cada parte: T-1.1 nao e a T-01.01 (CodeAnt no sprintx#68)
+          while [[ "$resto1" =~ (T-[0-9]{2,}\.[0-9]{2,}) ]]; do
+            item1_tasks="$item1_tasks ${BASH_REMATCH[1]} "; cita=1
+            resto1="${resto1#*"${BASH_REMATCH[1]}"}"
+          done
+          [ -n "$cita" ] || [ -n "$item1_sem_task" ] || item1_sem_task="$prob"
         fi
         case "$prob" in *"[fraco:"*) falha "$E_CONTRATO" "[fraco:...] so existe no item 2: $prob" ;; esac
       fi
@@ -1184,6 +1192,11 @@ EOF
         falha "$E_CONTRATO" "teste ausente de $t1 acusado duas vezes: o [item 2][fraco:ausente] do sprintx-revisor-testes basta, e o [item 1] da mesma task sai" ;;
       esac
     done
+    # Sem task citada, nao ha como provar que o [item 1] nao e o defeito de um [fraco:ausente].
+    # Sem [fraco:ausente] na tabela, nao ha o que duplicar, e o relatorio antigo segue lendo (DS-204).
+    if [ -n "$item1_sem_task" ] && [ -n "$ausente_tasks" ]; then
+      falha "$E_CONTRATO" "[item 1] sem a task (T-NN.MM) numa tabela com [fraco:ausente]: cite a task, ou tire o achado se for o mesmo teste ausente: $item1_sem_task"
+    fi
   fi
   local ver
   ver="$(tr -d '\r' < "$AUD" | grep -E '^VEREDITO: ' | tail -1)"
