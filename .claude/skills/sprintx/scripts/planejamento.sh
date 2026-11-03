@@ -1091,7 +1091,7 @@ valida_auditoria() {
   local sev prob item tipo esperada resto task clausula impl lim t1
   # O teste ausente e do sprintx-revisor-testes ([item 2][fraco:ausente]); o item 1 do
   # auditor-plano sobre a mesma task duplicava o achado (DS-202).
-  local item1_tasks="" ausente_tasks="" item2_tasks=""
+  local item1_tasks="" ausente_tasks="" item2_tasks="" teste_impls="" chave
   local tabela; tabela="$(linhas_da_tabela)"
   if [ -n "$tabela" ]; then
     while IFS="$(printf '\t')" read -r sev prob; do
@@ -1122,11 +1122,24 @@ valida_auditoria() {
           falha "$E_CONTRATO" "[fraco:teste] sem clausula citavel ('$clausula') e [fraco:criterio], ALTA: $prob"
         fi
         [ "$tipo" = ausente ] && ausente_tasks="$ausente_tasks $task "
-        # Uma task tem um so achado do item 2: o do revisor, se ele rodou (DS-202).
-        case "$item2_tasks" in *" $task "*)
-          falha "$E_CONTRATO" "dois achados do item 2 para $task: a adequacao dos testes tem um so achado por task, o do sprintx-revisor-testes quando ele roda: $prob" ;;
+        # Uma task tem um so juizo do item 2: o do revisor, se ele rodou (DS-202). So o
+        # [fraco:teste] repete, uma linha por implementacao errada distinta: cada uma e uma
+        # obrigacao da F6 (DS-203; a F5 da mp2-7b no conselhos tinha duas para T-04.01).
+        # A chave e uma linha inteira, comparada inteira: a implementacao nao tem quebra de linha,
+        # e nenhum separador dentro dela casa por pedaco (revisao do Codex).
+        chave="$task	$(trim "$impl" | tr -s '[:space:]' ' ')"
+        case "$item2_tasks" in
+          *" $task=$tipo "*)
+            [ "$tipo" = teste ] || falha "$E_CONTRATO" "dois [fraco:$tipo] para $task: a adequacao dos testes tem um so juizo por task, o do sprintx-revisor-testes quando ele roda; so o [fraco:teste] repete, com implementacoes erradas distintas: $prob"
+            if grep -Fxq -- "$chave" <<<"$teste_impls"; then
+              falha "$E_CONTRATO" "o mesmo [fraco:teste] de $task duas vezes: cada implementacao errada entra uma vez: $prob"
+            fi ;;
+          *" $task="*)
+            falha "$E_CONTRATO" "achados do item 2 de tipos diferentes para $task: a adequacao dos testes tem um so juizo por task, o do sprintx-revisor-testes quando ele roda: $prob" ;;
         esac
-        item2_tasks="$item2_tasks $task "
+        item2_tasks="$item2_tasks $task=$tipo "
+        [ "$tipo" = teste ] && teste_impls="$teste_impls$chave
+"
       else
         if [ "$item" = 1 ]; then
           # a primeira task citada no achado, onde quer que esteja (CodeAnt no sprintx#66)
