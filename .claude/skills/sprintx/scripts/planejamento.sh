@@ -1146,7 +1146,8 @@ valida_auditoria() {
           # katosmv/login#50; DS-204); sem nenhuma, o achado fica guardado para a conferencia
           # com o [fraco:ausente], no fim da tabela
           resto1="$prob"; cita=""
-          while [[ "$resto1" =~ (T-[0-9]+\.[0-9]+) ]]; do
+          # com o id do contrato, dois digitos em cada parte: T-1.1 nao e a T-01.01 (CodeAnt no sprintx#68)
+          while [[ "$resto1" =~ (T-[0-9]{2,}\.[0-9]{2,}) ]]; do
             item1_tasks="$item1_tasks ${BASH_REMATCH[1]} "; cita=1
             resto1="${resto1#*"${BASH_REMATCH[1]}"}"
           done
