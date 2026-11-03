@@ -34,7 +34,7 @@ Leia tudo antes de julgar qualquer coisa. Um achado que some depois de ler o arq
 Para cada task, fase e sprint:
 
 1. **Task sem teste** — `teste_integracao` ou `teste_funcional` vazio, genérico ou ausente. Na F5, o `sprintx-revisor-testes` acusa o mesmo defeito como `[item 2][fraco:ausente]`, e a sessão que consolida fica só com o dele; sem o revisor, o seu achado é o que vale.
-2. **Teste que passaria com implementação errada** — o teste não discrimina: só verifica que "não deu erro", ou valida a fixture em vez do comportamento. Esta é a pergunta mais importante da lista. Cada task tem um só achado do item 2: na F5, o do `sprintx-revisor-testes` vence o seu.
+2. **Teste que passaria com implementação errada** — o teste não discrimina: só verifica que "não deu erro", ou valida a fixture em vez do comportamento. Esta é a pergunta mais importante da lista. Cada task tem um só juízo do item 2, um só tipo: na F5, se o seu tipo diverge do `sprintx-revisor-testes`, vence o dele. Só o `fraco:teste` repete: se vocês dois o dão para a mesma task, com implementações erradas distintas, as duas linhas ficam, uma obrigação da F6 cada; a mesma implementação entra uma vez.
 3. **Critério de aceite subjetivo** — adjetivo ou juízo ("rápido", "correto", "bem estruturado") em vez de condição binária verificável.
 4. **Dependência circular** — ciclo em `depende_de`, direto ou transitivo.
 5. **Paralelismo falso** — tasks `paralelizavel: true` que escrevem nos mesmos arquivos ou dependem uma da outra. Compare os `arquivos.cria` e `arquivos.altera` de fato.

@@ -1365,6 +1365,17 @@ sev_caso g-ausente-de-outra-task-aceito 0 "$(printf '%s\n%s' '| ALTA | s/tasks.m
 sev_caso g-item1-com-fraco-teste-aceito 0 "$(printf '%s\n%s' '| ALTA | s/tasks.md | [item 1] T-01.01 sem teste de integracao | y |' '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: D-13 — passaria com: x | y |')" 'NÃO — x'
 # ...e dois [item 2] da mesma task: o do auditor-plano e o do revisor (revisao do Codex no DS-202).
 sev_caso g-item2-duplicado-recusado 4 "$(printf '%s\n%s' '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: D-13 — passaria com: x | y |' '| ALTA | s/tasks.md | [item 2][fraco:criterio] T-01.01 — cláusula: - — passaria com: z | y |')" 'NÃO — x'
+# Dois [fraco:teste] da mesma task com implementacoes erradas distintas sao duas obrigacoes da F6,
+# nao o mesmo defeito: a forma da F5 da mp2-7b no conselhos, recusada na 0.13.2 (DS-203).
+sev_caso g-item2-teste-com-impls-distintas-aceito 0 "$(printf '%s\n%s' '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-04.01 — cláusula: D-22 — passaria com: data comparada sem o trailer Task: | y |' '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-04.01 — cláusula: D-22 — passaria com: funcoes que ignoram a raiz recebida | y |')" 'SIM — x'
+sev_caso g-item2-teste-com-mesma-impl-recusado 4 "$(printf '%s\n%s' '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: D-13 — passaria com: x | y |' '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: D-13 — passaria com:  x  | y |')" 'SIM — x'
+# A implementacao que contem a outra, ou um separador de controle, nao e a mesma: a comparacao e
+# da linha inteira (revisao do Codex).
+sev_caso g-item2-teste-impl-que-contem-outra-aceito 0 "$(printf '%s\n%s' '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: D-13 — passaria com: x | y |' "| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: D-13 — passaria com: a$(printf '\037')T-01.01$(printf '\037')x | y |")" 'SIM — x'
+sev_caso g-item2-teste-impl-contida-na-outra-aceito 0 "$(printf '%s\n%s' '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: D-13 — passaria com: a x | y |' '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: D-13 — passaria com: x | y |')" 'SIM — x'
+sev_caso g-item2-ausente-repetido-recusado 4 "$(printf '%s\n%s' '| ALTA | s/tasks.md | [item 2][fraco:ausente] T-01.01 — cláusula: - — passaria com: x | y |' '| ALTA | s/tasks.md | [item 2][fraco:ausente] T-01.01 — cláusula: - — passaria com: z | y |')" 'NÃO — x'
+sev_caso g-item2-criterio-repetido-recusado 4 "$(printf '%s\n%s' '| ALTA | s/tasks.md | [item 2][fraco:criterio] T-01.01 — cláusula: - — passaria com: x | y |' '| ALTA | s/tasks.md | [item 2][fraco:criterio] T-01.01 — cláusula: - — passaria com: z | y |')" 'NÃO — x'
+sev_caso g-item2-ausente-e-teste-recusado 4 "$(printf '%s\n%s' '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: D-13 — passaria com: x | y |' '| ALTA | s/tasks.md | [item 2][fraco:ausente] T-01.01 — cláusula: - — passaria com: z | y |')" 'NÃO — x'
 sev_caso g-item2-de-tasks-diferentes-aceito 0 "$(printf '%s\n%s' '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-01.01 — cláusula: D-13 — passaria com: x | y |' '| ALTA | s/tasks.md | [item 2][fraco:criterio] T-02.01 — cláusula: - — passaria com: z | y |')" 'NÃO — x'
 # A task citada adiante no texto do item 1 tambem conta (CodeAnt no sprintx#66).
 sev_caso g-ausente-duplicado-task-no-meio-recusado 4 "$(printf '%s\n%s' '| ALTA | s/tasks.md | [item 1] teste funcional vazio em T-01.01 | y |' '| ALTA | s/tasks.md | [item 2][fraco:ausente] T-01.01 — cláusula: - — passaria com: x | y |')" 'NÃO — x'
@@ -1445,6 +1456,16 @@ OB="$(pl "$D" obrigacoes-f6 menu)"
 [ "$(printf '%s\n' "$OB" | wc -l | tr -d ' ')" -eq 1 ] && [ "$(printf '%s\n' "$OB" | cut -f1)" = T-03.01 ] \
   && [ "$(printf '%s\n' "$OB" | cut -f2)" = D-13 ] && [ "$(printf '%s\n' "$OB" | cut -f3)" = 'contadores trocados entre itens' ]
 afirma "gx-obrigacoes-f6-extraidas" $? "task, clausula e implementacao errada"
+# As duas implementacoes erradas da mesma task chegam a F6, uma obrigacao cada (DS-203).
+F_X="$(fdir "$D" menu)"; cp "$F_X/00-AUDITORIA.md" "$G/x-aud.md"
+printf '| severidade | arquivo | problema | correção sugerida |\n|---|---|---|---|\n%s\n%s\n\nVEREDITO: SIM — x\n' \
+  '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-03.01 — cláusula: D-13 — passaria com: contadores trocados entre itens | y |' \
+  '| MÉDIA | s/tasks.md | [item 2][fraco:teste] T-03.01 — cláusula: D-13 — passaria com: total somado duas vezes | y |' > "$F_X/00-AUDITORIA.md"
+OB2="$(pl "$D" obrigacoes-f6 menu)"; ob2_rc=$?
+cp "$G/x-aud.md" "$F_X/00-AUDITORIA.md"
+[ "$ob2_rc" -eq 0 ] && [ "$(printf '%s\n' "$OB2" | wc -l | tr -d ' ')" -eq 2 ] \
+  && [ "$(printf '%s\n' "$OB2" | cut -f3 | sort | tr '\n' '|')" = 'contadores trocados entre itens|total somado duas vezes|' ]
+afirma "gx-obrigacoes-f6-duas-da-mesma-task" $? "rc=$ob2_rc: $OB2"
 L_OBR=$(linha_de "$EXEC" '**Passo 2.0 — obrigação de `fraco:teste`, antes de qualquer código de produto.**')
 L_ESCR=$(linha_de "$EXEC" '2. **Escreva o teste de integração e o teste funcional ANTES')
 L_IMPL=$(linha_de "$EXEC" '3. Implemente até os dois testes passarem')
