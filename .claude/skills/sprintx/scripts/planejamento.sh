@@ -1145,11 +1145,16 @@ valida_auditoria() {
           # toda task citada no achado, onde quer que esteja (CodeAnt no sprintx#66 e no
           # katosmv/login#50; DS-204); sem nenhuma, o achado fica guardado para a conferencia
           # com o [fraco:ausente], no fim da tabela
-          resto1="$prob"; cita=""
-          # com o id do contrato, dois digitos em cada parte: T-1.1 nao e a T-01.01 (CodeAnt no sprintx#68)
-          while [[ "$resto1" =~ (T-[0-9]{2,}\.[0-9]{2,}) ]]; do
-            item1_tasks="$item1_tasks ${BASH_REMATCH[1]} "; cita=1
-            resto1="${resto1#*"${BASH_REMATCH[1]}"}"
+          cita=""
+          # com o id do contrato, dois digitos em cada parte: T-1.1 nao e a T-01.01 (CodeAnt no sprintx#68);
+          # e solto, sem letra, digito ou _ grudado, nem .digito depois: XT-01.01, T-01.01oops,
+          # T-01.01é e T-01.01.02 nao citam a task, mas "T-01.01." e "(T-01.01)" citam (CodeAnt no
+          # katosmv/login#54, revisao do Codex). A letra acentuada vira `a` antes, como no item 10.
+          resto1="$(LC_ALL=C; printf '%s' "${prob//$'\303'[$'\200'-$'\226'$'\230'-$'\266'$'\270'-$'\277']/a}")"
+          while [[ "$resto1" =~ (^|[^A-Za-z0-9_])(T-[0-9]{2,}\.[0-9]{2,})([^A-Za-z0-9_.]|\.([^0-9]|$)|$) ]]; do
+            item1_tasks="$item1_tasks ${BASH_REMATCH[2]} "; cita=1
+            # o separador da direita volta ao resto: pode ser o da esquerda da proxima task
+            resto1="${BASH_REMATCH[3]}${resto1#*"${BASH_REMATCH[0]}"}"
           done
           [ -n "$cita" ] || [ -n "$item1_sem_task" ] || item1_sem_task="$prob"
         fi
