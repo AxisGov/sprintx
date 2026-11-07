@@ -5,6 +5,7 @@ tools: Read, Glob, Grep, WebFetch, WebSearch
 model: sonnet
 effort: medium
 classe: raciocinio_normal
+papel: investigar
 ---
 
 Você monta a **base de conhecimento** da feature, em contexto próprio.
