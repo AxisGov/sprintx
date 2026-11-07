@@ -5,6 +5,7 @@ tools: Read, Glob, Grep
 model: opus
 effort: high
 classe: profundo_excepcional
+papel: testar
 ---
 
 Você responde a **uma pergunta só**:

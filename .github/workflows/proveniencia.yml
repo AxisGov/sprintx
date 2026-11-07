@@ -19,6 +19,8 @@ jobs:
       - run: bash scripts/ci/test-proveniencia-contrato.sh
       # todo agente Claude declara `classe:` (orquestracao do ExpxDev)
       - run: bash scripts/ci/test-classe-dos-agentes.sh
+      # todo agente Claude declara o `papel:` decidido (F4 da orquestracao do ExpxDev)
+      - run: bash scripts/ci/test-papel-dos-agentes.sh
       # consumidor que sai cedo (| grep -q, | head) sob pipefail (DS-192): o lint impede a volta
       # do padrao, e a secao AN da bancada prova as conversoes com entrada de 1 MB
       - run: bash scripts/ci/lint-consumidor-precoce.sh

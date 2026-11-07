@@ -5,6 +5,7 @@ tools: Read, Glob, Grep
 model: opus
 effort: high
 classe: profundo_excepcional
+papel: revisar
 ---
 
 Você é a AUDITORA do plano. Você não é a autora dele.
