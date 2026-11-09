@@ -116,28 +116,29 @@ dependências estão satisfeitas; sem nenhuma, registre um bloqueio `task_reivin
 
    **Revisão por task, depois do aceite.** Com o critério de aceite verificado, e antes de marcar a task concluída, rode a revisão por task do núcleo do expx (contrato `expx-revisao`). A evidência que ela grava, `docs/entregas/<slug>/revisao/<T-NN.MM>.json`, entra no commit da task pelo E1 da mergex, que só a aceita junto do produto da task: rodar a revisão depois do commit não cria evidência para ele, e um commit só com ela é recusado.
 
-   **Primeiro, o modo.** Sem `.expx/fatiamento.json`, o leitor não roda e vale o padrão, `se_disponivel`. Com o arquivo, o modo é o `revisao_por_task.modo` que o leitor imprime:
+   **Primeiro, o modo.** Com o leitor do núcleo instalado, ele roda sempre, e o modo é o `revisao_por_task.modo` que ele imprime: sem `.expx/fatiamento.json`, ele imprime o padrão, `se_disponivel`; uma pasta ou um link quebrado no lugar do arquivo o fazem falhar.
 
    ```bash
    RAIZ="$(git rev-parse --show-toplevel)"; N="$RAIZ/.expx/marketplace/plugins/expx/nucleo/scripts"
-   if [ -f "$RAIZ/.expx/fatiamento.json" ]; then node "$N/expx-fatiamento.mjs" --formato json --raiz "$RAIZ"; fi
+   if [ -f "$N/expx-fatiamento.mjs" ]; then node "$N/expx-fatiamento.mjs" --formato json --raiz "$RAIZ"
+   elif [ -e "$RAIZ/.expx/fatiamento.json" ] || [ -L "$RAIZ/.expx/fatiamento.json" ]; then echo "sem leitor"; fi
    ```
 
-   Com o arquivo, mas sem o leitor ou com o leitor falhando, o modo não pode ser conhecido: não rode a revisão, a task não fecha, e o bloqueio é `prerequisito_ausente` ("atualize o expx"). Com `desligada`, pule o resto deste passo.
+   Com o leitor falhando, ou sem o leitor e com qualquer entrada `.expx/fatiamento.json` (arquivo, pasta ou link; o bloco imprime `sem leitor`), o modo não pode ser conhecido: não rode a revisão, a task não fecha, e o bloqueio é `prerequisito_ausente` ("atualize o expx"). Sem o leitor e sem entrada nenhuma, vale o padrão, `se_disponivel` (limite: sem o leitor, uma pasta sem permissão de leitura esconde o arquivo, e vale o padrão). Com `desligada`, pule o resto deste passo.
 
    **Depois, só com `se_disponivel` ou `obrigatoria`, a revisão.** Sem o `expx-revisao.mjs`, trate como a saída 2.
 
    ```bash
    RAIZ="$(git rev-parse --show-toplevel)"; N="$RAIZ/.expx/marketplace/plugins/expx/nucleo/scripts"
-   node "$N/expx-revisao.mjs" revisar --trabalho <slug> --task <T-NN.MM> --raiz "$RAIZ" --arquivos <arquivos.cria e arquivos.altera da task, separados por vírgula>
+   node "$N/expx-revisao.mjs" revisar --trabalho "<slug>" --task "<T-NN.MM>" --raiz "$RAIZ" --arquivos "<arquivos.cria e arquivos.altera da task, separados por vírgula>"
    ```
 
    - **Saída 0** (`ok`): siga.
-   - **Saída 1** (`achados`): há achado aberto em linha que a task alterou. Corrija na própria task, rode de novo o subconjunto afetado e a revisão, até duas tentativas. Se persistir, registre o bloqueio: `revisao_defeito` quando o achado é real e não cabe na task, `revisao_contestada` quando você argumenta falso positivo, com o argumento. **Só o desenvolvedor rejeita** um achado (`expx-revisao.mjs rejeitar`): você classifica e contesta, nunca rejeita nem aceita o risco. Achado em linha que a task não alterou não bloqueia.
+   - **Saída 1** com a última linha `<T-NN.MM> achados` (`achados`): há achado aberto em linha que a task alterou. Corrija na própria task, rode de novo o subconjunto afetado e a revisão, até duas tentativas. Se persistir, registre o bloqueio: `revisao_defeito` quando o achado é real e não cabe na task, `revisao_contestada` quando você argumenta falso positivo, com o argumento. **Só o desenvolvedor rejeita** um achado (`expx-revisao.mjs rejeitar`): você classifica e contesta, nunca rejeita nem aceita o risco. Achado em linha que a task não alterou não bloqueia.
    - **Saída 2** (`indisponivel`): em `se_disponivel` é aviso, que vai no detalhe da conclusão, e a task segue. Em `obrigatoria`, a task não fecha: bloqueio `prerequisito_ausente`. Depois de uma saída 1, a saída 2 de uma nova tentativa não fecha a task, em nenhum modo: nada confirmou que o achado saiu, e a evidência nova apagaria o registro dele. O bloqueio é `prerequisito_ausente`, com o achado na descrição. Nunca rode `codeant login` nem defina credencial.
    - **Saída 3** (`incompleta:<motivo>`): bloqueio `revisao_incompleta`, com a rota do motivo na tabela "Orientação ao consumidor" do contrato `expx-revisao` (`L1`: dividir a task; `lote-falhou`: revisar de novo a task inteira).
    - **Saída 64 ou 75**: uso errado, ou evidência travada por outra execução. Com 75, espere e repita uma vez. Se persistir, ou com 64, bloqueio `prerequisito_ausente`, com a saída.
-   - **Outra saída** (`127` sem o `node`, por exemplo): a revisão não rodou; trate como a saída 2.
+   - **Outra saída** (`127` sem o `node`, `70` erro interno do núcleo, ou a saída 1 sem a linha `<T-NN.MM> achados`, por exemplo): a revisão não rodou; trate como a saída 2.
 
    O bloqueio segue a Regra de bloqueio, abaixo; as classes `revisao_defeito`, `revisao_contestada`, `revisao_incompleta` só nascem neste passo. A evidência fica na árvore para o E1, inclusive com `indisponivel`.
 5. Só então marque `status: concluida` em `tasks.md` e grave `task_concluida` no rastro pelo escritor — `bash <raiz-da-skill>/scripts/rastro.sh task-concluida <slug> <T-NN.MM> "<resultado da suíte> · revisao: <resultado>" <arquivos da task>` —, com o `<resultado>` que o `revisar` imprimiu depois do id da task (`ok`, `indisponivel:<motivo>`), ou `desligada` quando a revisão foi pulada, acrescentando na linha da task: data (obtenha com `date +%Y-%m-%d` do sistema) e resultado da suíte (ex.: `2026-08-26 · suíte: 42 passed, 0 failed`). Em seguida grave em `.expx/estado.json` (`references/09-estado.md`) o novo `tasks_concluidas` e o campo `task`: o id da próxima task que você vai abrir, ou `null` se não houver próxima.
