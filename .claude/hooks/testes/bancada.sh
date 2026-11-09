@@ -1867,7 +1867,7 @@ u_mutante "um-8-escritor-grava-no-trabalho-errado" $? "$UMU" "u_a u_k"
 UMU="$(u_m m9 .claude/hooks/testes/transcrito-agente.sh '*.claude/hooks*) v=' '*.claude/hooks-nunca*) v=')"
 u_mutante "um-9-agente-passa-lendo-o-hook" $? "$UMU" "u_tr"
 # 10. task_concluida volta ao caminho manual: a referencia e o escritor.
-UMU="$(u_m m10 "$U_R/06-execucao.md" 'grave `task_concluida` no rastro pelo escritor — `bash <raiz-da-skill>/scripts/rastro.sh task-concluida <slug> <T-NN.MM> "<resultado da suíte>" <arquivos da task>` —,' 'grave `task_concluida` no rastro,')"
+UMU="$(u_m m10 "$U_R/06-execucao.md" 'grave `task_concluida` no rastro pelo escritor — `bash <raiz-da-skill>/scripts/rastro.sh task-concluida <slug> <T-NN.MM> "<resultado da suíte> · revisao: <resultado>" <arquivos da task>` —,' 'grave `task_concluida` no rastro,')"
 u_mutante "um-10-task-concluida-volta-ao-manual-na-referencia" $? "$UMU" "u_doc"
 UMU="$(u_m m10b "$U_W" 'RASTRO_TASK="\"$ALVO\""; EXIGE_IDENTIDADE=1' 'RASTRO_TASK="\"$ALVO\""; EXIGE_IDENTIDADE=$([ "$CMD" = task-iniciada ] && echo 1 || echo 0)')"
 u_mutante "um-10b-task-concluida-sem-identidade-no-escritor" $? "$UMU" "u_c"
