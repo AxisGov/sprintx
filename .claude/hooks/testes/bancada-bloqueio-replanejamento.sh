@@ -190,8 +190,9 @@ echo "== J-R. a revisao por task na F6 (contrato expx-revisao) =="
 # O lado da skill do desenho de 2026-10-18 (4.2) nunca tinha sido implementado: a F6 nao
 # mandava rodar o `revisar` do nucleo antes do E1, e no modo obrigatoria a task saia sem a
 # evidencia, e o commit seguinte so com ela era recusado (conselhos, OC-2026-0009, na runx).
-tem "$EXEC" 'expx-revisao.mjs" revisar --trabalho <slug> --task <T-NN.MM> --raiz "$RAIZ" --arquivos'
-afirma "jr1-f6-chama-o-revisar" $? "trabalho, task, raiz e arquivos"
+# com aspas: caminho com espaco era dividido pelo shell e o revisar saia 64 (CodeAnt no katosmv/login#73)
+tem "$EXEC" 'expx-revisao.mjs" revisar --trabalho "<slug>" --task "<T-NN.MM>" --raiz "$RAIZ" --arquivos "<arquivos'
+afirma "jr1-f6-chama-o-revisar" $? "trabalho, task, raiz e arquivos, entre aspas"
 tr -d '\r' < "$EXEC" | awk '
   index($0, "auditor de aceite (o `criterio_aceite` é verdade agora?") { a = NR }
   index($0, "expx-revisao.mjs\" revisar") && !r { r = NR }
@@ -200,9 +201,28 @@ tr -d '\r' < "$EXEC" | awk '
 afirma "jr2-revisao-entre-aceite-e-conclusao" $? "depois do aceite, antes de concluida"
 tem "$EXEC" 'teste → implementação → suíte afetada → revisão de testes → aceite → revisão por task → `status: concluida`'
 afirma "jr3-ordem-obrigatoria-com-a-revisao" $? "a ordem do passo 9 inclui a revisao"
-tem "$EXEC" 'if [ -f "$RAIZ/.expx/fatiamento.json" ]; then node "$N/expx-fatiamento.mjs" --formato json --raiz "$RAIZ"; fi' \
+# O leitor decide a presenca (lstat: pasta e link quebrado sao entrada invalida); o `[ -f ]`
+# era falso para os dois e pulava o leitor (CodeAnt no katosmv/login#73, r4518931484).
+tem "$EXEC" 'if [ -f "$N/expx-fatiamento.mjs" ]; then node "$N/expx-fatiamento.mjs" --formato json --raiz "$RAIZ"' \
+  && tem "$EXEC" 'elif [ -e "$RAIZ/.expx/fatiamento.json" ] || [ -L "$RAIZ/.expx/fatiamento.json" ]; then echo "sem leitor"; fi' \
   && tem "$EXEC" 'Com `desligada`, pule o resto deste passo'
-afirma "jr4-modo-pelo-leitor-so-com-o-arquivo" $? "sem arquivo, se_disponivel; desligada pula"
+afirma "jr4-modo-pelo-leitor-sempre" $? "o leitor roda sempre que existe; sem ele, qualquer entrada e modo desconhecido"
+jr_bloco() { tr -d '\r' < "$EXEC" | awk '/\*\*Primeiro, o modo\.\*\*/{p=1} p && /^ *```/{n++; if (n == 2) exit; next} p && n == 1 {sub(/^   /, ""); print}'; }
+jr_modo() { # jr_modo <com-leitor|sem-leitor> <ausente|pasta|link> -> stdout do bloco, "rc=<n>" e "leitor" se rodou
+  local d n; d="$(mktemp -d)"; git -C "$d" init -q
+  n="$d/.expx/marketplace/plugins/expx/nucleo/scripts"; mkdir -p "$n"
+  [ "$1" = com-leitor ] && printf 'import { writeFileSync } from "node:fs"; writeFileSync(process.argv[1] + ".rodou", ""); process.exit(1);\n' > "$n/expx-fatiamento.mjs"
+  case "$2" in pasta) mkdir "$d/.expx/fatiamento.json" ;; link) ln -s nao-existe "$d/.expx/fatiamento.json" ;; esac
+  (cd "$d" && bash -c "$(jr_bloco)" 2>/dev/null; echo "rc=$?"; [ -e "$n/expx-fatiamento.mjs.rodou" ] && echo leitor) | tr '\n' ' '
+  rm -rf "$d"
+}
+for jr_c in "com-leitor pasta:rc=1 leitor " "com-leitor link:rc=1 leitor " "com-leitor ausente:rc=1 leitor " \
+  "sem-leitor pasta:sem leitor rc=0 " "sem-leitor link:sem leitor rc=0 " "sem-leitor ausente:rc=0 "; do
+  jr_nome="jr4b-modo-${jr_c%%:*}"; jr_nome="${jr_nome// /-}"
+  # shellcheck disable=SC2086
+  [ "$(jr_modo ${jr_c%%:*})" = "${jr_c#*:}" ]
+  afirma "$jr_nome" $? "o bloco da F6 contra ${jr_c%%:*}"
+done
 ok_saidas=0
 for p in '**Saída 0**' '**Saída 1**' '**Saída 2**' '**Saída 3**' '**Saída 64 ou 75**' 'Só o desenvolvedor rejeita'; do
   tem "$EXEC" "$p" || ok_saidas=1
@@ -217,8 +237,11 @@ tem "$EXEC" '`revisao_defeito`, `revisao_contestada`, `revisao_incompleta`' \
 afirma "jr8-as-novas-classes-se-resolvem-pelo-script" $? "resolver vale para as tres"
 tem "$EXEC" 'Depois de uma saída 1, a saída 2 de uma nova tentativa não fecha a task'
 afirma "jr9-indisponivel-depois-de-achado-nao-fecha" $? "o achado anterior nao some com a evidencia nova"
-tem "$EXEC" '**Outra saída** (`127` sem o `node`, por exemplo): a revisão não rodou; trate como a saída 2.'
-afirma "jr10-saida-sem-rota-e-indisponivel" $? "127 e qualquer outra viram a saida 2"
+tem "$EXEC" '**Outra saída** (`127` sem o `node`, `70` erro interno do núcleo, ou a saída 1 sem a linha `<T-NN.MM> achados`, por exemplo): a revisão não rodou; trate como a saída 2.'
+afirma "jr10-saida-sem-rota-e-indisponivel" $? "127, 70, a 1 sem a linha e qualquer outra viram a saida 2"
+# a excecao nao tratada saia 1, o codigo de achados (CodeAnt no katosmv/login#73): so a linha prova o achado
+tem "$EXEC" '**Saída 1** com a última linha `<T-NN.MM> achados`'
+afirma "jr11-saida-1-so-com-a-linha" $? "a saida 1 so e achado com a linha <T-NN.MM> achados"
 
 printf '%s' "$E_SCRIPT" | grep -Eq 'trabalho_novo|decisao_humana|recurso_externo|falha_tecnica|legado'; [ $? -ne 0 ]
 afirma "j10-vocabulario-e-da-sprintx" $? "nenhuma classe do BuildX nem legado"
@@ -384,7 +407,8 @@ FXN="$K/fx-f6-null"; k_variante "$FXN" 's/^max_replanejamentos_f6: 1$/max_replan
 FXL="$K/fx-f6-legado"; cp -R "$FXP" "$FXL"
 # Planejamento anterior a este contrato: exatamente as chaves que o P0.1 gravava.
 sed -e '/^max_replanejamentos_f6:/d' -e '/^replanejamentos_f6:/d' -e '/^bloqueios_replanejamento_f6:/d' -e '/^tasks_congeladas:/d' \
-  -e '/^assinatura_congeladas:/d' -e '/^parciais_replanejamento_f6:/d' -e 's/ · replanejamentos da execução (F6): [^·]*//' "$(kf "$FXL")/00-PLANEJAMENTO.md" > "$K/pl.tmp" \
+  -e '/^assinatura_congeladas:/d' -e '/^parciais_replanejamento_f6:/d' -e 's/ · replanejamentos da execução (F6): [^·]*//' \
+  -e '/^classe_sessao:/d' -e '/^classe_sessao_por:/d' -e '/^classe_sessao_justificativa:/d' "$(kf "$FXL")/00-PLANEJAMENTO.md" > "$K/pl.tmp" \
   && mv "$K/pl.tmp" "$(kf "$FXL")/00-PLANEJAMENTO.md" && git -C "$FXL" commit -q -m legado -- docs/sprintx/features/menu/00-PLANEJAMENTO.md
 [ "$(tr -d '\r' < "$(kf "$FXL")/00-PLANEJAMENTO.md" | awk 'NR==1{next} $0=="---"{exit} /^[a-z0-9_]+:/{sub(/:.*/,""); printf "%s ", $0}')" \
   = "expx_schema expx_tool kind trabalho_id max_reprovacoes_f5 orcamento_declarado_por estado reprovacoes atualizado_em historico " ] \

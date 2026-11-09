@@ -144,8 +144,14 @@ raiz da skill) como ponto de partida desses dois arquivos.
 `references/00-schema.md`) sempre pelo script, nunca à mão:
 
 ```bash
-bash <raiz-da-skill>/scripts/planejamento.sh criar <slug> [max_reprovacoes_f5] [orcamento_declarado_por] [max_replanejamentos_f6]
+bash <raiz-da-skill>/scripts/planejamento.sh criar <slug> [max_reprovacoes_f5] [orcamento_declarado_por] [max_replanejamentos_f6] \
+  [--classe-sessao <classe> --classe-sessao-por <id> [--classe-sessao-justificativa "<texto>"]]
 ```
+
+**A classe da sessão principal também é de quem acionou a `sprintx`** (DS-210). Só quando o pedido
+declara `classe_sessao`, repasse-a com quem a declarou (`--classe-sessao-por`) e, em
+`profundo_excepcional`, a justificativa; sem declaração, não passe as opções. Nunca a infira do
+tamanho da feature, e numa retomada não a mude.
 
 **O orçamento pertence a quem acionou a `sprintx`, nunca a ela.** Leia do pedido (o briefing do
 caller) as três chaves `max_reprovacoes_f5`, `orcamento_declarado_por` e `max_replanejamentos_f6`

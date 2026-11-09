@@ -134,7 +134,7 @@ A integração é condicional: sem a `mergex` instalada, a F6 roda exatamente co
 18. Estimativa sai sempre como faixa, com premissas, invalidadores e nível de confiança. Número único é proibido.
 19. Estimativa é esforço, nunca prazo de calendário. A conversão em data é decisão humana.
 20. Todo trabalho fecha com `FECHAMENTO.md`, declarando módulo afetado, arquivos alterados e palavras-chave.
-21. Uma feature aberta por árvore de trabalho. Com git, ela nasce em worktree próprio na F1, e toda sessão que a toca trabalha de dentro dele — ver "Sessões paralelas".
+21. Uma feature aberta por árvore de trabalho. Com git, ela nasce em worktree próprio na F1, e toda sessão que a toca trabalha de dentro dele — ver "Sessões paralelas". Não rode como subagente comum de outra sessão com a worktree diferente do `cwd` dela: os hooks seguem o `cwd` do payload, que `git -C` e `cd` no Bash não mudam, e rastro, reivindicação e portões caem no checkout principal. Abra a sessão no worktree (`expx sessao <slug>` imprime o comando; CONTRATO-expx-orquestracao, "Execução como subagente").
 
 ## Sessões paralelas
 
