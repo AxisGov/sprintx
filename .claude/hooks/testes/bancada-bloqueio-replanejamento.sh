@@ -215,6 +215,10 @@ afirma "jr7-resultado-no-detalhe-da-conclusao" $? "sem evento novo (desenho, 4.2
 tem "$EXEC" '`revisao_defeito`, `revisao_contestada`, `revisao_incompleta`' \
   && tr -d '\r' < "$EXEC" | grep -F 'são resolvidos por ele quando a causa deixa de existir' | grep -qF '`revisao_incompleta`'
 afirma "jr8-as-novas-classes-se-resolvem-pelo-script" $? "resolver vale para as tres"
+tem "$EXEC" 'Depois de uma saída 1, a saída 2 de uma nova tentativa não fecha a task'
+afirma "jr9-indisponivel-depois-de-achado-nao-fecha" $? "o achado anterior nao some com a evidencia nova"
+tem "$EXEC" '**Outra saída** (`127` sem o `node`, por exemplo): a revisão não rodou; trate como a saída 2.'
+afirma "jr10-saida-sem-rota-e-indisponivel" $? "127 e qualquer outra viram a saida 2"
 
 printf '%s' "$E_SCRIPT" | grep -Eq 'trabalho_novo|decisao_humana|recurso_externo|falha_tecnica|legado'; [ $? -ne 0 ]
 afirma "j10-vocabulario-e-da-sprintx" $? "nenhuma classe do BuildX nem legado"
