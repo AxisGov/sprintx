@@ -43,7 +43,7 @@ E_CONTRATO=4; E_TRANSICAO=5; E_USO=64
 
 # O enum `classe` (bloqueio) de references/00-schema.md. `legado` NAO e classe:
 # e o que a leitura devolve para entrada sem a chave, e nunca e gravado.
-CLASSES="defeito_de_plano lacuna_de_decisao prerequisito_ausente suite_vermelha task_reivindicada"
+CLASSES="defeito_de_plano lacuna_de_decisao prerequisito_ausente suite_vermelha task_reivindicada revisao_defeito revisao_contestada revisao_incompleta"
 
 falha() { local c="$1"; shift; printf 'bloqueios: %s\n' "$*" >&2; exit "$c"; }
 

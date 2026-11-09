@@ -22,7 +22,7 @@ e o item equivalente no frontmatter:
 
   - id: B-01
     task: {{T-NN.MM}}
-    classe: {{defeito_de_plano | lacuna_de_decisao | prerequisito_ausente | suite_vermelha | task_reivindicada}}
+    classe: {{defeito_de_plano | lacuna_de_decisao | prerequisito_ausente | suite_vermelha | task_reivindicada | revisao_defeito | revisao_contestada | revisao_incompleta}}
     aberto_em: {{AAAA-MM-DD}}
     resolvido_em: null
     descricao: {{descricao em uma linha}}

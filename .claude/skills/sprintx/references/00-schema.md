@@ -66,7 +66,7 @@ Valem para todo arquivo que leva frontmatter:
 | `estado` (planejamento) | `aguardando_f3` \| `aguardando_f4` \| `aguardando_f5` \| `replanejar` \| `aprovado` \| `orcamento_esgotado` \| `replanejar_execucao` \| `replanejamento_execucao_esgotado` \| `replanejamento_execucao_recusado` (ou `null` antes do fim da F2) |
 | `recusa_replanejamento_f6` (planejamento) | `classes_mistas` \| `orcamento_f6_legado` \| `orcamento_f6_nao_declarado` \| `planejamento_legado` |
 | `veredito` (rodada da F5) | `sim` \| `nao` |
-| `classe` (bloqueio) | `defeito_de_plano` \| `lacuna_de_decisao` \| `prerequisito_ausente` \| `suite_vermelha` \| `task_reivindicada` |
+| `classe` (bloqueio) | `defeito_de_plano` \| `lacuna_de_decisao` \| `prerequisito_ausente` \| `suite_vermelha` \| `task_reivindicada` \| `revisao_defeito` \| `revisao_contestada` \| `revisao_incompleta` |
 
 Atenção a duas distinções que o painel trata como coisas diferentes:
 
@@ -447,6 +447,9 @@ nem por "leitura atenta".
 | `prerequisito_ausente` | segredo inexistente, serviço fora do ar, dependência externa quebrada | um recurso fora do repositório não está disponível (variável ausente, serviço sem resposta, pacote que não instala) |
 | `suite_vermelha` | portão da sprint: a suíte inteira terminou com falha que a execução não corrigiu | o comando da suíte inteira saiu com falha |
 | `task_reivindicada` | não resta task executável porque as restantes estão reivindicadas por outra sessão | o rastro tem `task_iniciada` de outra sessão sem `task_concluida`/`task_bloqueada` depois |
+| `revisao_defeito` | revisão por task (F6): achado aberto real, em linha que a task alterou, que não sai em duas tentativas ou não cabe na task | o `revisar` saiu `1` com o achado na evidência da task |
+| `revisao_contestada` | revisão por task (F6): achado aberto que a execução argumenta ser falso positivo, com o argumento na descrição | o `revisar` saiu `1`; só o desenvolvedor rejeita o achado (`expx-revisao.mjs rejeitar`) |
+| `revisao_incompleta` | revisão por task (F6): a revisão não cobriu a task (`L1`, `L2`, `lote-falhou`, `excluido-declarado`, `perfil` e os diagnósticos) | o `revisar` saiu `3`, com o motivo depois de `incompleta:` |
 
 Regras duras de `classe`:
 

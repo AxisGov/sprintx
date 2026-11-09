@@ -113,14 +113,41 @@ dependências estão satisfeitas; sem nenhuma, registre um bloqueio `task_reivin
 4. Assuma os três papéis do ORQUESTRADOR, em sequência: implementador (passos 2–3), revisor de testes, auditor de aceite (o `criterio_aceite` é verdade agora? verifique de fato, não presuma).
 
    **O papel de revisor de testes é do agente `sprintx-revisor-testes`, quando ele existir neste harness.** Acione-o sobre a task que está fechando, com o pedido neutro de `references/05-auditoria.md` (Passo 1.0: alvo, arquivos, prova e formato, sem as suas hipóteses): ele lê os testes e responde no formato determinístico (`T-NN.MM | solido`, ou `T-NN.MM | fraco | <tipo> | <cláusula> | <implementação errada>`). Passe a ele também as implementações erradas que a última F5 registrou como `[fraco:teste]` para esta task (`obrigacoes-f6`): além do julgamento normal, ele confere que **cada uma delas é discriminada** pelo teste escrito. **A task não conclui se alguma delas continuar passando.** Um `fraco` significa que o teste passaria com a implementação errada — e teste fraco é pior que teste ausente, porque produz suíte verde e falsa confiança. Task com teste `fraco` NÃO fecha: corrija o teste e, antes de seguir, rode-o contra a implementação errada que o revisor apontou — ele tem que falhar, e pelo motivo esperado. Teste corrigido que nunca foi visto vermelho contra o erro não prova que o detecta; só com ele vermelho e depois verde a task segue. Sem o agente disponível, faça você mesma a pergunta, com o mesmo rigor.
-5. Só então marque `status: concluida` em `tasks.md` e grave `task_concluida` no rastro pelo escritor — `bash <raiz-da-skill>/scripts/rastro.sh task-concluida <slug> <T-NN.MM> "<resultado da suíte>" <arquivos da task>` —, acrescentando na linha da task: data (obtenha com `date +%Y-%m-%d` do sistema) e resultado da suíte (ex.: `2026-08-26 · suíte: 42 passed, 0 failed`). Em seguida grave em `.expx/estado.json` (`references/09-estado.md`) o novo `tasks_concluidas` e o campo `task`: o id da próxima task que você vai abrir, ou `null` se não houver próxima.
+
+   **Revisão por task, depois do aceite.** Com o critério de aceite verificado, e antes de marcar a task concluída, rode a revisão por task do núcleo do expx (contrato `expx-revisao`). A evidência que ela grava, `docs/entregas/<slug>/revisao/<T-NN.MM>.json`, entra no commit da task pelo E1 da mergex, que só a aceita junto do produto da task: rodar a revisão depois do commit não cria evidência para ele, e um commit só com ela é recusado.
+
+   **Primeiro, o modo.** Sem `.expx/fatiamento.json`, o leitor não roda e vale o padrão, `se_disponivel`. Com o arquivo, o modo é o `revisao_por_task.modo` que o leitor imprime:
+
+   ```bash
+   RAIZ="$(git rev-parse --show-toplevel)"; N="$RAIZ/.expx/marketplace/plugins/expx/nucleo/scripts"
+   if [ -f "$RAIZ/.expx/fatiamento.json" ]; then node "$N/expx-fatiamento.mjs" --formato json --raiz "$RAIZ"; fi
+   ```
+
+   Com o arquivo, mas sem o leitor ou com o leitor falhando, o modo não pode ser conhecido: não rode a revisão, a task não fecha, e o bloqueio é `prerequisito_ausente` ("atualize o expx"). Com `desligada`, pule o resto deste passo.
+
+   **Depois, só com `se_disponivel` ou `obrigatoria`, a revisão.** Sem o `expx-revisao.mjs`, trate como a saída 2.
+
+   ```bash
+   RAIZ="$(git rev-parse --show-toplevel)"; N="$RAIZ/.expx/marketplace/plugins/expx/nucleo/scripts"
+   node "$N/expx-revisao.mjs" revisar --trabalho <slug> --task <T-NN.MM> --raiz "$RAIZ" --arquivos <arquivos.cria e arquivos.altera da task, separados por vírgula>
+   ```
+
+   - **Saída 0** (`ok`): siga.
+   - **Saída 1** (`achados`): há achado aberto em linha que a task alterou. Corrija na própria task, rode de novo o subconjunto afetado e a revisão, até duas tentativas. Se persistir, registre o bloqueio: `revisao_defeito` quando o achado é real e não cabe na task, `revisao_contestada` quando você argumenta falso positivo, com o argumento. **Só o desenvolvedor rejeita** um achado (`expx-revisao.mjs rejeitar`): você classifica e contesta, nunca rejeita nem aceita o risco. Achado em linha que a task não alterou não bloqueia.
+   - **Saída 2** (`indisponivel`): em `se_disponivel` é aviso, que vai no detalhe da conclusão, e a task segue. Em `obrigatoria`, a task não fecha: bloqueio `prerequisito_ausente`. Depois de uma saída 1, a saída 2 de uma nova tentativa não fecha a task, em nenhum modo: nada confirmou que o achado saiu, e a evidência nova apagaria o registro dele. O bloqueio é `prerequisito_ausente`, com o achado na descrição. Nunca rode `codeant login` nem defina credencial.
+   - **Saída 3** (`incompleta:<motivo>`): bloqueio `revisao_incompleta`, com a rota do motivo na tabela "Orientação ao consumidor" do contrato `expx-revisao` (`L1`: dividir a task; `lote-falhou`: revisar de novo a task inteira).
+   - **Saída 64 ou 75**: uso errado, ou evidência travada por outra execução. Com 75, espere e repita uma vez. Se persistir, ou com 64, bloqueio `prerequisito_ausente`, com a saída.
+   - **Outra saída** (`127` sem o `node`, por exemplo): a revisão não rodou; trate como a saída 2.
+
+   O bloqueio segue a Regra de bloqueio, abaixo; as classes `revisao_defeito`, `revisao_contestada`, `revisao_incompleta` só nascem neste passo. A evidência fica na árvore para o E1, inclusive com `indisponivel`.
+5. Só então marque `status: concluida` em `tasks.md` e grave `task_concluida` no rastro pelo escritor — `bash <raiz-da-skill>/scripts/rastro.sh task-concluida <slug> <T-NN.MM> "<resultado da suíte> · revisao: <resultado>" <arquivos da task>` —, com o `<resultado>` que o `revisar` imprimiu depois do id da task (`ok`, `indisponivel:<motivo>`), ou `desligada` quando a revisão foi pulada, acrescentando na linha da task: data (obtenha com `date +%Y-%m-%d` do sistema) e resultado da suíte (ex.: `2026-08-26 · suíte: 42 passed, 0 failed`). Em seguida grave em `.expx/estado.json` (`references/09-estado.md`) o novo `tasks_concluidas` e o campo `task`: o id da próxima task que você vai abrir, ou `null` se não houver próxima.
 6. **Registre o esforço real da task**, em horas de trabalho focado, na mesma linha (ex.: `2026-08-26 · suíte: 42 passed, 0 failed · real: 3,5 h`). O real cobre o que a task de fato custou — escrever os dois testes, implementar, rodar a suíte e verificar o critério de aceite — e NÃO inclui reunião, revisão de código, deploy nem ida e volta com o cliente. Isso alimenta a calibração das estimativas futuras (ver "Passo 4"); anote no momento de concluir, não reconstrua de memória no fim do trabalho.
 7. Critério de aceite não atendido ou teste não passando: a task NÃO é concluída. Não existe "concluído com ressalva".
 8. **Atualize a cor daquele nó no diagrama**, quando a sprint tiver diagrama. **Sprint condensada (`tasks.md` com `kind: plano`) não tem `fases.md` e não tem diagrama** — a F3 só gera o bloco Mermaid quando grava `fases.md`. Nesse caso pule este passo inteiro, **sem registrar aviso**: não há diagrama ausente, há um formato que não usa diagrama. Tendo `fases.md`: troque a classe na linha `class` do nó da task, e nada mais (`concluida`, `em_andamento` ou `bloqueada`, conforme `references/09-diagrama.md`). Não recalcule o caminho crítico, não reordene, não reescreva o bloco — durante a execução a estrutura do grafo não muda, só a cor. Se a atualização falhar, ou se `fases.md` não tiver bloco Mermaid (plano de uma versão anterior da skill), registre no rastro com `resultado: aviso` e siga: o diagrama é derivado e **nunca** impede uma task de fechar.
 
 9. **O commit da task.** Se `.claude/skills/mergex/SKILL.md` existir, acione a **etapa E1 da `mergex`** para esta task. Ela commita os arquivos de produto declarados em `arquivos`, mais os artefatos de método deste trabalho que estiverem sujos (a pasta `docs/sprintx/features/<slug>/`, a começar pelo `tasks.md` que você acabou de atualizar), com a mensagem que traz o objetivo e os testes da task, depois de varrer o diff em busca de segredo, credencial e dado real de cliente.
 
-   **A ordem é obrigatória e é esta:** teste → implementação → suíte afetada → revisão de testes → aceite → `status: concluida` → `tasks.md` atualizado (data, resultado da suíte e esforço real dos passos 5 e 6) → E1. O commit registra a task **já marcada** como concluída, e é o `tasks.md` atualizado que dá à mensagem o objetivo e os testes.
+   **A ordem é obrigatória e é esta:** teste → implementação → suíte afetada → revisão de testes → aceite → revisão por task → `status: concluida` → `tasks.md` atualizado (data, resultado da suíte e esforço real dos passos 5 e 6) → E1. O commit registra a task **já marcada** como concluída, e é o `tasks.md` atualizado que dá à mensagem o objetivo e os testes.
 
    **`suite: parcial` fecha task e sustenta commit** — é o registro normal da F6, e a suíte inteira continua sendo cobrada no fechamento da sprint. O E1 barra apenas `suite: vermelha` e `suite: nao_executada`.
 
@@ -169,6 +196,9 @@ Surgiu algo que impede a task de seguir. **O caminho que te trouxe aqui fixa a c
 | Pré-requisito fora do repositório faltando: segredo inexistente, serviço fora do ar, dependência externa quebrada | `prerequisito_ausente` |
 | Suíte inteira vermelha no portão da sprint, sem correção | `suite_vermelha` |
 | Nenhuma task executável porque as restantes estão reivindicadas por outra sessão | `task_reivindicada` |
+| Revisão por task: achado aberto real, em linha que a task alterou, que não sai em duas tentativas ou não cabe na task (`revisar` saiu `1`) | `revisao_defeito` |
+| Revisão por task: achado aberto que você argumenta ser falso positivo, com o argumento (`revisar` saiu `1`) | `revisao_contestada` |
+| Revisão por task: a revisão não cobriu a task (`revisar` saiu `3`, `incompleta:<motivo>`) | `revisao_incompleta` |
 
 1. Registre o bloqueio com a classe da tabela — é o único jeito de criar um B-NN:
 
@@ -214,7 +244,7 @@ Surgiu algo que impede a task de seguir. **O caminho que te trouxe aqui fixa a c
 bash <raiz-da-skill>/scripts/bloqueios.sh resolver <slug> <B-NN>
 ```
 
-Ele grava só `resolvido_em`, `atualizado_em` e a marca de resolvido na linha da prosa; a classe não muda. `lacuna_de_decisao`, `prerequisito_ausente`, `suite_vermelha`, `task_reivindicada` e o legado são resolvidos por ele quando a causa deixa de existir. **`defeito_de_plano` não**: editar o plano não resolve um defeito de plano, e o script recusa (código `5`) até o plano replanejado voltar a `aprovado` pela F5 — quem o resolve é o fechamento da rodada que ele abriu, junto com a reabertura da task.
+Ele grava só `resolvido_em`, `atualizado_em` e a marca de resolvido na linha da prosa; a classe não muda. `lacuna_de_decisao`, `prerequisito_ausente`, `suite_vermelha`, `task_reivindicada`, `revisao_incompleta` e o legado são resolvidos por ele quando a causa deixa de existir; `revisao_defeito` e `revisao_contestada`, quando o desenvolvedor corrige o código ou rejeita o achado, e a revisão da task sai `0`. **`defeito_de_plano` não**: editar o plano não resolve um defeito de plano, e o script recusa (código `5`) até o plano replanejado voltar a `aprovado` pela F5 — quem o resolve é o fechamento da rodada que ele abriu, junto com a reabertura da task.
 
 ## Portões de fase e de sprint
 

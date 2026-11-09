@@ -19,7 +19,7 @@ J="$(mktemp -d)"
 # Prazo de toda espera por sinal em arquivo entre processos (tentativas de 1 s): um passo que
 # trave (git, mkdir) faz o caso falhar em vez de travar a suite (conselhos#208, M7).
 ESPERA_MAX=30
-ENUM_J="defeito_de_plano lacuna_de_decisao prerequisito_ausente suite_vermelha task_reivindicada"
+ENUM_J="defeito_de_plano lacuna_de_decisao prerequisito_ausente suite_vermelha task_reivindicada revisao_defeito revisao_contestada revisao_incompleta"
 bl() { local s="$1" r="$2"; shift 2; SPRINTX_RAIZ="$r" bash "$s" "$@" 2>/dev/null; }
 barq() { printf '%s/docs/sprintx/features/menu/00-BLOQUEIOS.md' "$1"; }
 blinha() { bl "$1" "$2" listar menu | tr -d '\r' | awk -F'\t' -v i="$3" '$1 == i { print $2 "|" $3 "|" $4 }'; }
@@ -59,6 +59,9 @@ desc_de_outra() { case "$1" in
   prerequisito_ausente) echo 'arquivo fora do ownership da task: defeito_de_plano' ;;
   suite_vermelha) echo 'outra sessao reivindicada: task_reivindicada' ;;
   task_reivindicada) echo 'duvida nova sem D-NN: lacuna_de_decisao' ;;
+  revisao_defeito) echo 'o revisor diz falso positivo: revisao_contestada' ;;
+  revisao_contestada) echo 'a cli nao revisou um lote: revisao_incompleta' ;;
+  revisao_incompleta) echo 'achado real que nao cabe na task: revisao_defeito' ;;
 esac; }
 
 # J1/J7. Novo com classe valida: aceito. O B-01 do piloto e representavel como defeito_de_plano.
@@ -182,6 +185,41 @@ E_TPL="$(tr -d '\r' < "$TPLB" | sed -n 's/^    classe: {{\(.*\)}}$/\1/p' | tr -d
 for par in "script:$E_SCRIPT" "schema-enum:$E_ENUM" "schema-tabela:$E_TABSCH" "f6-tabela:$E_F6" "template:$E_TPL"; do
   [ "${par#*:}" = "$ENUM_J " ]; afirma "j10-enum-${par%%:*}" $? "${par#*:}"
 done
+
+echo "== J-R. a revisao por task na F6 (contrato expx-revisao) =="
+# O lado da skill do desenho de 2026-10-18 (4.2) nunca tinha sido implementado: a F6 nao
+# mandava rodar o `revisar` do nucleo antes do E1, e no modo obrigatoria a task saia sem a
+# evidencia, e o commit seguinte so com ela era recusado (conselhos, OC-2026-0009, na runx).
+tem "$EXEC" 'expx-revisao.mjs" revisar --trabalho <slug> --task <T-NN.MM> --raiz "$RAIZ" --arquivos'
+afirma "jr1-f6-chama-o-revisar" $? "trabalho, task, raiz e arquivos"
+tr -d '\r' < "$EXEC" | awk '
+  index($0, "auditor de aceite (o `criterio_aceite` é verdade agora?") { a = NR }
+  index($0, "expx-revisao.mjs\" revisar") && !r { r = NR }
+  index($0, "Só então marque `status: concluida`") && !c { c = NR }
+  END { exit !(a && r && c && a < r && r < c) }'
+afirma "jr2-revisao-entre-aceite-e-conclusao" $? "depois do aceite, antes de concluida"
+tem "$EXEC" 'teste → implementação → suíte afetada → revisão de testes → aceite → revisão por task → `status: concluida`'
+afirma "jr3-ordem-obrigatoria-com-a-revisao" $? "a ordem do passo 9 inclui a revisao"
+tem "$EXEC" 'if [ -f "$RAIZ/.expx/fatiamento.json" ]; then node "$N/expx-fatiamento.mjs" --formato json --raiz "$RAIZ"; fi' \
+  && tem "$EXEC" 'Com `desligada`, pule o resto deste passo'
+afirma "jr4-modo-pelo-leitor-so-com-o-arquivo" $? "sem arquivo, se_disponivel; desligada pula"
+ok_saidas=0
+for p in '**Saída 0**' '**Saída 1**' '**Saída 2**' '**Saída 3**' '**Saída 64 ou 75**' 'Só o desenvolvedor rejeita'; do
+  tem "$EXEC" "$p" || ok_saidas=1
+done
+[ "$ok_saidas" -eq 0 ]; afirma "jr5-rota-de-cada-saida" $? "0, 1, 2, 3, 64/75 e a rejeicao humana"
+tr -d '\r' < "$EXEC" | awk '/^## Regra de bloqueio/{f=1} /^## Portões/{f=0} f' | grep -F 'revisar' | grep -qF '`revisao_incompleta`'
+afirma "jr6-tabela-da-f6-nomeia-o-caminho-da-revisao" $? "a linha da tabela diz de onde vem a classe"
+tem "$EXEC" 'rastro.sh task-concluida <slug> <T-NN.MM> "<resultado da suíte> · revisao: <resultado>"'
+afirma "jr7-resultado-no-detalhe-da-conclusao" $? "sem evento novo (desenho, 4.2)"
+tem "$EXEC" '`revisao_defeito`, `revisao_contestada`, `revisao_incompleta`' \
+  && tr -d '\r' < "$EXEC" | grep -F 'são resolvidos por ele quando a causa deixa de existir' | grep -qF '`revisao_incompleta`'
+afirma "jr8-as-novas-classes-se-resolvem-pelo-script" $? "resolver vale para as tres"
+tem "$EXEC" 'Depois de uma saída 1, a saída 2 de uma nova tentativa não fecha a task'
+afirma "jr9-indisponivel-depois-de-achado-nao-fecha" $? "o achado anterior nao some com a evidencia nova"
+tem "$EXEC" '**Outra saída** (`127` sem o `node`, por exemplo): a revisão não rodou; trate como a saída 2.'
+afirma "jr10-saida-sem-rota-e-indisponivel" $? "127 e qualquer outra viram a saida 2"
+
 printf '%s' "$E_SCRIPT" | grep -Eq 'trabalho_novo|decisao_humana|recurso_externo|falha_tecnica|legado'; [ $? -ne 0 ]
 afirma "j10-vocabulario-e-da-sprintx" $? "nenhuma classe do BuildX nem legado"
 
