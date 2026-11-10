@@ -862,6 +862,9 @@ trabalho_id: exportacao-csv-relatorios
 max_reprovacoes_f5: 3
 max_replanejamentos_f6: 1
 orcamento_declarado_por: buildx
+classe_sessao: raciocinio_normal
+classe_sessao_por: orquestra
+classe_sessao_justificativa: null
 autorizacao_tardia_f6_por: usuario
 autorizacao_tardia_f6_em: 2026-10-12
 autorizacao_tardia_f6_origem: orcamento_f6_nao_declarado
@@ -902,6 +905,20 @@ Regras duras deste kind:
   se e somente se `max_reprovacoes_f5` e `max_replanejamentos_f6` forem ambos `null`: teto sem
   dono, ou dono sem teto, é erro de contrato. A `sprintx` sozinha **nunca inventa orçamento** —
   ela grava `null`/`null`.
+- `classe_sessao`, `classe_sessao_por` e `classe_sessao_justificativa` (DS-210) declaram a classe da
+  sessão principal da feature, que o `expx sessao <slug>` do ExpxDev lê para imprimir o
+  `cd <worktree> && claude --model … --effort …` (CONTRATO-expx-orquestracao §14). A classe é
+  `mecanico_triagem`, `raciocinio_normal`, `profundo_excepcional` ou `null`; `classe_sessao_por` é
+  quem declarou (identificador minúsculo); `classe_sessao_justificativa` é `null` ou texto de uma
+  linha entre aspas duplas, sem aspas nem barra invertida dentro, obrigatório em
+  `profundo_excepcional` e `null` nas outras. A classe nunca é inferida: só quem aciona a
+  `sprintx` a declara, pelas opções do `planejamento.sh criar`, e nenhum outro subcomando a escreve;
+  toda regravação a preserva, e ela não muda mais na feature (v1). Sem declaração, as três são
+  `null`; o arquivo anterior à 0.13.22, sem elas, vale `null` e as ganha na próxima regravação.
+  Limite da v1: a primeira sessão da feature abre antes do `00-PLANEJAMENTO.md`, e quem a abre é
+  quem declara a classe, com o modelo dela; o `expx sessao` serve às sessões seguintes.
+  Incoerência (classe sem dono, dono ou justificativa sem classe, justificativa fora de
+  `profundo_excepcional`) é erro de contrato.
 - `estado` segue o enum `estado` (planejamento). É `null` da F1 até o fim da F2; a partir daí,
   é sempre um dos nove valores. Nenhum outro estado existe.
 - `reprovacoes` é um inteiro `>= 0` e é sempre igual à quantidade de rodadas `nao` do

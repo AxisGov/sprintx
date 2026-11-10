@@ -6,6 +6,9 @@ trabalho_id: {{slug-da-feature}}
 max_reprovacoes_f5: {{inteiro-positivo-ou-null}}
 max_replanejamentos_f6: {{inteiro-positivo-ou-null}}
 orcamento_declarado_por: {{identificador-ou-null}}
+classe_sessao: {{classe-ou-null}}
+classe_sessao_por: {{identificador-ou-null}}
+classe_sessao_justificativa: {{"texto"-ou-null}}
 # opcionais e inseparáveis: autorização humana tardia da F6 (DS-175)
 # autorizacao_tardia_f6_por: {{identificador-da-autoridade}}
 # autoridade canônica da F6 tardia; não reutilizar orcamento_declarado_por

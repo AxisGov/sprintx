@@ -11,7 +11,9 @@
 #
 # Barra a mudanca de status para `concluida` quando:
 #   - `suite` nao for `verde` nem `parcial`, ou
-#   - `teste_integracao` ou `teste_funcional` estiverem vazios.
+#   - `teste_integracao` ou `teste_funcional` estiverem vazios, ou
+#   - em `revisao_por_task.modo: obrigatoria`, faltar a evidencia da revisao por
+#     task da task que ESTA escrita leva a `concluida` (DS-207).
 #
 # Modo: nasce em `aviso`.
 #
@@ -71,10 +73,75 @@ PROBLEMAS="$(printf '%s' "$NOVO" | awk '
   END { fecha() }
 ')"
 
+# ------------------------------------- a evidencia da revisao por task (DS-207)
+# Desenho de 2026-10-18, 4.2: em `obrigatoria`, a task que ESTA escrita leva a
+# `concluida` precisa de docs/entregas/<slug>/revisao/<T>.json, arquivo comum.
+# So a transicao: o antes e o `old_string` do Edit, ou o tasks.md do disco no
+# Write. O modo vem do leitor do nucleo; sem ele, sem node, com ele falhando ou
+# com a linha fora da forma, o modo e desconhecido e nada e exigido (a F6 ja
+# bloqueia com `prerequisito_ausente`, e o aviso seria falso).
+# Um item `- <chave>:` no nivel de um `- id:` ja visto e outra task, sem id: ela vira `?`,
+# que nao e id, e avisa em obrigatoria, em vez de se fundir a task de cima.
+concluidas() { awk '
+  function fecha() { if (id != "" && c) print id; id=""; c=0 }
+  /^[ \t]*-[ \t]*id:/ { fecha(); id=$3; sub(/^[ \t]+/,"",id); ind = match($0, /-/) }
+  ind && /^[ \t]*-[ \t]+[A-Za-z_][A-Za-z0-9_]*:/ && !/^[ \t]*-[ \t]*id:/ && match($0, /-/) == ind { fecha(); id = "?" }
+  /status:[ \t]*concluida/ { c=1 }
+  END { fecha() }'; }
+SEM_EVIDENCIA=""
+REL_TASKS="${ALVO#"$RAIZ"/}"
+case "$REL_TASKS" in
+  docs/sprintx/features/*/sprint-*/tasks.md) SLUG="${REL_TASKS#docs/sprintx/features/}"; SLUG="${SLUG%%/*}" ;;
+  *) SLUG="" ;;
+esac
+NOVAS=""; FORA_DA_FORMA=""
+if [ -n "$SLUG" ]; then
+  if [ -n "$(rastro_tool_input_get "$ENTRADA" content)" ]; then
+    ANTES="$( { [ -f "$RAIZ/$REL_TASKS" ] && concluidas < "$RAIZ/$REL_TASKS"; } 2>/dev/null)"
+  else
+    ANTES="$(rastro_tool_input_get "$ENTRADA" old_string | concluidas)"
+  fi
+  RE_ID='^T-([0-9]+|[0-9]{2}\.[0-9]{2})$'
+  while IFS= read -r t; do
+    case $'\n'"$ANTES"$'\n' in *$'\n'"$t"$'\n'*) continue ;; esac
+    # id fora da forma nao vira caminho, e a evidencia nao pode ser conferida: avisa em obrigatoria
+    if [[ $t =~ $RE_ID ]]; then NOVAS="$NOVAS $t"; else FORA_DA_FORMA="$FORA_DA_FORMA $t"; fi
+  done <<EOF
+$(printf '%s\n' "$NOVO" | concluidas)
+EOF
+fi
+LEITOR="$RAIZ/.expx/marketplace/plugins/expx/nucleo/scripts/expx-fatiamento.mjs"
+if [ -n "$NOVAS$FORA_DA_FORMA" ] && [ -f "$LEITOR" ] && command -v node >/dev/null 2>&1; then
+  MODO_REVISAO=""
+  if SAIDA_LEITOR="$(node "$LEITOR" --formato env --raiz "$RAIZ" 2>/dev/null)"; then
+    while IFS= read -r l; do
+      case "$l" in EXPX_REVISAO_POR_TASK=*) MODO_REVISAO="${l#EXPX_REVISAO_POR_TASK=}" ;; esac
+    done <<EOF
+$SAIDA_LEITOR
+EOF
+  fi
+  if [ "$MODO_REVISAO" = obrigatoria ]; then
+    for t in $FORA_DA_FORMA; do
+      SEM_EVIDENCIA=1
+      PROBLEMAS="${PROBLEMAS:+$PROBLEMAS
+}$t: id fora da forma T-NN.MM, a evidencia da revisao por task nao pode ser conferida"
+    done
+    for t in $NOVAS; do
+      EV="$RAIZ/docs/entregas/$SLUG/revisao/$t.json"
+      if [ ! -f "$EV" ] || [ -L "$EV" ]; then
+        SEM_EVIDENCIA=1
+        PROBLEMAS="${PROBLEMAS:+$PROBLEMAS
+}$t: sem evidencia da revisao por task (docs/entregas/$SLUG/revisao/$t.json) em modo obrigatoria"
+      fi
+    done
+  fi
+fi
+
 [ -n "$PROBLEMAS" ] || exit 0
 
 RESUMO="$(printf '%s' "$PROBLEMAS" | tr '\n' ';')"
 MSG="sprintx/task-so-fecha-verde: task nao pode ir para concluida assim -> $RESUMO. A regra do metodo e: task so e concluida quando o teste de integracao E o teste funcional passam. Nao existe concluido com ressalva. Rode os testes ate passarem — o subconjunto afetado pela task basta, e grava suite: parcial — ou marque a task como bloqueada e registre em 00-BLOQUEIOS.md."
+[ -z "$SEM_EVIDENCIA" ] || MSG="$MSG Sem a evidencia da revisao por task, rode o passo de revisao da F6 (references/06-execucao.md) antes de concluir: em obrigatoria, a task nao fecha sem ela."
 
 MODO="$(rastro_modo "$RAIZ" task-so-fecha-verde metodo)"
 REL="${ALVO#"$RAIZ"/}"

@@ -771,6 +771,60 @@ for ruim in "0 buildx" "-1 buildx" "tres buildx" "2.5 buildx" "3 null" "null bui
   afirma "$g_nome" "$g_rc" "rc=$rc, nada gravado"
 done
 
+# A-CS. A classe da sessao principal (DS-210; escopo (a) do ExpxDev 0.13.22): so o `criar` a
+# grava, com opcoes nomeadas depois dos posicionais; sem declaracao, as tres chaves sao null; toda
+# regravacao a preserva; incoerente e erro de contrato, sem nada gravado.
+D="$G/acs"; nova_feature "$D" menu; A_ARQ="$(fdir "$D" menu)/00-PLANEJAMENTO.md"
+pl "$D" criar menu >/dev/null; rc=$?
+[ "$rc" -eq 0 ] && [ "$(fmv "$A_ARQ" classe_sessao)" = null ] && [ "$(fmv "$A_ARQ" classe_sessao_por)" = null ] \
+  && [ "$(fmv "$A_ARQ" classe_sessao_justificativa)" = null ]
+afirma "gacs1-sem-declaracao-tres-nulas" $? "rc=$rc"
+D="$G/acs2"; nova_feature "$D" menu; A_ARQ="$(fdir "$D" menu)/00-PLANEJAMENTO.md"
+pl "$D" criar menu 3 buildx --classe-sessao raciocinio_normal --classe-sessao-por orquestra >/dev/null; rc=$?
+[ "$rc" -eq 0 ] && [ "$(fmv "$A_ARQ" classe_sessao)" = raciocinio_normal ] && [ "$(fmv "$A_ARQ" classe_sessao_por)" = orquestra ] \
+  && [ "$(fmv "$A_ARQ" classe_sessao_justificativa)" = null ] && [ "$(fmv "$A_ARQ" max_reprovacoes_f5)" = 3 ]
+afirma "gacs2-declarada-com-orcamento" $? "rc=$rc"
+pl "$D" criar menu 3 buildx >/dev/null; afirma "gacs3-retomada-sem-opcoes-mantem" $? "no-op"
+[ "$(fmv "$A_ARQ" classe_sessao)" = raciocinio_normal ]; afirma "gacs3b-retomada-nao-apaga" $? "continua raciocinio_normal"
+pl "$D" criar menu 3 buildx --classe-sessao mecanico_triagem --classe-sessao-por orquestra >/dev/null; [ $? -eq 4 ]
+afirma "gacs4-classe-nao-muda-em-silencio" $? "outra classe: erro de contrato"
+printf 'decisoes\n' > "$(fdir "$D" menu)/00-DECISOES.md"
+pl "$D" avanca menu f2 >/dev/null; rc=$?
+[ "$rc" -eq 0 ] && [ "$(fmv "$A_ARQ" classe_sessao)" = raciocinio_normal ] && [ "$(fmv "$A_ARQ" classe_sessao_por)" = orquestra ] \
+  && [ "$(fmv "$A_ARQ" estado)" = aguardando_f3 ]
+afirma "gacs5-regravacao-preserva" $? "rc=$rc, avanca f2"
+D="$G/acs6"; nova_feature "$D" menu; A_ARQ="$(fdir "$D" menu)/00-PLANEJAMENTO.md"
+pl "$D" criar menu --classe-sessao profundo_excepcional --classe-sessao-por flavio --classe-sessao-justificativa 'migracao de dados' >/dev/null; rc=$?
+[ "$rc" -eq 0 ] && [ "$(fmv "$A_ARQ" classe_sessao_justificativa)" = '"migracao de dados"' ]
+afirma "gacs6-profundo-com-justificativa" $? "rc=$rc, $(fmv "$A_ARQ" classe_sessao_justificativa)"
+for ruim in "--classe-sessao profundo_excepcional --classe-sessao-por flavio:4" \
+  "--classe-sessao raciocinio_normal --classe-sessao-por flavio --classe-sessao-justificativa x:4" \
+  "--classe-sessao medio --classe-sessao-por flavio:4" "--classe-sessao raciocinio_normal:4" \
+  "--classe-sessao-por flavio:4" "--classe-sessao raciocinio_normal --classe-sessao-por Flavio:4" \
+  "--classe-sessao:64" "--outra x:64"; do
+  D="$G/acs-ruim"; rm -rf "$D"; nova_feature "$D" menu
+  g_nome="gacs7-invalida-$(printf '%s' "${ruim%:*}" | tr ' -' '_.')"
+  # shellcheck disable=SC2086
+  pl "$D" criar menu ${ruim%:*} >/dev/null; rc=$?
+  [ "$rc" -eq "${ruim##*:}" ] && [ ! -f "$(fdir "$D" menu)/00-PLANEJAMENTO.md" ]; g_rc=$?
+  afirma "$g_nome" "$g_rc" "rc=$rc, esperado ${ruim##*:}, nada gravado"
+done
+for ruim in 'com "aspas"' 'com \\barra'; do
+  D="$G/acs-ruim"; rm -rf "$D"; nova_feature "$D" menu
+  pl "$D" criar menu --classe-sessao profundo_excepcional --classe-sessao-por flavio --classe-sessao-justificativa "$ruim" >/dev/null; rc=$?
+  [ "$rc" -eq 4 ] && [ ! -f "$(fdir "$D" menu)/00-PLANEJAMENTO.md" ]; g_rc=$?
+  afirma "gacs8-justificativa-fora-da-forma" "$g_rc" "rc=$rc"
+done
+
+# Modo subagente (Conselhos, OC-2026-0011; DS-209): os hooks seguem o `cwd` do payload, que `git -C`
+# e `cd` no Bash nao mudam, e o rastro caia no checkout principal (bancada do ExpxDev 0.13.22).
+tr -d '\r' < "$SK/SKILL.md" | grep -q 'subagente comum' && tr -d '\r' < "$SK/SKILL.md" | grep -qF 'git -C' \
+  && tr -d '\r' < "$SK/SKILL.md" | grep -qF 'expx sessao <slug>'
+afirma "gacs9-skill-proibe-subagente-fora-da-worktree" $? "SKILL.md"
+tr -d '\r' < "$SK/references/00-schema.md" | grep -q 'classe_sessao_justificativa' \
+  && tr -d '\r' < "$SK/references/00-schema.md" | grep -qi 'nunca é inferida'
+afirma "gacs10-schema-documenta-a-tripla" $? "00-schema.md"
+
 # B/C/D. Fim da F2, F3 e F4: estado + checkpoint com trailers.
 D="$G/b"; nova_feature "$D" menu; F="$(fdir "$D" menu)"
 pl "$D" criar menu >/dev/null; N0="$(ncommits "$D")"

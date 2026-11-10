@@ -16,6 +16,7 @@
 # Uso (a partir de qualquer diretorio do repositorio; SPRINTX_RAIZ sobrescreve a raiz):
 #
 #   planejamento.sh criar <slug> [max_reprovacoes_f5|null] [declarado_por|null] [max_replanejamentos_f6|null]
+#                         [--classe-sessao <classe> --classe-sessao-por <id> [--classe-sessao-justificativa <texto>]]
 #   planejamento.sh avanca <slug> f2|f3|f4|f5
 #   planejamento.sh replanejar-execucao <slug>
 #   planejamento.sh autorizar-replanejamento-execucao <slug> <max_replanejamentos_f6> <autorizado_por>
@@ -144,6 +145,41 @@ evento() {
 
 # rastro <fase|-> <resultado> <detalhe> — o evento do checkpoint.
 rastro() { evento checkpoint_planejamento "$1" - "$2" "$3"; }
+
+# ------------------------------------------------------- classe da sessao (DS-210)
+
+# A classe da sessao principal (CONTRATO-expx-orquestracao §14), que o comando de
+# abertura da sessao le. So o `criar` a declara;
+# toda regravacao a preserva pelos CS_*; ausente no arquivo vale null.
+CS_CLASSE=null; CS_POR=null; CS_JUST=null
+# valida_classe_sessao <classe> <por> <justificativa-crua> — a justificativa crua e `null`
+# ou o texto entre aspas duplas, como o arquivo a grava
+valida_classe_sessao() {
+  local c="$1" p="$2" j="$3" texto
+  case "$j" in
+    null) texto="" ;;
+    \"*\") texto="${j#\"}"; texto="${texto%\"}"
+      case "$texto" in *[\"\\]*|*[[:cntrl:]]*) falha "$E_CONTRATO" "classe_sessao_justificativa invalida: uma linha, sem aspas duplas nem barra invertida" ;; esac
+      [ -n "${texto//[[:space:]]/}" ] || falha "$E_CONTRATO" "classe_sessao_justificativa vazia" ;;
+    *) falha "$E_CONTRATO" "classe_sessao_justificativa invalida: '$j' (texto entre aspas duplas ou null)" ;;
+  esac
+  case "$c" in
+    null) [ "$p" = null ] && [ "$j" = null ] || falha "$E_CONTRATO" "classe_sessao null com classe_sessao_por ou justificativa: quem nao declara classe nao declara dono"
+      return 0 ;;
+    mecanico_triagem|raciocinio_normal|profundo_excepcional) ;;
+    *) falha "$E_CONTRATO" "classe_sessao invalida: '$c' (mecanico_triagem|raciocinio_normal|profundo_excepcional|null)" ;;
+  esac
+  case "$p" in
+    null) falha "$E_CONTRATO" "classe_sessao_por null com classe_sessao $c: a classe precisa de dono" ;;
+    [a-z]*) case "$p" in *[!a-z0-9_-]*) falha "$E_CONTRATO" "classe_sessao_por invalido: '$p' (identificador minusculo)" ;; esac ;;
+    *) falha "$E_CONTRATO" "classe_sessao_por invalido: '$p' (identificador minusculo; a classe precisa de dono)" ;;
+  esac
+  if [ "$c" = profundo_excepcional ]; then
+    [ "$j" != null ] || falha "$E_CONTRATO" "profundo_excepcional exige classe_sessao_justificativa"
+  else
+    [ "$j" = null ] || falha "$E_CONTRATO" "classe_sessao_justificativa so vale em profundo_excepcional"
+  fi
+}
 
 # ------------------------------------------------------------------ orcamento
 
@@ -835,6 +871,11 @@ le_planejamento() {
   [ "${FM_trabalho_id-}" = "$SLUG" ] || falha "$E_CONTRATO" "trabalho_id nao e $SLUG"
 
   fm_em P_MAX max_reprovacoes_f5; fm_em P_POR orcamento_declarado_por
+  fm_em P_CS classe_sessao; fm_em P_CS_POR classe_sessao_por; fm_em P_CS_JUST classe_sessao_justificativa
+  # arquivo anterior a 0.13.22: sem a tripla, null; toda regravacao a mantem pelos CS_*
+  P_CS="${P_CS:-null}"; P_CS_POR="${P_CS_POR:-null}"; P_CS_JUST="${P_CS_JUST:-null}"
+  valida_classe_sessao "$P_CS" "$P_CS_POR" "$P_CS_JUST"
+  CS_CLASSE="$P_CS"; CS_POR="$P_CS_POR"; CS_JUST="$P_CS_JUST"
   fm_em P_ESTADO estado; fm_em P_REPROV reprovacoes; fm_em P_RECUSA recusa_replanejamento_f6
   le_f6
   le_autorizacao_tardia_f6
@@ -958,6 +999,10 @@ lista_yaml() { if [ -z "$1" ]; then printf '[]'; else printf '[%s]' "$(printf '%
 # orcamento numa regravacao. W_RECUSA e o motivo do terminal recusado, e so dele.
 escreve() {
   local max="$1" por="$2" estado="$3" reprov="$4" hist="$5" data tmp yaml prosa teto t6="" rodada6="" rec="" trec="" aut6="" dono6="$2"
+  local cs="classe_sessao: $CS_CLASSE
+classe_sessao_por: $CS_POR
+classe_sessao_justificativa: $CS_JUST
+"
   [ -f "$TEMPLATE" ] || falha "$E_CONTRATO" "template ausente: assets/TEMPLATE-PLANEJAMENTO.md"
   data="$(hoje)"
   if [ "$estado" = replanejamento_execucao_recusado ]; then
@@ -1012,15 +1057,15 @@ Rodada de replanejamento da execução ativa, aberta por: $(printf '%s' "$W6_BLQ
   {
     printf -- '---\nexpx_schema: 1\nexpx_tool: sprintx\nkind: planejamento\ntrabalho_id: %s\n' "$SLUG"
     if [ "$W6" = presente ]; then
-      printf 'max_reprovacoes_f5: %s\nmax_replanejamentos_f6: %s\norcamento_declarado_por: %s\n%sestado: %s\n%sreprovacoes: %s\n' \
-        "$max" "$W6_MAX" "$por" "$aut6" "$estado" "$rec" "$reprov"
+      printf 'max_reprovacoes_f5: %s\nmax_replanejamentos_f6: %s\norcamento_declarado_por: %s\n%s%sestado: %s\n%sreprovacoes: %s\n' \
+        "$max" "$W6_MAX" "$por" "$cs" "$aut6" "$estado" "$rec" "$reprov"
       printf 'replanejamentos_f6: %s\nbloqueios_replanejamento_f6: %s\ntasks_congeladas: %s\nassinatura_congeladas: %s\n' \
         "$W6_N" "$(lista_yaml "$W6_BLQ")" "$(lista_yaml "$W6_CONG")" "$W6_ASS"
       parciais_yaml
       printf 'atualizado_em: %s\n' "$data"
     else
-      printf 'max_reprovacoes_f5: %s\norcamento_declarado_por: %s\nestado: %s\n%sreprovacoes: %s\natualizado_em: %s\n' \
-        "$max" "$por" "$estado" "$rec" "$reprov" "$data"
+      printf 'max_reprovacoes_f5: %s\norcamento_declarado_por: %s\n%sestado: %s\n%sreprovacoes: %s\natualizado_em: %s\n' \
+        "$max" "$por" "$cs" "$estado" "$rec" "$reprov" "$data"
     fi
     printf '%s\n---\n' "$yaml"
     # Texto com quebra de linha vai por ENVIRON, nunca por `awk -v`: o awk do
@@ -1447,13 +1492,41 @@ EOF
 # ------------------------------------------------------------------ comandos
 
 cmd_criar() {
-  [ $# -ge 1 ] && [ $# -le 4 ] || falha "$E_USO" "uso: criar <slug> [max_reprovacoes_f5|null] [declarado_por|null] [max_replanejamentos_f6|null]"
+  local uso="uso: criar <slug> [max_reprovacoes_f5|null] [declarado_por|null] [max_replanejamentos_f6|null] [--classe-sessao <classe> --classe-sessao-por <id> [--classe-sessao-justificativa <texto>]]"
+  # os posicionais vem antes; as opcoes da classe da sessao, depois (DS-210)
+  local pos=() cs="" cs_por="" cs_just="" cs_dada=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --classe-sessao|--classe-sessao-por|--classe-sessao-justificativa)
+        [ $# -ge 2 ] || falha "$E_USO" "$1 exige valor; $uso"
+        case "$1" in
+          --classe-sessao) cs="$2" ;;
+          --classe-sessao-por) cs_por="$2" ;;
+          *) cs_just="$2" ;;
+        esac
+        cs_dada=1; shift 2 ;;
+      --*) falha "$E_USO" "opcao desconhecida: $1; $uso" ;;
+      *) [ -z "$cs_dada" ] || falha "$E_USO" "posicional depois das opcoes: $1; $uso"
+        pos+=("$1"); shift ;;
+    esac
+  done
+  [ "${#pos[@]}" -ge 1 ] && [ "${#pos[@]}" -le 4 ] || falha "$E_USO" "$uso"
+  set -- "${pos[@]}"
+  if [ -n "$cs_dada" ]; then
+    case "$cs_just" in *[\"\\]*|*[[:cntrl:]]*) falha "$E_CONTRATO" "classe_sessao_justificativa invalida: uma linha, sem aspas duplas nem barra invertida" ;; esac
+    cs="${cs:-null}"; cs_por="${cs_por:-null}"
+    if [ -n "$cs_just" ]; then cs_just="\"$cs_just\""; else cs_just=null; fi
+  fi
   contexto "$1"
   local max="${2:-null}" por="${3:-null}" max6="${4:-null}"
   valida_orcamento "$max" "$por" "$max6"
   valida_orcamento_f6 "$max6" "$por"
+  [ -z "$cs_dada" ] || valida_classe_sessao "$cs" "$cs_por" "$cs_just"
   if [ -f "$ARQ" ]; then
     le_planejamento
+    if [ -n "$cs_dada" ] && { [ "$P_CS" != "$cs" ] || [ "$P_CS_POR" != "$cs_por" ] || [ "$P_CS_JUST" != "$cs_just" ]; }; then
+      falha "$E_CONTRATO" "00-PLANEJAMENTO.md ja registra classe_sessao $P_CS/$P_CS_POR; o pedido traz $cs/$cs_por — a classe da sessao nao muda (v1)"
+    fi
     if [ "$P_MAX" != "$max" ] || [ "$P_POR" != "$por" ]; then
       falha "$E_CONTRATO" "00-PLANEJAMENTO.md ja registra orcamento $P_MAX/$P_POR; o pedido traz $max/$por — orcamento nao muda em silencio"
     fi
@@ -1468,6 +1541,7 @@ cmd_criar() {
     printf 'planejamento=ja_existe\nestado=%s\n' "$P_ESTADO"
     return 0
   fi
+  if [ -n "$cs_dada" ]; then CS_CLASSE="$cs"; CS_POR="$cs_por"; CS_JUST="$cs_just"; fi
   estado_efetivo
   if [ "$E_ESTADO" != null ]; then
     # Feature legada ja adiantada: nasce com o estado que o disco mostra, e com

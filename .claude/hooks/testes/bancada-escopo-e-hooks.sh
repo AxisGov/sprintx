@@ -2137,6 +2137,65 @@ t_semgit "$H"; afirma "t3-segredo-sem-git-casa-o-gitignore-como-o-git" $? "16 ca
 . "$H/testes/bancada-segredo-limite.sh"
 t_seglimite "$H" "$PL"; afirma "t3b-segredo-prefixo-de-chave-com-limite-a-esquerda" $? "hook e planejamento.sh${T_FALHA:+ — FORA:$T_FALHA}"
 
+# A evidencia da revisao por task (desenho de 2026-10-18, 4.2): em `obrigatoria`, a task que ESTA
+# escrita leva a `concluida` precisa de docs/entregas/<slug>/revisao/<T>.json, arquivo comum. O modo
+# vem do leitor do nucleo; sem ele, ou com ele falhando, o hook nao exige (a F6 ja bloqueia).
+TE_FX="$T_DIR/evid"
+TE_N=".expx/marketplace/plugins/expx/nucleo/scripts"
+te_leitor() { # te_leitor <dir> <modo|falha|nenhum>
+  rm -rf "${1:?}/$TE_N"; [ "$2" = nenhum ] && return 0
+  mkdir -p "$1/$TE_N"
+  if [ "$2" = falha ]; then printf 'process.exit(1);\n' > "$1/$TE_N/expx-fatiamento.mjs"
+  else printf 'process.stdout.write("EXPX_ENTREGA=sprint\\nEXPX_REVISAO_POR_TASK=%s\\n");\n' "$2" > "$1/$TE_N/expx-fatiamento.mjs"; fi
+}
+te_edit() { # te_edit <cwd> <file_path> <old_string> <new_string>
+  printf '{"session_id":"x","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":"%s","old_string":"%s","new_string":"%s"},"tool_response":{}}' \
+    "$(t_esc "$1")" "$(t_esc "$2")" "$(t_esc "$3")" "$(t_esc "$4")"
+}
+te_roda() { # te_roda <json> — "rc/classe" do task-so-fecha-verde na fixture
+  local o r
+  o="$(printf '%s' "$1" | (cd "$TE_FX" && EXPX_SESSAO=t3e@1 CLAUDECODE=1 bash "$H/sprintx/task-so-fecha-verde.sh") 2>&1)"; r=$?
+  case "$o" in "") printf '%s/silencio' "$r" ;; *"evidencia da revisao por task"*) printf '%s/evidencia' "$r" ;; *) printf '%s/outro' "$r" ;; esac
+}
+te_caso() { # te_caso <nome> <esperado> <leitor> <evidencia:nenhuma|arquivo|link> <json>
+  t_fx "$TE_FX"; te_leitor "$TE_FX" "$3"
+  case "$4" in
+    arquivo) mkdir -p "$TE_FX/docs/entregas/feat/revisao"; printf '{}' > "$TE_FX/docs/entregas/feat/revisao/T-01.02.json" ;;
+    link) mkdir -p "$TE_FX/docs/entregas/feat/revisao"; printf '{}' > "$TE_FX/alvo.json"; ln -s ../../../../alvo.json "$TE_FX/docs/entregas/feat/revisao/T-01.02.json" ;;
+  esac
+  [ -z "${TE_PREP:-}" ] || eval "$TE_PREP"
+  local real; real="$(te_roda "$5")"
+  [ "$real" = "$2" ]; afirma "te-$1" $? "esperado $2, real $real"
+}
+TE_W="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(t_conteudo fecha-ok)")"
+te_caso obrigatoria-sem-evidencia-avisa 0/evidencia obrigatoria nenhuma "$TE_W"
+te_caso obrigatoria-com-evidencia-silencia 0/silencio obrigatoria arquivo "$TE_W"
+te_caso evidencia-link-nao-vale 0/evidencia obrigatoria link "$TE_W"
+te_caso se-disponivel-nao-exige 0/silencio se_disponivel nenhuma "$TE_W"
+te_caso leitor-falhando-nao-exige 0/silencio falha nenhuma "$TE_W"
+te_caso sem-leitor-nao-exige 0/silencio nenhum nenhuma "$TE_W"
+# so a transicao: a task ja concluida no disco nao e cobrada de novo
+TE_PREP='sed -i.bak "/id: T-01.02/{n;s/em_andamento/concluida/;}" "$TE_FX/$T_TASKS"' \
+  te_caso ja-concluida-no-disco-nao-exige 0/silencio obrigatoria nenhuma "$TE_W"
+TE_PREP='mkdir -p "$TE_FX/.expx"; printf "{\"hooks\":{\"task-so-fecha-verde\":{\"modo\":\"bloqueio\"}}}" > "$TE_FX/.expx/hooks.json"' \
+  te_caso modo-bloqueio-barra 2/evidencia obrigatoria nenhuma "$TE_W"
+# Edit: o antes e o old_string
+TE_E="$(te_edit "$TE_FX" "$TE_FX/$T_TASKS" $'  - id: T-01.02\n    status: em_andamento' \
+  $'  - id: T-01.02\n    status: concluida\n    suite: verde\n    teste_integracao: chama a api\n    teste_funcional: dado x entao y')"
+te_caso edit-que-conclui-avisa 0/evidencia obrigatoria nenhuma "$TE_E"
+TE_E2="$(te_edit "$TE_FX" "$TE_FX/$T_TASKS" $'  - id: T-01.02\n    status: concluida' \
+  $'  - id: T-01.02\n    status: concluida\n    suite: verde\n    teste_integracao: chama a api\n    teste_funcional: dado x entao y')"
+te_caso edit-de-task-ja-concluida-nao-exige 0/silencio obrigatoria nenhuma "$TE_E2"
+# limite congelado: Edit sem `- id:` no new_string nao atribui a task, e nada e conferido
+TE_E3="$(te_edit "$TE_FX" "$TE_FX/$T_TASKS" 'status: em_andamento' $'status: concluida\n    suite: verde')"
+te_caso edit-sem-id-nao-confere 0/silencio obrigatoria nenhuma "$TE_E3"
+# id fora da forma: a evidencia nao pode ser conferida, e isso avisa (revisao do runx#20, o mesmo hook)
+TE_WM="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(t_conteudo fecha-ok | sed 's/T-01\.02/T-1.2/')")"
+te_caso id-fora-da-forma-avisa 0/evidencia obrigatoria nenhuma "$TE_WM"
+# task sem id, no mesmo nivel das outras: tambem nao pode ser conferida (Codex na revisao do DS-211)
+TE_WS="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks:\n  - id: T-01.01\n    status: em_andamento\n  - status: concluida\n    suite: verde\n    teste_integracao: chama a api\n    teste_funcional: dado x entao y\n---\n')")"
+te_caso task-sem-id-avisa 0/evidencia obrigatoria nenhuma "$TE_WS"
+
 # Estrutural. A auditoria: estes sao os hooks que leem pathname do payload, e a variavel de cada
 # um. Cada par passa por rastro_caminho_em ANTES de qualquer uso que nao seja a propria leitura
 # ou o teste de vazio; nenhum hook fora da lista le `cwd`/`file_path`; e nenhum hook reimplementa
