@@ -320,7 +320,7 @@ CAMPOS=$(sed -n '/### Contrato da Task/,/### Contrato da Fase/p' "$SKILLMD" | gr
 [ "$CAMPOS" -eq 10 ]; afirma "contrato-task-intacto" $? "$CAMPOS campos (esperado 10)"
 
 # 8. Regra 21 e a posse da branch/worktree seguem com a F1.
-tem "$SKILLMD" '21. Uma feature aberta por árvore de trabalho. Com git, ela nasce em worktree próprio na F1'; afirma "regra-21-intacta" $? "regra 21 literal"
+tem "$SKILLMD" '21. Uma feature aberta por árvore de trabalho. Com git, e sem o pedido explícito de "sem worktree" (F1, Passo 0), ela nasce em worktree próprio na F1'; afirma "regra-21-intacta" $? "regra 21 literal (com a excecao da F1, DS-212)"
 conta_regras() { sed -n '/^## Regras invioláveis$/,/^## Sessões paralelas$/p' "$1" | grep -cE '^[0-9]+\. '; }
 REGRAS=$(conta_regras "$SKILLMD")
 [ "$REGRAS" -eq 21 ]; afirma "21-regras-inviolaveis" $? "$REGRAS regras (esperado 21)"
@@ -816,6 +816,53 @@ for ruim in 'com "aspas"' 'com \\barra'; do
   afirma "gacs8-justificativa-fora-da-forma" "$g_rc" "rc=$rc"
 done
 
+# Vazio explicito numa opcao dada e erro de contrato, nunca "sem declaracao" (CodeAnt no conselhos#296)
+for g_op in --classe-sessao --classe-sessao-por --classe-sessao-justificativa; do
+  D="$G/acs-vazio"; rm -rf "$D"; nova_feature "$D" menu
+  case "$g_op" in
+    # os vazios que antes viravam null e passavam por "sem declaracao" (rc 0)
+    --classe-sessao) pl "$D" criar menu --classe-sessao "" --classe-sessao-por "" >/dev/null ;;
+    --classe-sessao-por) pl "$D" criar menu --classe-sessao-por "" >/dev/null ;;
+    *) pl "$D" criar menu --classe-sessao-justificativa "" >/dev/null ;;
+  esac
+  rc=$?
+  [ "$rc" -eq 4 ] && [ ! -f "$(fdir "$D" menu)/00-PLANEJAMENTO.md" ]; g_rc=$?
+  g_nome="gacs11-vazio${g_op#--classe-sessao}"
+  afirma "$g_nome" "$g_rc" "rc=$rc, nada gravado"
+done
+# A corrida do `criar` (CodeAnt no katosmv/login#75): outro `criar` do mesmo slug grava entre a
+# conferencia e a gravacao. Um `mv` e um `ln` falsos no PATH gravam o concorrente (orcamento 7/outro)
+# no ultimo instante. Antes, o `mv -f` o sobrescrevia e os dois diziam `criado`; agora o arquivo
+# nasce por link exclusivo, e quem perde cai no `ja_existe`, que compara e recusa.
+D="$G/acs-corrida"; rm -rf "$D"; nova_feature "$D" menu; A_ARQ="$(fdir "$D" menu)/00-PLANEJAMENTO.md"
+CO="$G/acs-corrida-bin"; rm -rf "$CO"; mkdir -p "$CO"
+D2="$G/acs-corrida-fonte"; rm -rf "$D2"; nova_feature "$D2" menu; pl "$D2" criar menu 7 outro >/dev/null
+cp "$(fdir "$D2" menu)/00-PLANEJAMENTO.md" "$CO/concorrente.md"
+for g_cmd in mv ln; do
+  g_real="$(command -v "$g_cmd")"
+  printf '#!/bin/sh\nfor a in "$@"; do d="$a"; done\ncase "$d" in */00-PLANEJAMENTO.md) [ -e "%s/feito" ] || { : > "%s/feito"; cp "%s/concorrente.md" "$d"; } ;; esac\nexec "%s" "$@"\n' \
+    "$CO" "$CO" "$CO" "$g_real" > "$CO/$g_cmd"
+  chmod +x "$CO/$g_cmd"
+done
+s="$(cd "$D" && PATH="$CO:$PATH" bash "$PL" criar menu 3 buildx --classe-sessao raciocinio_normal --classe-sessao-por orquestra 2>&1)"; rc=$?
+[ "$rc" -eq 4 ] && [ "$(fmv "$A_ARQ" max_reprovacoes_f5)" = 7 ] && [ "$(fmv "$A_ARQ" orcamento_declarado_por)" = outro ]
+afirma "gacs13-corrida-do-criar-nao-sobrescreve" $? "rc=$rc, $(fmv "$A_ARQ" max_reprovacoes_f5)/$(fmv "$A_ARQ" orcamento_declarado_por)"
+# link pendente no lugar do arquivo: erro de contrato, nunca o refazer sem fim (Codex na revisao do DS-213)
+D="$G/acs-link"; rm -rf "$D"; nova_feature "$D" menu; mkdir -p "$(fdir "$D" menu)"; ln -s nao-existe "$(fdir "$D" menu)/00-PLANEJAMENTO.md"
+if command -v timeout >/dev/null 2>&1; then (cd "$D" && timeout 20 bash "$PL" criar menu >/dev/null 2>&1); rc=$?; else pl "$D" criar menu >/dev/null; rc=$?; fi
+[ "$rc" -eq 4 ]; afirma "gacs14-link-pendente-e-contrato" $? "rc=$rc (124 = nao terminou)"
+# ...nem pelo legado: o `avanca` de uma feature anterior ao contrato nao grava por cima do link (Codex)
+D="$G/acs-link2"; rm -rf "$D"; nova_feature "$D" menu; F="$(fdir "$D" menu)"; mkdir -p "$F/base"; printf 'd\n' > "$F/00-DECISOES.md"
+ln -s nao-existe "$F/00-PLANEJAMENTO.md"
+pl "$D" avanca menu f2 >/dev/null; rc=$?
+[ "$rc" -eq 4 ] && [ -L "$F/00-PLANEJAMENTO.md" ]; afirma "gacs15-avanca-nao-grava-por-cima-do-link" $? "rc=$rc"
+# W_EXCLUSIVO do ambiente nao vale: so o `criar` o liga (Codex)
+D="$G/acs-env"; rm -rf "$D"; nova_feature "$D" menu
+(cd "$D" && W_EXCLUSIVO=1 W_PERDEU=1 bash "$PL" criar menu >/dev/null 2>&1); rc=$?
+[ "$rc" -eq 0 ] && [ -f "$(fdir "$D" menu)/00-PLANEJAMENTO.md" ]; afirma "gacs16-w-do-ambiente-nao-vale" $? "rc=$rc"
+# A regra 21 traz a excecao "sem worktree" da F1 (CodeAnt no conselhos#296)
+tr -d '\r' < "$SK/SKILL.md" | grep -qF 'Com git, e sem o pedido explícito de "sem worktree" (F1, Passo 0), ela nasce em worktree próprio'
+afirma "gacs12-regra-21-com-a-excecao-da-f1" $? "SKILL.md"
 # Modo subagente (Conselhos, OC-2026-0011; DS-209): os hooks seguem o `cwd` do payload, que `git -C`
 # e `cd` no Bash nao mudam, e o rastro caia no checkout principal (bancada do ExpxDev 0.13.22).
 tr -d '\r' < "$SK/SKILL.md" | grep -q 'subagente comum' && tr -d '\r' < "$SK/SKILL.md" | grep -qF 'git -C' \

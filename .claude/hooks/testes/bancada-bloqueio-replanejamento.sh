@@ -242,6 +242,9 @@ afirma "jr10-saida-sem-rota-e-indisponivel" $? "127, 70, a 1 sem a linha e qualq
 # a excecao nao tratada saia 1, o codigo de achados (CodeAnt no katosmv/login#73): so a linha prova o achado
 tem "$EXEC" '**Saída 1** com a última linha `<T-NN.MM> achados`'
 afirma "jr11-saida-1-so-com-a-linha" $? "a saida 1 so e achado com a linha <T-NN.MM> achados"
+# o nucleo tambem deixa aberto o achado sem vinculo a uma linha da task (CodeAnt no conselhos#296)
+tem "$EXEC" 'há achado aberto: em linha que a task alterou, ou sem vínculo a uma linha de um arquivo da task'
+afirma "jr12-saida-1-cobre-o-achado-sem-vinculo" $? "arquivo fora da task ou sem linha"
 
 printf '%s' "$E_SCRIPT" | grep -Eq 'trabalho_novo|decisao_humana|recurso_externo|falha_tecnica|legado'; [ $? -ne 0 ]
 afirma "j10-vocabulario-e-da-sprintx" $? "nenhuma classe do BuildX nem legado"

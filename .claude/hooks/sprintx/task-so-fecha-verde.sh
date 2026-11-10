@@ -55,6 +55,12 @@ RE_CONCLUIDA=$'status:[ \t]*concluida'
 # Percorre os blocos de task do texto novo; para cada um que esta `concluida`,
 # confere suite verde e os dois testes preenchidos.
 PROBLEMAS="$(printf '%s' "$NOVO" | awk '
+  # escalar em bloco (`chave: |` ou `>`): as linhas mais indentadas que a chave sao texto,
+  # nunca chaves (DS-212; o `_parse` da runx faz o mesmo, DR-112)
+  BEGIN { bs = -1 }
+  { ind0 = match($0, /[^ \t]/) - 1 }
+  bs >= 0 && ($0 ~ /^[ \t]*$/ || ind0 > bs) { next }
+  { bs = -1 }
   function fecha(  msg) {
     if (id != "" && concluida) {
       msg = ""
@@ -66,10 +72,11 @@ PROBLEMAS="$(printf '%s' "$NOVO" | awk '
     id=""; concluida=0; suite=""; ti=0; tf=0
   }
   /^[ \t]*-[ \t]*id:/ { fecha(); id=$3; sub(/^[ \t]+/,"",id) }
-  /status:[ \t]*concluida/      { concluida=1 }
+  /^[ \t]*(-[ \t]+)?status:[ \t]*concluida[ \t]*(#.*)?$/ { concluida=1 }
   /suite:/                      { s=$0; sub(/.*suite:[ \t]*/,"",s); sub(/[ \t]+$/,"",s); suite=s }
   /teste_integracao:/           { v=$0; sub(/.*teste_integracao:[ \t]*/,"",v); gsub(/[ \t"'"'"']/,"",v); if (v != "" && v != "null") ti=1 }
   /teste_funcional:/            { v=$0; sub(/.*teste_funcional:[ \t]*/,"",v);  gsub(/[ \t"'"'"']/,"",v); if (v != "" && v != "null") tf=1 }
+  /:[ \t]*[|>][+-]?[1-9]?[+-]?[ \t]*(#.*)?$/ { bs = ($0 ~ /^[ \t]*-[ \t]/) ? ind0 + 2 : ind0 }
   END { fecha() }
 ')"
 
@@ -84,9 +91,23 @@ PROBLEMAS="$(printf '%s' "$NOVO" | awk '
 # que nao e id, e avisa em obrigatoria, em vez de se fundir a task de cima.
 concluidas() { awk '
   function fecha() { if (id != "" && c) print id; id=""; c=0 }
-  /^[ \t]*-[ \t]*id:/ { fecha(); id=$3; sub(/^[ \t]+/,"",id); ind = match($0, /-/) }
+  # escalar em bloco (`chave: |` ou `>`): as linhas mais indentadas que a chave sao texto,
+  # nunca chaves (DS-212; o `_parse` da runx faz o mesmo, DR-112)
+  BEGIN { bs = -1 }
+  { ind0 = match($0, /[^ \t]/) - 1 }
+  bs >= 0 && ($0 ~ /^[ \t]*$/ || ind0 > bs) { next }
+  { bs = -1 }
+  # o id como o YAML o le: sem as aspas de um par das pontas e sem o comentario; vazio vira `?`
+  /^[ \t]*-[ \t]*id:/ { fecha(); v = $0; sub(/^[ \t]*-[ \t]*id:[ \t]*/, "", v)
+    if (v ~ /^"/) { v = substr(v, 2); q = index(v, "\""); id = q ? substr(v, 1, q - 1) : "" }
+    else if (v ~ /^\047/) { v = substr(v, 2); q = index(v, "\047"); id = q ? substr(v, 1, q - 1) : "" }
+    else { id = v; sub(/[ \t].*/, "", id); if (id ~ /^#/) id = "" }
+    if (id == "") id = "?"
+    ind = match($0, /-/) }
   ind && /^[ \t]*-[ \t]+[A-Za-z_][A-Za-z0-9_]*:/ && !/^[ \t]*-[ \t]*id:/ && match($0, /-/) == ind { fecha(); id = "?" }
-  /status:[ \t]*concluida/ { c=1 }
+  # so a chave `status`, nunca o texto de outro campo (uma nota) que a cite (conselhos#296)
+  /^[ \t]*(-[ \t]+)?status:[ \t]*concluida[ \t]*(#.*)?$/ { c=1 }
+  /:[ \t]*[|>][+-]?[1-9]?[+-]?[ \t]*(#.*)?$/ { bs = ($0 ~ /^[ \t]*-[ \t]/) ? ind0 + 2 : ind0 }
   END { fecha() }'; }
 SEM_EVIDENCIA=""
 REL_TASKS="${ALVO#"$RAIZ"/}"
@@ -103,7 +124,8 @@ if [ -n "$SLUG" ]; then
   fi
   RE_ID='^T-([0-9]+|[0-9]{2}\.[0-9]{2})$'
   while IFS= read -r t; do
-    case $'\n'"$ANTES"$'\n' in *$'\n'"$t"$'\n'*) continue ;; esac
+    # `?` (sem id) nunca e "ja concluida": duas tasks sem id teriam o mesmo marcador (CodeAnt no sprintx#73)
+    if [ "$t" != "?" ]; then case $'\n'"$ANTES"$'\n' in *$'\n'"$t"$'\n'*) continue ;; esac; fi
     # id fora da forma nao vira caminho, e a evidencia nao pode ser conferida: avisa em obrigatoria
     if [[ $t =~ $RE_ID ]]; then NOVAS="$NOVAS $t"; else FORA_DA_FORMA="$FORA_DA_FORMA $t"; fi
   done <<EOF
@@ -126,9 +148,14 @@ EOF
       PROBLEMAS="${PROBLEMAS:+$PROBLEMAS
 }$t: id fora da forma T-NN.MM, a evidencia da revisao por task nao pode ser conferida"
     done
+    # link em qualquer ponto do caminho nao vale: a pasta `revisao` linkada para fora da worktree (conselhos#296)
+    LINK_NO_CAMINHO=""
+    for p in docs docs/entregas "docs/entregas/$SLUG" "docs/entregas/$SLUG/revisao"; do
+      [ ! -L "$RAIZ/$p" ] || LINK_NO_CAMINHO=1
+    done
     for t in $NOVAS; do
       EV="$RAIZ/docs/entregas/$SLUG/revisao/$t.json"
-      if [ ! -f "$EV" ] || [ -L "$EV" ]; then
+      if [ -n "$LINK_NO_CAMINHO" ] || [ ! -f "$EV" ] || [ -L "$EV" ]; then
         SEM_EVIDENCIA=1
         PROBLEMAS="${PROBLEMAS:+$PROBLEMAS
 }$t: sem evidencia da revisao por task (docs/entregas/$SLUG/revisao/$t.json) em modo obrigatoria"

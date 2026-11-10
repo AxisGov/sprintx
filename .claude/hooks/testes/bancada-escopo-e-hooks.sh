@@ -2155,7 +2155,7 @@ te_edit() { # te_edit <cwd> <file_path> <old_string> <new_string>
 te_roda() { # te_roda <json> — "rc/classe" do task-so-fecha-verde na fixture
   local o r
   o="$(printf '%s' "$1" | (cd "$TE_FX" && EXPX_SESSAO=t3e@1 CLAUDECODE=1 bash "$H/sprintx/task-so-fecha-verde.sh") 2>&1)"; r=$?
-  case "$o" in "") printf '%s/silencio' "$r" ;; *"evidencia da revisao por task"*) printf '%s/evidencia' "$r" ;; *) printf '%s/outro' "$r" ;; esac
+  case "$o" in "") printf '%s/silencio' "$r" ;; *"id fora da forma"*) printf '%s/forma' "$r" ;; *"evidencia da revisao por task"*) printf '%s/evidencia' "$r" ;; *) printf '%s/outro' "$r" ;; esac
 }
 te_caso() { # te_caso <nome> <esperado> <leitor> <evidencia:nenhuma|arquivo|link> <json>
   t_fx "$TE_FX"; te_leitor "$TE_FX" "$3"
@@ -2191,10 +2191,30 @@ TE_E3="$(te_edit "$TE_FX" "$TE_FX/$T_TASKS" 'status: em_andamento' $'status: con
 te_caso edit-sem-id-nao-confere 0/silencio obrigatoria nenhuma "$TE_E3"
 # id fora da forma: a evidencia nao pode ser conferida, e isso avisa (revisao do runx#20, o mesmo hook)
 TE_WM="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(t_conteudo fecha-ok | sed 's/T-01\.02/T-1.2/')")"
-te_caso id-fora-da-forma-avisa 0/evidencia obrigatoria nenhuma "$TE_WM"
+te_caso id-fora-da-forma-avisa 0/forma obrigatoria nenhuma "$TE_WM"
 # task sem id, no mesmo nivel das outras: tambem nao pode ser conferida (Codex na revisao do DS-211)
 TE_WS="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks:\n  - id: T-01.01\n    status: em_andamento\n  - status: concluida\n    suite: verde\n    teste_integracao: chama a api\n    teste_funcional: dado x entao y\n---\n')")"
-te_caso task-sem-id-avisa 0/evidencia obrigatoria nenhuma "$TE_WS"
+te_caso task-sem-id-avisa 0/forma obrigatoria nenhuma "$TE_WS"
+# CodeAnt no conselhos#296: o id vazio avisa; o id entre aspas e o id (o YAML tira as aspas); e link
+# em qualquer ponto do caminho da evidencia (a pasta `revisao`) nao vale
+TE_WV="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(t_conteudo fecha-ok | sed 's/- id: T-01\.02/- id:/')")"
+te_caso id-vazio-avisa 0/forma obrigatoria nenhuma "$TE_WV"
+TE_WQ="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(t_conteudo fecha-ok | sed 's/- id: T-01\.02/- id: "T-01.02"/')")"
+te_caso id-entre-aspas-com-evidencia-silencia 0/silencio obrigatoria arquivo "$TE_WQ"
+te_caso id-entre-aspas-sem-evidencia-e-falta-de-evidencia 0/evidencia obrigatoria nenhuma "$TE_WQ"
+TE_PREP='mkdir -p "$TE_FX/../evid-fora" "$TE_FX/docs/entregas/feat"; printf "{}" > "$TE_FX/../evid-fora/T-01.02.json"; ln -s "$TE_FX/../evid-fora" "$TE_FX/docs/entregas/feat/revisao"' \
+  te_caso pasta-revisao-link-nao-vale 0/evidencia obrigatoria nenhuma "$TE_W"
+# `status: concluida` dentro de outro campo (uma nota) nao conclui a task: so a chave `status` (CodeAnt no conselhos#296)
+TE_WN="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks:\n  - id: T-01.02\n    status: em_andamento\n    nota: depois vira (status: concluida)\n---\n')")"
+te_caso status-dentro-de-nota-nao-conclui 0/silencio obrigatoria nenhuma "$TE_WN"
+# ...nem dentro de um escalar em bloco (`objetivo: |`), que e texto (Codex, conselhos#296; DR-112 na runx)
+TE_WB="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks:\n  - id: T-01.02\n    status: em_andamento\n    objetivo: |\n      depois vira\n      status: concluida\n---\n')")"
+te_caso status-dentro-de-bloco-nao-conclui 0/silencio obrigatoria nenhuma "$TE_WB"
+TE_WB2="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks:\n  - objetivo: >-\n      status: concluida\n    id: T-01.02\n    status: em_andamento\n---\n')")"
+te_caso status-em-bloco-no-item-nao-conclui 0/silencio obrigatoria nenhuma "$TE_WB2"
+# task sem id ja concluida no disco nao esconde outra sem id que conclui agora: `?` nunca e "ja concluida" (CodeAnt no sprintx#73)
+TE_PREP='printf -- "---\ntrabalho_id: feat\ntasks:\n  - id: T-01.01\n    status: em_andamento\n  - status: concluida\n---\n" > "$TE_FX/$T_TASKS"' \
+  te_caso sem-id-ja-concluida-nao-esconde-a-nova 0/forma obrigatoria nenhuma "$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks:\n  - id: T-01.01\n    status: em_andamento\n  - status: concluida\n  - status: concluida\n    suite: verde\n---\n')")"
 
 # Estrutural. A auditoria: estes sao os hooks que leem pathname do payload, e a variavel de cada
 # um. Cada par passa por rastro_caminho_em ANTES de qualquer uso que nao seja a propria leitura

@@ -61,6 +61,8 @@ TEMPLATE="$SK/assets/TEMPLATE-PLANEJAMENTO.md"
 E_RECUSADO=2; E_PERSISTENCIA=3; E_CONTRATO=4; E_TRANSICAO=5; E_USO=64
 
 falha() { local c="$1"; shift; printf 'planejamento: %s\n' "$*" >&2; exit "$c"; }
+# o modo exclusivo do `criar` (DS-213) nunca vem do ambiente: so o `criar` o liga
+W_EXCLUSIVO=""; W_PERDEU=""; W_REFEZ=""
 
 . "$SK/scripts/caminho-git.sh" || falha "$E_USO" "scripts/caminho-git.sh ausente"
 . "$SK/scripts/lib/trava-autorizacao-f6.sh" || falha "$E_USO" "scripts/lib/trava-autorizacao-f6.sh ausente"
@@ -863,6 +865,7 @@ EOF3
 # le_planejamento — carrega e valida o arquivo inteiro. Arquivo que nao passa
 # aqui e contrato invalido: nada e decidido em cima dele.
 le_planejamento() {
+  [ ! -L "$ARQ" ] || falha "$E_CONTRATO" "${PREFIXO}00-PLANEJAMENTO.md e um link: o planejamento e arquivo comum"
   [ -f "$ARQ" ] || falha "$E_CONTRATO" "${PREFIXO}00-PLANEJAMENTO.md nao existe"
   fm_carrega "$ARQ"
   [ "${FM_expx_schema-}" = 1 ] || falha "$E_CONTRATO" "expx_schema deve ser 1"
@@ -1086,6 +1089,17 @@ $prosa" awk '
   } > "$tmp" || { rm -f "$tmp"; falha "$E_CONTRATO" "falha ao gravar ${PREFIXO}00-PLANEJAMENTO.md"; }
   # O comentario final do template e so documentacao da forma: fora do arquivo gerado.
   sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$tmp" > "$tmp.2" && mv -f "$tmp.2" "$tmp"
+  # No `criar` (W_EXCLUSIVO=1) o arquivo nasce por link exclusivo do temporario completo: dois
+  # `criar` do mesmo slug nao se sobrescrevem (CodeAnt no katosmv/login#75). Quem perde marca
+  # W_PERDEU e o `criar` refaz o caminho do `ja_existe`. Sistema de arquivos sem link: o `mv`.
+  if [ "${W_EXCLUSIVO:-}" = 1 ]; then
+    # o temporario linkado ao plano nao fica para tras numa saida tratavel (o SIGKILL nao se trata)
+    trap "rm -f -- $(printf '%q' "$tmp")" EXIT
+    trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM
+    if ln "$tmp" "$ARQ" 2>/dev/null; then rm -f "$tmp"; trap - EXIT HUP INT TERM; return 0; fi
+    trap - EXIT HUP INT TERM
+    if [ -e "$ARQ" ] || [ -L "$ARQ" ]; then rm -f "$tmp"; W_PERDEU=1; return 0; fi
+  fi
   mv -f "$tmp" "$ARQ"
 }
 
@@ -1274,7 +1288,8 @@ ultimo_veredito() {
 # de uma feature legada. A tabela antiga, com UMA correcao: auditoria NAO nunca
 # volta a apontar para a F5 sobre o mesmo plano — o estado derivado e replanejar.
 estado_efetivo() {
-  if [ -f "$ARQ" ]; then le_planejamento; E_ESTADO="$P_ESTADO"; E_FONTE=planejamento; return; fi
+  # link, inclusive pendente, nao e feature legada: o `le_planejamento` o recusa (DS-213)
+  if [ -f "$ARQ" ] || [ -L "$ARQ" ]; then le_planejamento; E_ESTADO="$P_ESTADO"; E_FONTE=planejamento; return; fi
   E_FONTE=legado
   if [ ! -d "$PASTA/base" ] || [ ! -f "$PASTA/00-DECISOES.md" ]; then E_ESTADO=null
   elif [ ! -d "$PASTA/sprint-01" ]; then E_ESTADO=aguardando_f3
@@ -1492,6 +1507,7 @@ EOF
 # ------------------------------------------------------------------ comandos
 
 cmd_criar() {
+  local orig=("$@")
   local uso="uso: criar <slug> [max_reprovacoes_f5|null] [declarado_por|null] [max_replanejamentos_f6|null] [--classe-sessao <classe> --classe-sessao-por <id> [--classe-sessao-justificativa <texto>]]"
   # os posicionais vem antes; as opcoes da classe da sessao, depois (DS-210)
   local pos=() cs="" cs_por="" cs_just="" cs_dada=""
@@ -1499,6 +1515,8 @@ cmd_criar() {
     case "$1" in
       --classe-sessao|--classe-sessao-por|--classe-sessao-justificativa)
         [ $# -ge 2 ] || falha "$E_USO" "$1 exige valor; $uso"
+        # vazio explicito nao e "sem declaracao": quem nao declara nao passa a opcao (conselhos#296)
+        [ -n "$2" ] || falha "$E_CONTRATO" "$1 com valor vazio: para nao declarar a classe da sessao, nao passe a opcao"
         case "$1" in
           --classe-sessao) cs="$2" ;;
           --classe-sessao-por) cs_por="$2" ;;
@@ -1522,7 +1540,8 @@ cmd_criar() {
   valida_orcamento "$max" "$por" "$max6"
   valida_orcamento_f6 "$max6" "$por"
   [ -z "$cs_dada" ] || valida_classe_sessao "$cs" "$cs_por" "$cs_just"
-  if [ -f "$ARQ" ]; then
+  # link (inclusive pendente) e entrada existente: o `le_planejamento` o recusa
+  if [ -f "$ARQ" ] || [ -L "$ARQ" ]; then
     le_planejamento
     if [ -n "$cs_dada" ] && { [ "$P_CS" != "$cs" ] || [ "$P_CS_POR" != "$cs_por" ] || [ "$P_CS_JUST" != "$cs_just" ]; }; then
       falha "$E_CONTRATO" "00-PLANEJAMENTO.md ja registra classe_sessao $P_CS/$P_CS_POR; o pedido traz $cs/$cs_por — a classe da sessao nao muda (v1)"
@@ -1542,17 +1561,21 @@ cmd_criar() {
     return 0
   fi
   if [ -n "$cs_dada" ]; then CS_CLASSE="$cs"; CS_POR="$cs_por"; CS_JUST="$cs_just"; fi
+  W_PERDEU=""
   estado_efetivo
   if [ "$E_ESTADO" != null ]; then
     # Feature legada ja adiantada: nasce com o estado que o disco mostra, e com
     # o orcamento que o caller declarou agora.
-    migra_legado "$max" "$por" "$max6"
+    W_EXCLUSIVO=1 migra_legado "$max" "$por" "$max6"
+    # outro `criar` gravou primeiro: refaz pelo `ja_existe`, que compara e recusa a diferenca
+    if [ "$W_PERDEU" = 1 ]; then W_PERDEU=""; [ -z "${W_REFEZ:-}" ] || falha "$E_PERSISTENCIA" "00-PLANEJAMENTO.md mudou duas vezes durante o criar"; W_REFEZ=1 cmd_criar "${orig[@]}"; return $?; fi
     le_planejamento
     printf 'planejamento=migrado_legado\nmax_reprovacoes_f5=%s\norcamento_declarado_por=%s\nmax_replanejamentos_f6=%s\nestado=%s\n' "$max" "$por" "$max6" "$P_ESTADO"
     return 0
   fi
   f6_novo "$max6"
-  escreve "$max" "$por" null 0 ""
+  W_EXCLUSIVO=1 escreve "$max" "$por" null 0 ""
+  if [ "$W_PERDEU" = 1 ]; then W_PERDEU=""; [ -z "${W_REFEZ:-}" ] || falha "$E_PERSISTENCIA" "00-PLANEJAMENTO.md mudou duas vezes durante o criar"; W_REFEZ=1 cmd_criar "${orig[@]}"; return $?; fi
   printf 'planejamento=criado\nmax_reprovacoes_f5=%s\norcamento_declarado_por=%s\nmax_replanejamentos_f6=%s\nestado=null\n' "$max" "$por" "$max6"
 }
 
