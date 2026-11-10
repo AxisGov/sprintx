@@ -2212,6 +2212,24 @@ TE_WB="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\nt
 te_caso status-dentro-de-bloco-nao-conclui 0/silencio obrigatoria nenhuma "$TE_WB"
 TE_WB2="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks:\n  - objetivo: >-\n      status: concluida\n    id: T-01.02\n    status: em_andamento\n---\n')")"
 te_caso status-em-bloco-no-item-nao-conclui 0/silencio obrigatoria nenhuma "$TE_WB2"
+# CodeAnt no conselhos#298: `status: "concluida"` entre aspas e YAML valido, e um comentario que termina
+# em `|` nao abre escalar em bloco (regressao da DS-212). Testes vazios: as regras antigas avisam.
+TE_WA="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks:\n  - id: T-01.02\n    status: "concluida"\n    suite: verde\n    teste_integracao:\n    teste_funcional:\n---\n')")"
+te_caso status-entre-aspas-conclui 0/outro nenhum nenhuma "$TE_WA"
+TE_WC="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks:\n  - id: T-01.02\n  # nota: |\n    status: concluida\n    suite: verde\n    teste_integracao:\n    teste_funcional:\n---\n')")"
+te_caso comentario-com-barra-nao-abre-bloco 0/outro nenhum nenhuma "$TE_WC"
+TE_WC2="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks:\n  - id: T-01.02\n  # nota: |\n    status: concluida\n    suite: verde\n    teste_integracao: chama a api\n    teste_funcional: dado x entao y\n---\n')")"
+te_caso comentario-com-barra-e-evidencia 0/evidencia obrigatoria nenhuma "$TE_WC2"
+TE_WA2="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks:\n  - id: T-01.02\n    status: \047concluida\047\n    suite: verde\n    teste_integracao:\n    teste_funcional:\n---\n')")"
+te_caso status-entre-aspas-simples-conclui 0/outro nenhum nenhuma "$TE_WA2"
+# CRLF: o \r no fim da linha nao impede o `status` ancorado (conselhos#298)
+TE_WR="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\r\ntrabalho_id: feat\r\ntasks:\r\n  - id: T-01.02\r\n    status: concluida\r\n    suite: verde\r\n    teste_integracao:\r\n    teste_funcional:\r\n---\r\n')")"
+# o payload real escapa o \r como \\r (o t_esc do harness nao o escapa)
+TE_WR="${TE_WR//$'\r'/\\r}"
+te_caso crlf-conclui 0/outro nenhum nenhuma "$TE_WR"
+# tab indenta 4, como no `_parse` da runx: `\t\tstatus: concluida` dentro de `objetivo: |` e texto (conselhos#298)
+TE_WT="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks:\n  - id: T-01.02\n    status: em_andamento\n    objetivo: |\n\t\tstatus: concluida\n---\n')")"
+te_caso tab-no-bloco-e-texto 0/silencio obrigatoria nenhuma "$TE_WT"
 # task sem id ja concluida no disco nao esconde outra sem id que conclui agora: `?` nunca e "ja concluida" (CodeAnt no sprintx#73)
 TE_PREP='printf -- "---\ntrabalho_id: feat\ntasks:\n  - id: T-01.01\n    status: em_andamento\n  - status: concluida\n---\n" > "$TE_FX/$T_TASKS"' \
   te_caso sem-id-ja-concluida-nao-esconde-a-nova 0/forma obrigatoria nenhuma "$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks:\n  - id: T-01.01\n    status: em_andamento\n  - status: concluida\n  - status: concluida\n    suite: verde\n---\n')")"
