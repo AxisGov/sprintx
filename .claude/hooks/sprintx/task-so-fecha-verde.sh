@@ -91,7 +91,7 @@ case "$REL_TASKS" in
   docs/sprintx/features/*/sprint-*/tasks.md) SLUG="${REL_TASKS#docs/sprintx/features/}"; SLUG="${SLUG%%/*}" ;;
   *) SLUG="" ;;
 esac
-NOVAS=""
+NOVAS=""; FORA_DA_FORMA=""
 if [ -n "$SLUG" ]; then
   if [ -n "$(rastro_tool_input_get "$ENTRADA" content)" ]; then
     ANTES="$( { [ -f "$RAIZ/$REL_TASKS" ] && concluidas < "$RAIZ/$REL_TASKS"; } 2>/dev/null)"
@@ -100,15 +100,15 @@ if [ -n "$SLUG" ]; then
   fi
   RE_ID='^T-([0-9]+|[0-9]{2}\.[0-9]{2})$'
   while IFS= read -r t; do
-    [[ $t =~ $RE_ID ]] || continue
     case $'\n'"$ANTES"$'\n' in *$'\n'"$t"$'\n'*) continue ;; esac
-    NOVAS="$NOVAS $t"
+    # id fora da forma nao vira caminho, e a evidencia nao pode ser conferida: avisa em obrigatoria
+    if [[ $t =~ $RE_ID ]]; then NOVAS="$NOVAS $t"; else FORA_DA_FORMA="$FORA_DA_FORMA $t"; fi
   done <<EOF
 $(printf '%s\n' "$NOVO" | concluidas)
 EOF
 fi
 LEITOR="$RAIZ/.expx/marketplace/plugins/expx/nucleo/scripts/expx-fatiamento.mjs"
-if [ -n "$NOVAS" ] && [ -f "$LEITOR" ] && command -v node >/dev/null 2>&1; then
+if [ -n "$NOVAS$FORA_DA_FORMA" ] && [ -f "$LEITOR" ] && command -v node >/dev/null 2>&1; then
   MODO_REVISAO=""
   if SAIDA_LEITOR="$(node "$LEITOR" --formato env --raiz "$RAIZ" 2>/dev/null)"; then
     while IFS= read -r l; do
@@ -118,6 +118,11 @@ $SAIDA_LEITOR
 EOF
   fi
   if [ "$MODO_REVISAO" = obrigatoria ]; then
+    for t in $FORA_DA_FORMA; do
+      SEM_EVIDENCIA=1
+      PROBLEMAS="${PROBLEMAS:+$PROBLEMAS
+}$t: id fora da forma T-NN.MM, a evidencia da revisao por task nao pode ser conferida"
+    done
     for t in $NOVAS; do
       EV="$RAIZ/docs/entregas/$SLUG/revisao/$t.json"
       if [ ! -f "$EV" ] || [ -L "$EV" ]; then

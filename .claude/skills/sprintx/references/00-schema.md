@@ -915,6 +915,8 @@ Regras duras deste kind:
   `sprintx` a declara, pelas opções do `planejamento.sh criar`, e nenhum outro subcomando a escreve;
   toda regravação a preserva, e ela não muda mais na feature (v1). Sem declaração, as três são
   `null`; o arquivo anterior à 0.13.22, sem elas, vale `null` e as ganha na próxima regravação.
+  Limite da v1: a primeira sessão da feature abre antes do `00-PLANEJAMENTO.md`, e quem a abre é
+  quem declara a classe, com o modelo dela; o `expx sessao` serve às sessões seguintes.
   Incoerência (classe sem dono, dono ou justificativa sem classe, justificativa fora de
   `profundo_excepcional`) é erro de contrato.
 - `estado` segue o enum `estado` (planejamento). É `null` da F1 até o fim da F2; a partir daí,

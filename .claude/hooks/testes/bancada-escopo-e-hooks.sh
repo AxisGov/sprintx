@@ -2155,7 +2155,7 @@ te_edit() { # te_edit <cwd> <file_path> <old_string> <new_string>
 te_roda() { # te_roda <json> — "rc/classe" do task-so-fecha-verde na fixture
   local o r
   o="$(printf '%s' "$1" | (cd "$TE_FX" && EXPX_SESSAO=t3e@1 CLAUDECODE=1 bash "$H/sprintx/task-so-fecha-verde.sh") 2>&1)"; r=$?
-  case "$o" in "") printf '%s/silencio' "$r" ;; *"sem evidencia da revisao por task"*) printf '%s/evidencia' "$r" ;; *) printf '%s/outro' "$r" ;; esac
+  case "$o" in "") printf '%s/silencio' "$r" ;; *"evidencia da revisao por task"*) printf '%s/evidencia' "$r" ;; *) printf '%s/outro' "$r" ;; esac
 }
 te_caso() { # te_caso <nome> <esperado> <leitor> <evidencia:nenhuma|arquivo|link> <json>
   t_fx "$TE_FX"; te_leitor "$TE_FX" "$3"
@@ -2189,6 +2189,9 @@ te_caso edit-de-task-ja-concluida-nao-exige 0/silencio obrigatoria nenhuma "$TE_
 # limite congelado: Edit sem `- id:` no new_string nao atribui a task, e nada e conferido
 TE_E3="$(te_edit "$TE_FX" "$TE_FX/$T_TASKS" 'status: em_andamento' $'status: concluida\n    suite: verde')"
 te_caso edit-sem-id-nao-confere 0/silencio obrigatoria nenhuma "$TE_E3"
+# id fora da forma: a evidencia nao pode ser conferida, e isso avisa (revisao do runx#20, o mesmo hook)
+TE_WM="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(t_conteudo fecha-ok | sed 's/T-01\.02/T-1.2/')")"
+te_caso id-fora-da-forma-avisa 0/evidencia obrigatoria nenhuma "$TE_WM"
 
 # Estrutural. A auditoria: estes sao os hooks que leem pathname do payload, e a variavel de cada
 # um. Cada par passa por rastro_caminho_em ANTES de qualquer uso que nao seja a propria leitura
