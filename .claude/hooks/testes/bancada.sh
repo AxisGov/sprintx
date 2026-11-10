@@ -870,7 +870,9 @@ tr -d '\r' < "$SK/SKILL.md" | grep -q 'subagente comum' && tr -d '\r' < "$SK/SKI
 afirma "gacs9-skill-proibe-subagente-fora-da-worktree" $? "SKILL.md"
 # O subagente com isolation "worktree" do Claude Code adota a propria worktree na F1 (ExpxDev 0.13.26,
 # CONTRATO-expx-orquestracao 15.1): criar outra a deixaria longe do cwd que os hooks recebem (DS-216).
-tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'nucleo/scripts/expx-worktree-isolada.sh"`. Se ele imprime `isolada`, esta árvore é a worktree que o Claude Code criou para o subagente'
+tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF '[ -f "$R/$S" ] || R="$(git worktree list --porcelain | sed -n '\''1s/^worktree //p'\'')"; bash "$R/$S"` (o script da árvore atual, senão o do checkout principal' \
+  && tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'Sem ele nos dois lugares, com a raiz em `.claude/worktrees/agent-<id>`, pare e diga ("atualize o expx")' \
+  && tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'Se ele imprime `isolada`, esta árvore é a worktree que o Claude Code criou para o subagente'
 afirma "gsi1-f1-consulta-o-nucleo" $? "01-ingestao.md"
 tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'não crie outro worktree, que ficaria longe do `cwd` que os hooks recebem' \
   && tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'Com a árvore limpa (`git status --porcelain` vazio; suja, pare e diga)' \

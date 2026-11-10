@@ -255,7 +255,7 @@ tem "$EXEC" 'lock não foi atualizado' && tem "$EXEC" 'falso positivo conhecido'
 afirma "jr15-lock-nao-atualizado-e-falso-positivo-conhecido" $? "contestado com o diff do lock"
 # o lock alterado noutra coisa nao prova nada (CodeAnt no sprintx#75, CodeRabbit no runx#22)
 # e o diff sozinho tambem nao: o lock pode repetir a mudanca e manter a resolucao antiga (CodeAnt no expxdev#161)
-tem "$EXEC" 'mostrando nele a mesma mudança do `package.json` (a versão ou a dependência nova), e com a instalação congelada do lockfile (`npm ci` ou equivalente) passando com ele. Sem as duas provas, o achado é real: corrija o lock na task.'
+tem "$EXEC" 'mostrando nele a mesma mudança do `package.json` (a versão ou a dependência nova), e com a instalação congelada do lockfile (`npm ci` ou equivalente) passando com ele. Se o lock não traz a mudança, ou se a instalação congelada o recusa por não bater com o `package.json`, o achado é real: corrija o lock na task. Se ela falha por outro motivo (rede, registro, script de instalação), não há prova: registre a contestação com essa falha, e o desenvolvedor decide.'
 afirma "jr16-lock-com-a-mesma-mudanca-do-package-json" $? "o diff e a instalacao congelada: sem as duas, o achado e real"
 
 printf '%s' "$E_SCRIPT" | grep -Eq 'trabalho_novo|decisao_humana|recurso_externo|falha_tecnica|legado'; [ $? -ne 0 ]
