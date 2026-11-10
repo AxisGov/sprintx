@@ -2220,6 +2220,24 @@ TE_WC="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\nt
 te_caso comentario-com-barra-nao-abre-bloco 0/outro nenhum nenhuma "$TE_WC"
 TE_WC2="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks:\n  - id: T-01.02\n  # nota: |\n    status: concluida\n    suite: verde\n    teste_integracao: chama a api\n    teste_funcional: dado x entao y\n---\n')")"
 te_caso comentario-com-barra-e-evidencia 0/evidencia obrigatoria nenhuma "$TE_WC2"
+# ...nem o comentario no fim de uma linha de chave (`tasks: # nota: |`, `- id: T # nota: |`): a DS-214
+# so cobria a linha inteira de comentario (CodeAnt no katosmv/login#77, r4529263172 e r4529281624)
+TE_WI="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks: # nota: |\n  - id: T-01.02\n    status: concluida\n    suite: verde\n    teste_integracao:\n    teste_funcional:\n---\n')")"
+te_caso comentario-inline-com-barra-nao-abre-bloco 0/outro nenhum nenhuma "$TE_WI"
+TE_WI2="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks: # nota: |\n  - id: T-01.02\n    status: concluida\n    suite: verde\n    teste_integracao: chama a api\n    teste_funcional: dado x entao y\n---\n')")"
+te_caso comentario-inline-com-barra-e-evidencia 0/evidencia obrigatoria nenhuma "$TE_WI2"
+TE_WI3="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks:\n  - id: T-01.02 # nota: |\n    status: concluida\n    suite: verde\n    teste_integracao:\n    teste_funcional:\n---\n')")"
+te_caso comentario-inline-no-id-nao-abre-bloco 0/outro nenhum nenhuma "$TE_WI3"
+# o `#` entre aspas nao e comentario, e o `|` entre aspas nao abre escalar (Codex, revisao da DS-218)
+TE_WQ="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\nnota: "x: | # y"\ntasks:\n  - id: T-01.02\n    status: concluida\n    suite: verde\n    teste_integracao:\n    teste_funcional:\n---\n')")"
+te_caso aspas-com-barra-e-cerquilha-nao-abre-bloco 0/outro nenhum nenhuma "$TE_WQ"
+TE_WQ2="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\nnota: \047x: | # y\047\ntasks:\n  - id: T-01.02\n    status: concluida\n    suite: verde\n    teste_integracao: chama a api\n    teste_funcional: dado x entao y\n---\n')")"
+te_caso aspas-simples-com-barra-e-evidencia 0/evidencia obrigatoria nenhuma "$TE_WQ2"
+# a aspa dupla escapada (`\"`) nao fecha o texto (Codex, 2a rodada da DS-218)
+TE_WQ3="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\nnota: "x\\" foo: | # y"\ntasks:\n  - id: T-01.02\n    status: concluida\n    suite: verde\n    teste_integracao:\n    teste_funcional:\n---\n')")"
+te_caso aspas-com-escape-nao-abre-bloco 0/outro nenhum nenhuma "$TE_WQ3"
+TE_WQ4="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\nnota: "x\\" foo: | # y"\ntasks:\n  - id: T-01.02\n    status: concluida\n    suite: verde\n    teste_integracao: chama a api\n    teste_funcional: dado x entao y\n---\n')")"
+te_caso aspas-com-escape-e-evidencia 0/evidencia obrigatoria nenhuma "$TE_WQ4"
 TE_WA2="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks:\n  - id: T-01.02\n    status: \047concluida\047\n    suite: verde\n    teste_integracao:\n    teste_funcional:\n---\n')")"
 te_caso status-entre-aspas-simples-conclui 0/outro nenhum nenhuma "$TE_WA2"
 # CRLF: o \r no fim da linha nao impede o `status` ancorado (conselhos#298)

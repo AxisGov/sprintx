@@ -79,8 +79,11 @@ PROBLEMAS="$(printf '%s' "$NOVO" | awk '
   /suite:/                      { s=$0; sub(/.*suite:[ \t]*/,"",s); sub(/[ \t]+$/,"",s); suite=s }
   /teste_integracao:/           { v=$0; sub(/.*teste_integracao:[ \t]*/,"",v); gsub(/[ \t"'"'"']/,"",v); if (v != "" && v != "null") ti=1 }
   /teste_funcional:/            { v=$0; sub(/.*teste_funcional:[ \t]*/,"",v);  gsub(/[ \t"'"'"']/,"",v); if (v != "" && v != "null") tf=1 }
-  # comentario nunca abre escalar (`# nota: |`, regressao da DS-212; conselhos#298)
-  $0 !~ /^[ \t]*#/ && /:[ \t]*[|>][+-]?[1-9]?[+-]?[ \t]*(#.*)?$/ { bs = ($0 ~ /^[ \t]*-[ \t]/) ? ind0 + 2 : ind0 }
+  # comentario nunca abre escalar: nem a linha inteira (`# nota: |`, regressao da DS-212; conselhos#298)
+  # nem o fim de uma linha de chave (`tasks: # nota: |`; login#77): o indicador vem antes do comentario,
+  # e o texto entre aspas sai antes (o `#` e o `|` dentro dele nao contam; a dupla com `\"` escapado inteira)
+  $0 !~ /^[ \t]*#/ { sc = $0; gsub(/"([^"\\]|\\.)*"/, "\"\"", sc); gsub(/\047[^\047]*\047/, "\047\047", sc); sub(/[ \t]#.*$/, "", sc)
+    if (sc ~ /:[ \t]*[|>][+-]?[1-9]?[+-]?[ \t]*$/) bs = ($0 ~ /^[ \t]*-[ \t]/) ? ind0 + 2 : ind0 }
   END { fecha() }
 ')"
 
@@ -113,8 +116,11 @@ concluidas() { awk '
   ind && /^[ \t]*-[ \t]+[A-Za-z_][A-Za-z0-9_]*:/ && !/^[ \t]*-[ \t]*id:/ && match($0, /-/) == ind { fecha(); id = "?" }
   # so a chave `status`, nunca o texto de outro campo (uma nota) que a cite (conselhos#296)
   /^[ \t]*(-[ \t]+)?status:[ \t]*(concluida|"concluida"|\047concluida\047)[ \t]*(#.*)?$/ { c=1 }
-  # comentario nunca abre escalar (`# nota: |`, regressao da DS-212; conselhos#298)
-  $0 !~ /^[ \t]*#/ && /:[ \t]*[|>][+-]?[1-9]?[+-]?[ \t]*(#.*)?$/ { bs = ($0 ~ /^[ \t]*-[ \t]/) ? ind0 + 2 : ind0 }
+  # comentario nunca abre escalar: nem a linha inteira (`# nota: |`, regressao da DS-212; conselhos#298)
+  # nem o fim de uma linha de chave (`tasks: # nota: |`; login#77): o indicador vem antes do comentario,
+  # e o texto entre aspas sai antes (o `#` e o `|` dentro dele nao contam; a dupla com `\"` escapado inteira)
+  $0 !~ /^[ \t]*#/ { sc = $0; gsub(/"([^"\\]|\\.)*"/, "\"\"", sc); gsub(/\047[^\047]*\047/, "\047\047", sc); sub(/[ \t]#.*$/, "", sc)
+    if (sc ~ /:[ \t]*[|>][+-]?[1-9]?[+-]?[ \t]*$/) bs = ($0 ~ /^[ \t]*-[ \t]/) ? ind0 + 2 : ind0 }
   END { fecha() }'; }
 SEM_EVIDENCIA=""
 REL_TASKS="${ALVO#"$RAIZ"/}"

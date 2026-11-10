@@ -860,6 +860,12 @@ pl "$D" avanca menu f2 >/dev/null; rc=$?
 D="$G/acs-env"; rm -rf "$D"; nova_feature "$D" menu
 (cd "$D" && W_EXCLUSIVO=1 W_PERDEU=1 bash "$PL" criar menu >/dev/null 2>&1); rc=$?
 [ "$rc" -eq 0 ] && [ -f "$(fdir "$D" menu)/00-PLANEJAMENTO.md" ]; afirma "gacs16-w-do-ambiente-nao-vale" $? "rc=$rc"
+# o trap do temporario so sai depois do `rm`/`mv` do caminho sem link (nitpick do CodeAnt no katosmv/login#77)
+awk '/if \[ "\$\{W_EXCLUSIVO:-\}" = 1 \]; then/ { b = 1 } b && /^  fi$/ { exit } b && /^    trap - EXIT HUP INT TERM$/ { r = 1 } END { exit r }' "$PL"
+afirma "gacs18-trap-sai-depois-do-mv" $? "planejamento.sh"
+# o `mv` que falha nao vira `planejamento=criado`: os dois caminhos param com E_PERSISTENCIA (Codex, revisao da DS-218)
+[ "$(grep -cF 'mv -f "$tmp" "$ARQ" || ' "$PL")" -eq 2 ]
+afirma "gacs19-mv-que-falha-para" $? "planejamento.sh"
 # A regra 21 traz a excecao "sem worktree" da F1 (CodeAnt no conselhos#296)
 tr -d '\r' < "$SK/SKILL.md" | grep -qF 'Com git, e sem o pedido explícito de "sem worktree" (F1, Passo 0), ela nasce em worktree próprio'
 afirma "gacs12-regra-21-com-a-excecao-da-f1" $? "SKILL.md"
@@ -868,6 +874,28 @@ afirma "gacs12-regra-21-com-a-excecao-da-f1" $? "SKILL.md"
 tr -d '\r' < "$SK/SKILL.md" | grep -q 'subagente comum' && tr -d '\r' < "$SK/SKILL.md" | grep -qF 'git -C' \
   && tr -d '\r' < "$SK/SKILL.md" | grep -qF 'expx sessao <slug>'
 afirma "gacs9-skill-proibe-subagente-fora-da-worktree" $? "SKILL.md"
+# O subagente com isolation "worktree" do Claude Code adota a propria worktree na F1 (ExpxDev 0.13.26,
+# CONTRATO-expx-orquestracao 15.1): criar outra a deixaria longe do cwd que os hooks recebem (DS-216).
+tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF '[ -f "$R/$S" ] || R="$(git worktree list --porcelain | sed -n '\''1s/^worktree //p'\'')"; bash "$R/$S"` (o script da árvore atual, senão o do checkout principal' \
+  && tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'Sem ele nos dois lugares, com a raiz em `.claude/worktrees/agent-<id>`, pare e diga ("atualize o expx")' \
+  && tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'Se ele imprime `isolada`, esta árvore é a worktree que o Claude Code criou para o subagente'
+afirma "gsi1-f1-consulta-o-nucleo" $? "01-ingestao.md"
+tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'não crie outro worktree, que ficaria longe do `cwd` que os hooks recebem' \
+  && tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'Com a árvore limpa (`git status --porcelain` vazio; suja, pare e diga)' \
+  && tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'troque `git worktree add -b "$f" "<pasta>" "$n"` por `git switch -c "$f" --no-track "$n"`'
+afirma "gsi2-f1-troca-na-propria-arvore" $? "01-ingestao.md"
+tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'num outro worktree vivo, pare e diga (retome com uma sessão aberta lá, `expx sessao <slug>`)'
+afirma "gsi3-branch-ocupada-para" $? "01-ingestao.md"
+# o registro prunable (pasta movida ou apagada) segue a rota de sempre antes da troca (Codex, 2a rodada do item 3)
+tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'num worktree que o `git worktree list --porcelain` marca `prunable`, trate-o antes como diz o resto deste item (pare e pergunte; pasta apagada: `git worktree remove <caminho>`, e troque aqui; pasta movida e reparada: ela está viva)'
+afirma "gsi6-prunable-antes-da-troca" $? "01-ingestao.md"
+# a base da feature nao pode ser a worktree-agent-<id> (CodeRabbit no runx#23, o mesmo item 1 aqui)
+tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'Na worktree de um subagente isolado (item 2), a branch atual é a `worktree-agent-<id>`: no lugar dela vale a do checkout principal, `git -C "$(git worktree list --porcelain | sed -n '\''1s/^worktree //p'\'')" branch --show-current`, com o mesmo critério.'
+afirma "gsi7-base-do-checkout-principal" $? "01-ingestao.md"
+tr -d '\r' < "$SK/SKILL.md" | grep -qF 'O subagente com `isolation: "worktree"` do Claude Code é a exceção: ele adota a própria worktree no Passo 0 da F1'
+afirma "gsi4-regra-21-nomeia-a-excecao" $? "SKILL.md"
+tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'ou o da pasta movida do item 2, relativo a ele, ou, na adoção do subagente isolado, `.claude/worktrees/agent-<id>`)'
+afirma "gsi5-item-5-grava-a-worktree-do-agente" $? "01-ingestao.md"
 tr -d '\r' < "$SK/references/00-schema.md" | grep -q 'classe_sessao_justificativa' \
   && tr -d '\r' < "$SK/references/00-schema.md" | grep -qi 'nunca é inferida'
 afirma "gacs10-schema-documenta-a-tripla" $? "00-schema.md"
