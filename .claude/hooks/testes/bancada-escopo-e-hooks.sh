@@ -2212,6 +2212,9 @@ TE_WB="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\nt
 te_caso status-dentro-de-bloco-nao-conclui 0/silencio obrigatoria nenhuma "$TE_WB"
 TE_WB2="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks:\n  - objetivo: >-\n      status: concluida\n    id: T-01.02\n    status: em_andamento\n---\n')")"
 te_caso status-em-bloco-no-item-nao-conclui 0/silencio obrigatoria nenhuma "$TE_WB2"
+# task sem id ja concluida no disco nao esconde outra sem id que conclui agora: `?` nunca e "ja concluida" (CodeAnt no sprintx#73)
+TE_PREP='printf -- "---\ntrabalho_id: feat\ntasks:\n  - id: T-01.01\n    status: em_andamento\n  - status: concluida\n---\n" > "$TE_FX/$T_TASKS"' \
+  te_caso sem-id-ja-concluida-nao-esconde-a-nova 0/forma obrigatoria nenhuma "$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks:\n  - id: T-01.01\n    status: em_andamento\n  - status: concluida\n  - status: concluida\n    suite: verde\n---\n')")"
 
 # Estrutural. A auditoria: estes sao os hooks que leem pathname do payload, e a variavel de cada
 # um. Cada par passa por rastro_caminho_em ANTES de qualquer uso que nao seja a propria leitura

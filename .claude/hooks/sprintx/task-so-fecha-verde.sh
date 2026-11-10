@@ -124,7 +124,8 @@ if [ -n "$SLUG" ]; then
   fi
   RE_ID='^T-([0-9]+|[0-9]{2}\.[0-9]{2})$'
   while IFS= read -r t; do
-    case $'\n'"$ANTES"$'\n' in *$'\n'"$t"$'\n'*) continue ;; esac
+    # `?` (sem id) nunca e "ja concluida": duas tasks sem id teriam o mesmo marcador (CodeAnt no sprintx#73)
+    if [ "$t" != "?" ]; then case $'\n'"$ANTES"$'\n' in *$'\n'"$t"$'\n'*) continue ;; esac; fi
     # id fora da forma nao vira caminho, e a evidencia nao pode ser conferida: avisa em obrigatoria
     if [[ $t =~ $RE_ID ]]; then NOVAS="$NOVAS $t"; else FORA_DA_FORMA="$FORA_DA_FORMA $t"; fi
   done <<EOF
