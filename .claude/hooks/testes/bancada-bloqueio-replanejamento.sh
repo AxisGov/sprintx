@@ -253,6 +253,9 @@ afirma "jr14-revisa-de-novo-so-com-arquivo-mudado" $? "so o produto mudado reabr
 # o lock nao revisavel nao vai a CLI, que acusa "lock nao atualizado" (Login, ui-react-046)
 tem "$EXEC" 'lock não foi atualizado' && tem "$EXEC" 'falso positivo conhecido' && tem "$EXEC" 'com o diff do lock'
 afirma "jr15-lock-nao-atualizado-e-falso-positivo-conhecido" $? "contestado com o diff do lock"
+# o lock alterado noutra coisa nao prova nada (CodeAnt no sprintx#75, CodeRabbit no runx#22)
+tem "$EXEC" 'mostrando nele a mesma mudança do `package.json` (a versão ou a dependência nova). Se o lock não traz essa mudança, o achado é real: corrija o lock na task.'
+afirma "jr16-lock-com-a-mesma-mudanca-do-package-json" $? "lock sem a mudanca: o achado e real"
 
 printf '%s' "$E_SCRIPT" | grep -Eq 'trabalho_novo|decisao_humana|recurso_externo|falha_tecnica|legado'; [ $? -ne 0 ]
 afirma "j10-vocabulario-e-da-sprintx" $? "nenhuma classe do BuildX nem legado"
