@@ -1097,10 +1097,13 @@ $prosa" awk '
     trap "rm -f -- $(printf '%q' "$tmp")" EXIT
     trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM
     if ln "$tmp" "$ARQ" 2>/dev/null; then rm -f "$tmp"; trap - EXIT HUP INT TERM; return 0; fi
-    trap - EXIT HUP INT TERM
-    if [ -e "$ARQ" ] || [ -L "$ARQ" ]; then rm -f "$tmp"; W_PERDEU=1; return 0; fi
+    # o trap so sai depois do `rm`/`mv`: um sinal entre os dois deixaria o temporario na pasta da feature (login#77)
+    if [ -e "$ARQ" ] || [ -L "$ARQ" ]; then rm -f "$tmp"; trap - EXIT HUP INT TERM; W_PERDEU=1; return 0; fi
+    # o `mv` que falha para: nunca `planejamento=criado` sem o arquivo (o trap ainda leva o temporario)
+    mv -f "$tmp" "$ARQ" || falha "$E_PERSISTENCIA" "falha ao gravar ${PREFIXO}00-PLANEJAMENTO.md"
+    trap - EXIT HUP INT TERM; return 0
   fi
-  mv -f "$tmp" "$ARQ"
+  mv -f "$tmp" "$ARQ" || { rm -f "$tmp"; falha "$E_PERSISTENCIA" "falha ao gravar ${PREFIXO}00-PLANEJAMENTO.md"; }
 }
 
 # ------------------------------------------------------------------ auditoria

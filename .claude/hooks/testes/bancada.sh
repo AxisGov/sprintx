@@ -860,6 +860,12 @@ pl "$D" avanca menu f2 >/dev/null; rc=$?
 D="$G/acs-env"; rm -rf "$D"; nova_feature "$D" menu
 (cd "$D" && W_EXCLUSIVO=1 W_PERDEU=1 bash "$PL" criar menu >/dev/null 2>&1); rc=$?
 [ "$rc" -eq 0 ] && [ -f "$(fdir "$D" menu)/00-PLANEJAMENTO.md" ]; afirma "gacs16-w-do-ambiente-nao-vale" $? "rc=$rc"
+# o trap do temporario so sai depois do `rm`/`mv` do caminho sem link (nitpick do CodeAnt no katosmv/login#77)
+awk '/if \[ "\$\{W_EXCLUSIVO:-\}" = 1 \]; then/ { b = 1 } b && /^  fi$/ { exit } b && /^    trap - EXIT HUP INT TERM$/ { r = 1 } END { exit r }' "$PL"
+afirma "gacs18-trap-sai-depois-do-mv" $? "planejamento.sh"
+# o `mv` que falha nao vira `planejamento=criado`: os dois caminhos param com E_PERSISTENCIA (Codex, revisao da DS-218)
+[ "$(grep -cF 'mv -f "$tmp" "$ARQ" || ' "$PL")" -eq 2 ]
+afirma "gacs19-mv-que-falha-para" $? "planejamento.sh"
 # A regra 21 traz a excecao "sem worktree" da F1 (CodeAnt no conselhos#296)
 tr -d '\r' < "$SK/SKILL.md" | grep -qF 'Com git, e sem o pedido explícito de "sem worktree" (F1, Passo 0), ela nasce em worktree próprio'
 afirma "gacs12-regra-21-com-a-excecao-da-f1" $? "SKILL.md"
