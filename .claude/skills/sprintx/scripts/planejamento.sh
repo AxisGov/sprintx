@@ -1086,6 +1086,13 @@ $prosa" awk '
   } > "$tmp" || { rm -f "$tmp"; falha "$E_CONTRATO" "falha ao gravar ${PREFIXO}00-PLANEJAMENTO.md"; }
   # O comentario final do template e so documentacao da forma: fora do arquivo gerado.
   sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$tmp" > "$tmp.2" && mv -f "$tmp.2" "$tmp"
+  # No `criar` (W_EXCLUSIVO=1) o arquivo nasce por link exclusivo do temporario completo: dois
+  # `criar` do mesmo slug nao se sobrescrevem (CodeAnt no katosmv/login#75). Quem perde marca
+  # W_PERDEU e o `criar` refaz o caminho do `ja_existe`. Sistema de arquivos sem link: o `mv`.
+  if [ "${W_EXCLUSIVO:-}" = 1 ]; then
+    if ln "$tmp" "$ARQ" 2>/dev/null; then rm -f "$tmp"; return 0; fi
+    if [ -e "$ARQ" ] || [ -L "$ARQ" ]; then rm -f "$tmp"; W_PERDEU=1; return 0; fi
+  fi
   mv -f "$tmp" "$ARQ"
 }
 
@@ -1492,6 +1499,7 @@ EOF
 # ------------------------------------------------------------------ comandos
 
 cmd_criar() {
+  local orig=("$@")
   local uso="uso: criar <slug> [max_reprovacoes_f5|null] [declarado_por|null] [max_replanejamentos_f6|null] [--classe-sessao <classe> --classe-sessao-por <id> [--classe-sessao-justificativa <texto>]]"
   # os posicionais vem antes; as opcoes da classe da sessao, depois (DS-210)
   local pos=() cs="" cs_por="" cs_just="" cs_dada=""
@@ -1544,17 +1552,21 @@ cmd_criar() {
     return 0
   fi
   if [ -n "$cs_dada" ]; then CS_CLASSE="$cs"; CS_POR="$cs_por"; CS_JUST="$cs_just"; fi
+  W_PERDEU=""
   estado_efetivo
   if [ "$E_ESTADO" != null ]; then
     # Feature legada ja adiantada: nasce com o estado que o disco mostra, e com
     # o orcamento que o caller declarou agora.
-    migra_legado "$max" "$por" "$max6"
+    W_EXCLUSIVO=1 migra_legado "$max" "$por" "$max6"
+    # outro `criar` gravou primeiro: refaz pelo `ja_existe`, que compara e recusa a diferenca
+    if [ "$W_PERDEU" = 1 ]; then W_PERDEU=""; cmd_criar "${orig[@]}"; return $?; fi
     le_planejamento
     printf 'planejamento=migrado_legado\nmax_reprovacoes_f5=%s\norcamento_declarado_por=%s\nmax_replanejamentos_f6=%s\nestado=%s\n' "$max" "$por" "$max6" "$P_ESTADO"
     return 0
   fi
   f6_novo "$max6"
-  escreve "$max" "$por" null 0 ""
+  W_EXCLUSIVO=1 escreve "$max" "$por" null 0 ""
+  if [ "$W_PERDEU" = 1 ]; then W_PERDEU=""; cmd_criar "${orig[@]}"; return $?; fi
   printf 'planejamento=criado\nmax_reprovacoes_f5=%s\norcamento_declarado_por=%s\nmax_replanejamentos_f6=%s\nestado=null\n' "$max" "$por" "$max6"
 }
 

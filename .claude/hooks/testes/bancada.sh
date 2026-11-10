@@ -830,6 +830,23 @@ for g_op in --classe-sessao --classe-sessao-por --classe-sessao-justificativa; d
   g_nome="gacs11-vazio${g_op#--classe-sessao}"
   afirma "$g_nome" "$g_rc" "rc=$rc, nada gravado"
 done
+# A corrida do `criar` (CodeAnt no katosmv/login#75): outro `criar` do mesmo slug grava entre a
+# conferencia e a gravacao. Um `mv` e um `ln` falsos no PATH gravam o concorrente (orcamento 7/outro)
+# no ultimo instante. Antes, o `mv -f` o sobrescrevia e os dois diziam `criado`; agora o arquivo
+# nasce por link exclusivo, e quem perde cai no `ja_existe`, que compara e recusa.
+D="$G/acs-corrida"; rm -rf "$D"; nova_feature "$D" menu; A_ARQ="$(fdir "$D" menu)/00-PLANEJAMENTO.md"
+CO="$G/acs-corrida-bin"; rm -rf "$CO"; mkdir -p "$CO"
+D2="$G/acs-corrida-fonte"; rm -rf "$D2"; nova_feature "$D2" menu; pl "$D2" criar menu 7 outro >/dev/null
+cp "$(fdir "$D2" menu)/00-PLANEJAMENTO.md" "$CO/concorrente.md"
+for g_cmd in mv ln; do
+  g_real="$(command -v "$g_cmd")"
+  printf '#!/bin/sh\nfor a in "$@"; do d="$a"; done\ncase "$d" in */00-PLANEJAMENTO.md) [ -e "%s/feito" ] || { : > "%s/feito"; cp "%s/concorrente.md" "$d"; } ;; esac\nexec "%s" "$@"\n' \
+    "$CO" "$CO" "$CO" "$g_real" > "$CO/$g_cmd"
+  chmod +x "$CO/$g_cmd"
+done
+s="$(cd "$D" && PATH="$CO:$PATH" bash "$PL" criar menu 3 buildx --classe-sessao raciocinio_normal --classe-sessao-por orquestra 2>&1)"; rc=$?
+[ "$rc" -eq 4 ] && [ "$(fmv "$A_ARQ" max_reprovacoes_f5)" = 7 ] && [ "$(fmv "$A_ARQ" orcamento_declarado_por)" = outro ]
+afirma "gacs13-corrida-do-criar-nao-sobrescreve" $? "rc=$rc, $(fmv "$A_ARQ" max_reprovacoes_f5)/$(fmv "$A_ARQ" orcamento_declarado_por)"
 # A regra 21 traz a excecao "sem worktree" da F1 (CodeAnt no conselhos#296)
 tr -d '\r' < "$SK/SKILL.md" | grep -qF 'Com git, e sem o pedido explícito de "sem worktree" (F1, Passo 0), ela nasce em worktree próprio'
 afirma "gacs12-regra-21-com-a-excecao-da-f1" $? "SKILL.md"
