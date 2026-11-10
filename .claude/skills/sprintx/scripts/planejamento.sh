@@ -1499,6 +1499,8 @@ cmd_criar() {
     case "$1" in
       --classe-sessao|--classe-sessao-por|--classe-sessao-justificativa)
         [ $# -ge 2 ] || falha "$E_USO" "$1 exige valor; $uso"
+        # vazio explicito nao e "sem declaracao": quem nao declara nao passa a opcao (conselhos#296)
+        [ -n "$2" ] || falha "$E_CONTRATO" "$1 com valor vazio: para nao declarar a classe da sessao, nao passe a opcao"
         case "$1" in
           --classe-sessao) cs="$2" ;;
           --classe-sessao-por) cs_por="$2" ;;

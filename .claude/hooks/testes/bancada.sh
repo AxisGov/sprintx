@@ -320,7 +320,7 @@ CAMPOS=$(sed -n '/### Contrato da Task/,/### Contrato da Fase/p' "$SKILLMD" | gr
 [ "$CAMPOS" -eq 10 ]; afirma "contrato-task-intacto" $? "$CAMPOS campos (esperado 10)"
 
 # 8. Regra 21 e a posse da branch/worktree seguem com a F1.
-tem "$SKILLMD" '21. Uma feature aberta por árvore de trabalho. Com git, ela nasce em worktree próprio na F1'; afirma "regra-21-intacta" $? "regra 21 literal"
+tem "$SKILLMD" '21. Uma feature aberta por árvore de trabalho. Com git, e sem o pedido explícito de "sem worktree" (F1, Passo 0), ela nasce em worktree próprio na F1'; afirma "regra-21-intacta" $? "regra 21 literal (com a excecao da F1, DS-212)"
 conta_regras() { sed -n '/^## Regras invioláveis$/,/^## Sessões paralelas$/p' "$1" | grep -cE '^[0-9]+\. '; }
 REGRAS=$(conta_regras "$SKILLMD")
 [ "$REGRAS" -eq 21 ]; afirma "21-regras-inviolaveis" $? "$REGRAS regras (esperado 21)"
@@ -816,6 +816,23 @@ for ruim in 'com "aspas"' 'com \\barra'; do
   afirma "gacs8-justificativa-fora-da-forma" "$g_rc" "rc=$rc"
 done
 
+# Vazio explicito numa opcao dada e erro de contrato, nunca "sem declaracao" (CodeAnt no conselhos#296)
+for g_op in --classe-sessao --classe-sessao-por --classe-sessao-justificativa; do
+  D="$G/acs-vazio"; rm -rf "$D"; nova_feature "$D" menu
+  case "$g_op" in
+    # os vazios que antes viravam null e passavam por "sem declaracao" (rc 0)
+    --classe-sessao) pl "$D" criar menu --classe-sessao "" --classe-sessao-por "" >/dev/null ;;
+    --classe-sessao-por) pl "$D" criar menu --classe-sessao-por "" >/dev/null ;;
+    *) pl "$D" criar menu --classe-sessao-justificativa "" >/dev/null ;;
+  esac
+  rc=$?
+  [ "$rc" -eq 4 ] && [ ! -f "$(fdir "$D" menu)/00-PLANEJAMENTO.md" ]; g_rc=$?
+  g_nome="gacs11-vazio${g_op#--classe-sessao}"
+  afirma "$g_nome" "$g_rc" "rc=$rc, nada gravado"
+done
+# A regra 21 traz a excecao "sem worktree" da F1 (CodeAnt no conselhos#296)
+tr -d '\r' < "$SK/SKILL.md" | grep -qF 'Com git, e sem o pedido explícito de "sem worktree" (F1, Passo 0), ela nasce em worktree próprio'
+afirma "gacs12-regra-21-com-a-excecao-da-f1" $? "SKILL.md"
 # Modo subagente (Conselhos, OC-2026-0011; DS-209): os hooks seguem o `cwd` do payload, que `git -C`
 # e `cd` no Bash nao mudam, e o rastro caia no checkout principal (bancada do ExpxDev 0.13.22).
 tr -d '\r' < "$SK/SKILL.md" | grep -q 'subagente comum' && tr -d '\r' < "$SK/SKILL.md" | grep -qF 'git -C' \
