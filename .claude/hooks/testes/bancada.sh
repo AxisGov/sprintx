@@ -883,6 +883,9 @@ afirma "gsi3-branch-ocupada-para" $? "01-ingestao.md"
 # o registro prunable (pasta movida ou apagada) segue a rota de sempre antes da troca (Codex, 2a rodada do item 3)
 tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'num worktree que o `git worktree list --porcelain` marca `prunable`, trate-o antes como diz o resto deste item (pare e pergunte; pasta apagada: `git worktree remove <caminho>`, e troque aqui; pasta movida e reparada: ela está viva)'
 afirma "gsi6-prunable-antes-da-troca" $? "01-ingestao.md"
+# a base da feature nao pode ser a worktree-agent-<id> (CodeRabbit no runx#23, o mesmo item 1 aqui)
+tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'Na worktree de um subagente isolado (item 2), a branch atual é a `worktree-agent-<id>`: no lugar dela vale a do checkout principal, `git -C "$(git worktree list --porcelain | sed -n '\''1s/^worktree //p'\'')" branch --show-current`, com o mesmo critério.'
+afirma "gsi7-base-do-checkout-principal" $? "01-ingestao.md"
 tr -d '\r' < "$SK/SKILL.md" | grep -qF 'O subagente com `isolation: "worktree"` do Claude Code é a exceção: ele adota a própria worktree no Passo 0 da F1'
 afirma "gsi4-regra-21-nomeia-a-excecao" $? "SKILL.md"
 tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'ou o da pasta movida do item 2, relativo a ele, ou, na adoção do subagente isolado, `.claude/worktrees/agent-<id>`)'
