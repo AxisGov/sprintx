@@ -868,6 +868,23 @@ afirma "gacs12-regra-21-com-a-excecao-da-f1" $? "SKILL.md"
 tr -d '\r' < "$SK/SKILL.md" | grep -q 'subagente comum' && tr -d '\r' < "$SK/SKILL.md" | grep -qF 'git -C' \
   && tr -d '\r' < "$SK/SKILL.md" | grep -qF 'expx sessao <slug>'
 afirma "gacs9-skill-proibe-subagente-fora-da-worktree" $? "SKILL.md"
+# O subagente com isolation "worktree" do Claude Code adota a propria worktree na F1 (ExpxDev 0.13.26,
+# CONTRATO-expx-orquestracao 15.1): criar outra a deixaria longe do cwd que os hooks recebem (DS-216).
+tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'nucleo/scripts/expx-worktree-isolada.sh"`. Se ele imprime `isolada`, esta árvore é a worktree que o Claude Code criou para o subagente'
+afirma "gsi1-f1-consulta-o-nucleo" $? "01-ingestao.md"
+tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'não crie outro worktree, que ficaria longe do `cwd` que os hooks recebem' \
+  && tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'Com a árvore limpa (`git status --porcelain` vazio; suja, pare e diga)' \
+  && tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'troque `git worktree add -b "$f" "<pasta>" "$n"` por `git switch -c "$f" --no-track "$n"`'
+afirma "gsi2-f1-troca-na-propria-arvore" $? "01-ingestao.md"
+tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'num outro worktree vivo, pare e diga (retome com uma sessão aberta lá, `expx sessao <slug>`)'
+afirma "gsi3-branch-ocupada-para" $? "01-ingestao.md"
+# o registro prunable (pasta movida ou apagada) segue a rota de sempre antes da troca (Codex, 2a rodada do item 3)
+tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'num worktree que o `git worktree list --porcelain` marca `prunable`, trate-o antes como diz o resto deste item (pare e pergunte; pasta apagada: `git worktree remove <caminho>`, e troque aqui; pasta movida e reparada: ela está viva)'
+afirma "gsi6-prunable-antes-da-troca" $? "01-ingestao.md"
+tr -d '\r' < "$SK/SKILL.md" | grep -qF 'O subagente com `isolation: "worktree"` do Claude Code é a exceção: ele adota a própria worktree no Passo 0 da F1'
+afirma "gsi4-regra-21-nomeia-a-excecao" $? "SKILL.md"
+tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'ou o da pasta movida do item 2, relativo a ele, ou, na adoção do subagente isolado, `.claude/worktrees/agent-<id>`)'
+afirma "gsi5-item-5-grava-a-worktree-do-agente" $? "01-ingestao.md"
 tr -d '\r' < "$SK/references/00-schema.md" | grep -q 'classe_sessao_justificativa' \
   && tr -d '\r' < "$SK/references/00-schema.md" | grep -qi 'nunca é inferida'
 afirma "gacs10-schema-documenta-a-tripla" $? "00-schema.md"
