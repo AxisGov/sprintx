@@ -863,6 +863,7 @@ EOF3
 # le_planejamento — carrega e valida o arquivo inteiro. Arquivo que nao passa
 # aqui e contrato invalido: nada e decidido em cima dele.
 le_planejamento() {
+  [ ! -L "$ARQ" ] || falha "$E_CONTRATO" "${PREFIXO}00-PLANEJAMENTO.md e um link: o planejamento e arquivo comum"
   [ -f "$ARQ" ] || falha "$E_CONTRATO" "${PREFIXO}00-PLANEJAMENTO.md nao existe"
   fm_carrega "$ARQ"
   [ "${FM_expx_schema-}" = 1 ] || falha "$E_CONTRATO" "expx_schema deve ser 1"
@@ -1090,7 +1091,11 @@ $prosa" awk '
   # `criar` do mesmo slug nao se sobrescrevem (CodeAnt no katosmv/login#75). Quem perde marca
   # W_PERDEU e o `criar` refaz o caminho do `ja_existe`. Sistema de arquivos sem link: o `mv`.
   if [ "${W_EXCLUSIVO:-}" = 1 ]; then
-    if ln "$tmp" "$ARQ" 2>/dev/null; then rm -f "$tmp"; return 0; fi
+    # o temporario linkado ao plano nao fica para tras numa saida tratavel (o SIGKILL nao se trata)
+    trap "rm -f -- $(printf '%q' "$tmp")" EXIT
+    trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM
+    if ln "$tmp" "$ARQ" 2>/dev/null; then rm -f "$tmp"; trap - EXIT HUP INT TERM; return 0; fi
+    trap - EXIT HUP INT TERM
     if [ -e "$ARQ" ] || [ -L "$ARQ" ]; then rm -f "$tmp"; W_PERDEU=1; return 0; fi
   fi
   mv -f "$tmp" "$ARQ"
@@ -1532,7 +1537,8 @@ cmd_criar() {
   valida_orcamento "$max" "$por" "$max6"
   valida_orcamento_f6 "$max6" "$por"
   [ -z "$cs_dada" ] || valida_classe_sessao "$cs" "$cs_por" "$cs_just"
-  if [ -f "$ARQ" ]; then
+  # link (inclusive pendente) e entrada existente: o `le_planejamento` o recusa
+  if [ -f "$ARQ" ] || [ -L "$ARQ" ]; then
     le_planejamento
     if [ -n "$cs_dada" ] && { [ "$P_CS" != "$cs" ] || [ "$P_CS_POR" != "$cs_por" ] || [ "$P_CS_JUST" != "$cs_just" ]; }; then
       falha "$E_CONTRATO" "00-PLANEJAMENTO.md ja registra classe_sessao $P_CS/$P_CS_POR; o pedido traz $cs/$cs_por — a classe da sessao nao muda (v1)"
@@ -1559,14 +1565,14 @@ cmd_criar() {
     # o orcamento que o caller declarou agora.
     W_EXCLUSIVO=1 migra_legado "$max" "$por" "$max6"
     # outro `criar` gravou primeiro: refaz pelo `ja_existe`, que compara e recusa a diferenca
-    if [ "$W_PERDEU" = 1 ]; then W_PERDEU=""; cmd_criar "${orig[@]}"; return $?; fi
+    if [ "$W_PERDEU" = 1 ]; then W_PERDEU=""; [ -z "${W_REFEZ:-}" ] || falha "$E_PERSISTENCIA" "00-PLANEJAMENTO.md mudou duas vezes durante o criar"; W_REFEZ=1 cmd_criar "${orig[@]}"; return $?; fi
     le_planejamento
     printf 'planejamento=migrado_legado\nmax_reprovacoes_f5=%s\norcamento_declarado_por=%s\nmax_replanejamentos_f6=%s\nestado=%s\n' "$max" "$por" "$max6" "$P_ESTADO"
     return 0
   fi
   f6_novo "$max6"
   W_EXCLUSIVO=1 escreve "$max" "$por" null 0 ""
-  if [ "$W_PERDEU" = 1 ]; then W_PERDEU=""; cmd_criar "${orig[@]}"; return $?; fi
+  if [ "$W_PERDEU" = 1 ]; then W_PERDEU=""; [ -z "${W_REFEZ:-}" ] || falha "$E_PERSISTENCIA" "00-PLANEJAMENTO.md mudou duas vezes durante o criar"; W_REFEZ=1 cmd_criar "${orig[@]}"; return $?; fi
   printf 'planejamento=criado\nmax_reprovacoes_f5=%s\norcamento_declarado_por=%s\nmax_replanejamentos_f6=%s\nestado=null\n' "$max" "$por" "$max6"
 }
 

@@ -847,6 +847,10 @@ done
 s="$(cd "$D" && PATH="$CO:$PATH" bash "$PL" criar menu 3 buildx --classe-sessao raciocinio_normal --classe-sessao-por orquestra 2>&1)"; rc=$?
 [ "$rc" -eq 4 ] && [ "$(fmv "$A_ARQ" max_reprovacoes_f5)" = 7 ] && [ "$(fmv "$A_ARQ" orcamento_declarado_por)" = outro ]
 afirma "gacs13-corrida-do-criar-nao-sobrescreve" $? "rc=$rc, $(fmv "$A_ARQ" max_reprovacoes_f5)/$(fmv "$A_ARQ" orcamento_declarado_por)"
+# link pendente no lugar do arquivo: erro de contrato, nunca o refazer sem fim (Codex na revisao do DS-213)
+D="$G/acs-link"; rm -rf "$D"; nova_feature "$D" menu; mkdir -p "$(fdir "$D" menu)"; ln -s nao-existe "$(fdir "$D" menu)/00-PLANEJAMENTO.md"
+if command -v timeout >/dev/null 2>&1; then (cd "$D" && timeout 20 bash "$PL" criar menu >/dev/null 2>&1); rc=$?; else pl "$D" criar menu >/dev/null; rc=$?; fi
+[ "$rc" -eq 4 ]; afirma "gacs14-link-pendente-e-contrato" $? "rc=$rc (124 = nao terminou)"
 # A regra 21 traz a excecao "sem worktree" da F1 (CodeAnt no conselhos#296)
 tr -d '\r' < "$SK/SKILL.md" | grep -qF 'Com git, e sem o pedido explícito de "sem worktree" (F1, Passo 0), ela nasce em worktree próprio'
 afirma "gacs12-regra-21-com-a-excecao-da-f1" $? "SKILL.md"
