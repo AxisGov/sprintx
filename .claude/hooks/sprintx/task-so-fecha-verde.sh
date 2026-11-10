@@ -48,7 +48,8 @@ NOVO="$(rastro_tool_input_get "$ENTRADA" content)"
 # Sem `printf | grep -q`: sob pipefail, o printf levava SIGPIPE e a regra
 # era pulada. O espaco depois de `status:` e o mesmo que o awk abaixo aceita: com `status:  concluida`
 # (dois espacos) a regra tambem era pulada (CodeAnt no sprintx#57).
-RE_CONCLUIDA=$'status:[ \t]*concluida'
+# com ou sem aspas: `status: "concluida"` e YAML valido (conselhos#298)
+RE_CONCLUIDA=$'status:[ \t]*["\']?concluida'
 [[ $NOVO =~ $RE_CONCLUIDA ]] || exit 0
 
 # ------------------------------------------------------ achar as violacoes
@@ -58,6 +59,8 @@ PROBLEMAS="$(printf '%s' "$NOVO" | awk '
   # escalar em bloco (`chave: |` ou `>`): as linhas mais indentadas que a chave sao texto,
   # nunca chaves (DS-212; o `_parse` da runx faz o mesmo, DR-112)
   BEGIN { bs = -1 }
+  # CRLF sai, e o tab indenta 4, como no `_parse` da runx (conselhos#298)
+  { sub(/\r$/, ""); gsub(/\t/, "    ") }
   { ind0 = match($0, /[^ \t]/) - 1 }
   bs >= 0 && ($0 ~ /^[ \t]*$/ || ind0 > bs) { next }
   { bs = -1 }
@@ -72,11 +75,12 @@ PROBLEMAS="$(printf '%s' "$NOVO" | awk '
     id=""; concluida=0; suite=""; ti=0; tf=0
   }
   /^[ \t]*-[ \t]*id:/ { fecha(); id=$3; sub(/^[ \t]+/,"",id) }
-  /^[ \t]*(-[ \t]+)?status:[ \t]*concluida[ \t]*(#.*)?$/ { concluida=1 }
+  /^[ \t]*(-[ \t]+)?status:[ \t]*(concluida|"concluida"|\047concluida\047)[ \t]*(#.*)?$/ { concluida=1 }
   /suite:/                      { s=$0; sub(/.*suite:[ \t]*/,"",s); sub(/[ \t]+$/,"",s); suite=s }
   /teste_integracao:/           { v=$0; sub(/.*teste_integracao:[ \t]*/,"",v); gsub(/[ \t"'"'"']/,"",v); if (v != "" && v != "null") ti=1 }
   /teste_funcional:/            { v=$0; sub(/.*teste_funcional:[ \t]*/,"",v);  gsub(/[ \t"'"'"']/,"",v); if (v != "" && v != "null") tf=1 }
-  /:[ \t]*[|>][+-]?[1-9]?[+-]?[ \t]*(#.*)?$/ { bs = ($0 ~ /^[ \t]*-[ \t]/) ? ind0 + 2 : ind0 }
+  # comentario nunca abre escalar (`# nota: |`, regressao da DS-212; conselhos#298)
+  $0 !~ /^[ \t]*#/ && /:[ \t]*[|>][+-]?[1-9]?[+-]?[ \t]*(#.*)?$/ { bs = ($0 ~ /^[ \t]*-[ \t]/) ? ind0 + 2 : ind0 }
   END { fecha() }
 ')"
 
@@ -94,6 +98,8 @@ concluidas() { awk '
   # escalar em bloco (`chave: |` ou `>`): as linhas mais indentadas que a chave sao texto,
   # nunca chaves (DS-212; o `_parse` da runx faz o mesmo, DR-112)
   BEGIN { bs = -1 }
+  # CRLF sai, e o tab indenta 4, como no `_parse` da runx (conselhos#298)
+  { sub(/\r$/, ""); gsub(/\t/, "    ") }
   { ind0 = match($0, /[^ \t]/) - 1 }
   bs >= 0 && ($0 ~ /^[ \t]*$/ || ind0 > bs) { next }
   { bs = -1 }
@@ -106,8 +112,9 @@ concluidas() { awk '
     ind = match($0, /-/) }
   ind && /^[ \t]*-[ \t]+[A-Za-z_][A-Za-z0-9_]*:/ && !/^[ \t]*-[ \t]*id:/ && match($0, /-/) == ind { fecha(); id = "?" }
   # so a chave `status`, nunca o texto de outro campo (uma nota) que a cite (conselhos#296)
-  /^[ \t]*(-[ \t]+)?status:[ \t]*concluida[ \t]*(#.*)?$/ { c=1 }
-  /:[ \t]*[|>][+-]?[1-9]?[+-]?[ \t]*(#.*)?$/ { bs = ($0 ~ /^[ \t]*-[ \t]/) ? ind0 + 2 : ind0 }
+  /^[ \t]*(-[ \t]+)?status:[ \t]*(concluida|"concluida"|\047concluida\047)[ \t]*(#.*)?$/ { c=1 }
+  # comentario nunca abre escalar (`# nota: |`, regressao da DS-212; conselhos#298)
+  $0 !~ /^[ \t]*#/ && /:[ \t]*[|>][+-]?[1-9]?[+-]?[ \t]*(#.*)?$/ { bs = ($0 ~ /^[ \t]*-[ \t]/) ? ind0 + 2 : ind0 }
   END { fecha() }'; }
 SEM_EVIDENCIA=""
 REL_TASKS="${ALVO#"$RAIZ"/}"
