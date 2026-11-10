@@ -248,8 +248,9 @@ afirma "jr12-saida-1-cobre-o-achado-sem-vinculo" $? "arquivo fora da task ou sem
 # revisar de novo depois do rejeitar reabriu o mesmo ponto com outra identidade (Login, ui-react-046, T-01.01)
 tem "$EXEC" 'Depois de um `rejeitar` do desenvolvedor que imprime `<T-NN.MM> ok`, a revisão da task está feita: siga ao passo 5 sem rodar o `revisar` de novo'
 afirma "jr13-nao-revisa-de-novo-depois-do-rejeitar" $? "o rejeitar que sai ok fecha a revisao da task"
-tem "$EXEC" 'Só revise de novo se um arquivo da task mudou depois do `rejeitar`'
-afirma "jr14-revisa-de-novo-so-com-arquivo-mudado" $? "so o produto mudado reabre a revisao"
+# o arquivo que mudou entre o revisar e o rejeitar: o rejeitar gravava ok sobre o blob antigo (CodeAnt no katosmv/login#78)
+tem "$EXEC" 'Só revise de novo se um arquivo da task mudou depois do último `revisar`. Se ele mudou antes do `rejeitar`, o `rejeitar` recusa (`evidencia desatualizada: <arquivo>`, saída 1, nada gravado): rode o `revisar` de novo, não rejeite.'
+afirma "jr14-revisa-de-novo-so-com-arquivo-mudado" $? "so o produto mudado desde o ultimo revisar reabre a revisao"
 # o lock nao revisavel nao vai a CLI, que acusa "lock nao atualizado" (Login, ui-react-046)
 tem "$EXEC" 'lock não foi atualizado' && tem "$EXEC" 'falso positivo conhecido' && tem "$EXEC" 'com o diff do lock'
 afirma "jr15-lock-nao-atualizado-e-falso-positivo-conhecido" $? "contestado com o diff do lock"

@@ -894,8 +894,11 @@ tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'Na worktree de um subag
 afirma "gsi7-base-do-checkout-principal" $? "01-ingestao.md"
 tr -d '\r' < "$SK/SKILL.md" | grep -qF 'O subagente com `isolation: "worktree"` do Claude Code é a exceção: ele adota a própria worktree no Passo 0 da F1'
 afirma "gsi4-regra-21-nomeia-a-excecao" $? "SKILL.md"
-tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'ou o da pasta movida do item 2, relativo a ele, ou, na adoção do subagente isolado, `.claude/worktrees/agent-<id>`)'
+tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF '5. **Gravar** o caminho real do worktree em que `feature/<slug>` está, como o `git worktree list --porcelain` o lista, relativo ao checkout principal: `../<repo>--<slug>` quando ele nasceu aqui, o da pasta movida do item 2, ou `.claude/worktrees/agent-<id>` na worktree de um subagente isolado, inclusive na retomada nela depois da troca de branch, quando o script já não imprime `isolada`.'
 afirma "gsi5-item-5-grava-a-worktree-do-agente" $? "01-ingestao.md"
+# a retomada na worktree do agente, ja em feature/<slug>, gravava ../<repo>--<slug> (CodeAnt no katosmv/login#78)
+! tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'ou, na adoção do subagente isolado, `.claude/worktrees/agent-<id>`)'
+afirma "gsi8-item-5-sem-lista-de-casos" $? "01-ingestao.md"
 tr -d '\r' < "$SK/references/00-schema.md" | grep -q 'classe_sessao_justificativa' \
   && tr -d '\r' < "$SK/references/00-schema.md" | grep -qi 'nunca é inferida'
 afirma "gacs10-schema-documenta-a-tripla" $? "00-schema.md"
