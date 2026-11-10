@@ -80,9 +80,12 @@ PROBLEMAS="$(printf '%s' "$NOVO" | awk '
 # Write. O modo vem do leitor do nucleo; sem ele, sem node, com ele falhando ou
 # com a linha fora da forma, o modo e desconhecido e nada e exigido (a F6 ja
 # bloqueia com `prerequisito_ausente`, e o aviso seria falso).
+# Um item `- <chave>:` no nivel de um `- id:` ja visto e outra task, sem id: ela vira `?`,
+# que nao e id, e avisa em obrigatoria, em vez de se fundir a task de cima.
 concluidas() { awk '
   function fecha() { if (id != "" && c) print id; id=""; c=0 }
-  /^[ \t]*-[ \t]*id:/ { fecha(); id=$3; sub(/^[ \t]+/,"",id) }
+  /^[ \t]*-[ \t]*id:/ { fecha(); id=$3; sub(/^[ \t]+/,"",id); ind = match($0, /-/) }
+  ind && /^[ \t]*-[ \t]+[A-Za-z_][A-Za-z0-9_]*:/ && !/^[ \t]*-[ \t]*id:/ && match($0, /-/) == ind { fecha(); id = "?" }
   /status:[ \t]*concluida/ { c=1 }
   END { fecha() }'; }
 SEM_EVIDENCIA=""

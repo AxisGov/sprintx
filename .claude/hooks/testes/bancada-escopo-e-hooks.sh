@@ -2192,6 +2192,9 @@ te_caso edit-sem-id-nao-confere 0/silencio obrigatoria nenhuma "$TE_E3"
 # id fora da forma: a evidencia nao pode ser conferida, e isso avisa (revisao do runx#20, o mesmo hook)
 TE_WM="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(t_conteudo fecha-ok | sed 's/T-01\.02/T-1.2/')")"
 te_caso id-fora-da-forma-avisa 0/evidencia obrigatoria nenhuma "$TE_WM"
+# task sem id, no mesmo nivel das outras: tambem nao pode ser conferida (Codex na revisao do DS-211)
+TE_WS="$(t_json PreToolUse Write "$TE_FX" "$TE_FX/$T_TASKS" "$(printf -- '---\ntrabalho_id: feat\ntasks:\n  - id: T-01.01\n    status: em_andamento\n  - status: concluida\n    suite: verde\n    teste_integracao: chama a api\n    teste_funcional: dado x entao y\n---\n')")"
+te_caso task-sem-id-avisa 0/evidencia obrigatoria nenhuma "$TE_WS"
 
 # Estrutural. A auditoria: estes sao os hooks que leem pathname do payload, e a variavel de cada
 # um. Cada par passa por rastro_caminho_em ANTES de qualquer uso que nao seja a propria leitura
