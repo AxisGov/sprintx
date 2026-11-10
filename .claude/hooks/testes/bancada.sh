@@ -851,6 +851,15 @@ afirma "gacs13-corrida-do-criar-nao-sobrescreve" $? "rc=$rc, $(fmv "$A_ARQ" max_
 D="$G/acs-link"; rm -rf "$D"; nova_feature "$D" menu; mkdir -p "$(fdir "$D" menu)"; ln -s nao-existe "$(fdir "$D" menu)/00-PLANEJAMENTO.md"
 if command -v timeout >/dev/null 2>&1; then (cd "$D" && timeout 20 bash "$PL" criar menu >/dev/null 2>&1); rc=$?; else pl "$D" criar menu >/dev/null; rc=$?; fi
 [ "$rc" -eq 4 ]; afirma "gacs14-link-pendente-e-contrato" $? "rc=$rc (124 = nao terminou)"
+# ...nem pelo legado: o `avanca` de uma feature anterior ao contrato nao grava por cima do link (Codex)
+D="$G/acs-link2"; rm -rf "$D"; nova_feature "$D" menu; F="$(fdir "$D" menu)"; mkdir -p "$F/base"; printf 'd\n' > "$F/00-DECISOES.md"
+ln -s nao-existe "$F/00-PLANEJAMENTO.md"
+pl "$D" avanca menu f2 >/dev/null; rc=$?
+[ "$rc" -eq 4 ] && [ -L "$F/00-PLANEJAMENTO.md" ]; afirma "gacs15-avanca-nao-grava-por-cima-do-link" $? "rc=$rc"
+# W_EXCLUSIVO do ambiente nao vale: so o `criar` o liga (Codex)
+D="$G/acs-env"; rm -rf "$D"; nova_feature "$D" menu
+(cd "$D" && W_EXCLUSIVO=1 W_PERDEU=1 bash "$PL" criar menu >/dev/null 2>&1); rc=$?
+[ "$rc" -eq 0 ] && [ -f "$(fdir "$D" menu)/00-PLANEJAMENTO.md" ]; afirma "gacs16-w-do-ambiente-nao-vale" $? "rc=$rc"
 # A regra 21 traz a excecao "sem worktree" da F1 (CodeAnt no conselhos#296)
 tr -d '\r' < "$SK/SKILL.md" | grep -qF 'Com git, e sem o pedido explícito de "sem worktree" (F1, Passo 0), ela nasce em worktree próprio'
 afirma "gacs12-regra-21-com-a-excecao-da-f1" $? "SKILL.md"

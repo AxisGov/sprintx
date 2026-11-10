@@ -61,6 +61,8 @@ TEMPLATE="$SK/assets/TEMPLATE-PLANEJAMENTO.md"
 E_RECUSADO=2; E_PERSISTENCIA=3; E_CONTRATO=4; E_TRANSICAO=5; E_USO=64
 
 falha() { local c="$1"; shift; printf 'planejamento: %s\n' "$*" >&2; exit "$c"; }
+# o modo exclusivo do `criar` (DS-213) nunca vem do ambiente: so o `criar` o liga
+W_EXCLUSIVO=""; W_PERDEU=""; W_REFEZ=""
 
 . "$SK/scripts/caminho-git.sh" || falha "$E_USO" "scripts/caminho-git.sh ausente"
 . "$SK/scripts/lib/trava-autorizacao-f6.sh" || falha "$E_USO" "scripts/lib/trava-autorizacao-f6.sh ausente"
@@ -1286,7 +1288,8 @@ ultimo_veredito() {
 # de uma feature legada. A tabela antiga, com UMA correcao: auditoria NAO nunca
 # volta a apontar para a F5 sobre o mesmo plano — o estado derivado e replanejar.
 estado_efetivo() {
-  if [ -f "$ARQ" ]; then le_planejamento; E_ESTADO="$P_ESTADO"; E_FONTE=planejamento; return; fi
+  # link, inclusive pendente, nao e feature legada: o `le_planejamento` o recusa (DS-213)
+  if [ -f "$ARQ" ] || [ -L "$ARQ" ]; then le_planejamento; E_ESTADO="$P_ESTADO"; E_FONTE=planejamento; return; fi
   E_FONTE=legado
   if [ ! -d "$PASTA/base" ] || [ ! -f "$PASTA/00-DECISOES.md" ]; then E_ESTADO=null
   elif [ ! -d "$PASTA/sprint-01" ]; then E_ESTADO=aguardando_f3
