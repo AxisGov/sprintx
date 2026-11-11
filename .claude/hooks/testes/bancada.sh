@@ -887,7 +887,7 @@ afirma "gsi2-f1-troca-na-propria-arvore" $? "01-ingestao.md"
 tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'num outro worktree vivo, pare e diga (retome com uma sessão aberta lá, `expx sessao <slug>`)'
 afirma "gsi3-branch-ocupada-para" $? "01-ingestao.md"
 # o registro prunable (pasta movida ou apagada) segue a rota de sempre antes da troca (Codex, 2a rodada do item 3)
-tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'num worktree que o `git worktree list --porcelain` marca `prunable`, trate-o antes como diz o resto deste item (pare e pergunte; pasta apagada: `git worktree remove <caminho>`, e troque aqui; pasta movida e reparada: ela está viva)'
+tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'num worktree que o `git worktree list --porcelain` marca `prunable`, trate-o antes como diz o resto deste item (pare e pergunte; pasta apagada: `git worktree remove "<caminho>"`, e troque aqui; pasta movida e reparada: ela está viva)'
 afirma "gsi6-prunable-antes-da-troca" $? "01-ingestao.md"
 # a base da feature nao pode ser a worktree-agent-<id> (CodeRabbit no runx#23, o mesmo item 1 aqui)
 tr -d '\r' < "$SK/references/01-ingestao.md" | grep -qF 'Na worktree de um subagente isolado (item 2), a branch atual é a `worktree-agent-<id>`: no lugar dela vale a do checkout principal, `git -C "$(git worktree list --porcelain | sed -n '\''1s/^worktree //p'\'')" branch --show-current`, com o mesmo critério.'

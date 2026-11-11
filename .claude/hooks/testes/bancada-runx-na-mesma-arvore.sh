@@ -133,7 +133,7 @@ git -C "$AQW/r" worktree remove "$AQW/mb"; git -C "$AQW/mb2" status >/dev/null 2
   && printf '%s\n' "$AQW_LISTA" | grep -qx "worktree $AQW_REAL/ma2" && ! printf '%s\n' "$AQW_LISTA" | grep -q '^prunable'
 afirma "aq20c-worktree-movido-so-se-repara-antes-de-remover" $? "repara=$AQW_REPARA (DS-199)"
 rm -rf "$AQW"
-grep -Fq '`git worktree remove <caminho>` tira só esse registro' "$SK/references/01-ingestao.md"
+grep -Fq '`git worktree remove "<caminho>"` tira só esse registro' "$SK/references/01-ingestao.md"
 afirma "aq21-f1-tira-so-o-registro-sem-pasta-antes-de-retomar" $? "01-ingestao.md (DS-198)"
 grep -Fq 'pare e pergunte.' "$SK/references/01-ingestao.md" && grep -Fq 'Pasta movida: `git worktree repair <novo caminho>`, e retome lá, com esse caminho, relativo ao checkout principal, no item 5. Pasta apagada:' "$SK/references/01-ingestao.md"
 afirma "aq22-f1-pergunta-antes-de-remover-o-registro" $? "01-ingestao.md (DS-199)"
