@@ -235,6 +235,9 @@ afirma "jr7-resultado-no-detalhe-da-conclusao" $? "sem evento novo (desenho, 4.2
 tem "$EXEC" '`revisao_defeito`, `revisao_contestada`, `revisao_incompleta`' \
   && tr -d '\r' < "$EXEC" | grep -F 'são resolvidos por ele quando a causa deixa de existir' | grep -qF '`revisao_incompleta`'
 afirma "jr8-as-novas-classes-se-resolvem-pelo-script" $? "resolver vale para as tres"
+# a CodeAnt fora escala para o Codex no proprio nucleo (0.14.0, decisao do Flavio: nao e parametro, e escala)
+tem "$EXEC" 'nem a CodeAnt nem o Codex revisaram' && tem "$EXEC" 'o próprio núcleo já escalou para o Codex' && tem "$EXEC" 'você nunca chama o Codex' && tem "$EXEC" 'Nunca rode `codeant login` nem `codex login`' && tem "$EXEC" 'Com o núcleo 0.14.0 ou mais novo' && tem "$EXEC" 'com um núcleo anterior, a saída 2 é só a CodeAnt fora'
+afirma "jr18-saida-2-depois-da-escala" $? "a saida 2 e a CodeAnt e o Codex fora; o agente nunca chama o Codex"
 tem "$EXEC" 'Depois de uma saída 1, a saída 2 de uma nova tentativa não fecha a task'
 afirma "jr9-indisponivel-depois-de-achado-nao-fecha" $? "o achado anterior nao some com a evidencia nova"
 tem "$EXEC" '**Outra saída** (`127` sem o `node`, `70` erro interno do núcleo, ou a saída 1 sem a linha `<T-NN.MM> achados`, por exemplo): a revisão não rodou; trate como a saída 2.'
