@@ -109,7 +109,7 @@ canônico `docs/stack/CONVENCOES.md`.
    | `composer.lock` | `composer install` |
 
    Nenhum lockfile reconhecido: registre a lacuna em `base/00-LACUNAS.md` e siga.
-5. **Gravar** o caminho (`../<repo>--<slug>`, relativo ao checkout principal, ou o da pasta movida do item 2, relativo a ele, ou, na adoção do subagente isolado, `.claude/worktrees/agent-<id>`) para uso na F4, quando o `ORQUESTRADOR.md`
+5. **Gravar** o caminho real do worktree em que `feature/<slug>` está, como o `git worktree list --porcelain` o lista, relativo ao checkout principal: `../<repo>--<slug>` quando ele nasceu aqui, o da pasta movida do item 2, ou `.claude/worktrees/agent-<id>` na worktree de um subagente isolado, inclusive na retomada nela depois da troca de branch, quando o script já não imprime `isolada`. É para uso na F4, quando o `ORQUESTRADOR.md`
    grava a chave `worktree` (`references/00-schema.md`).
 6. **Entrar na área de trabalho.** Se a raiz atual já é o worktree dessa branch, siga para o
    Passo 1. Senão, se o harness oferecer uma ferramenta de troca para worktree, use-a apontando para o diretório criado. Caso contrário — e sempre no OpenCode
