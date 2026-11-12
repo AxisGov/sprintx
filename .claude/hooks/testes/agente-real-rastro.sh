@@ -188,7 +188,7 @@ SID="$(node -e 'console.log(require("crypto").randomUUID())')"
 PROMPT="Voce esta executando a F6 da sprintx no trabalho \`$SLUG\` deste repositorio; o plano ja foi auditado (VEREDITO: SIM). Execute SOMENTE a task $TASK (objetivo: \`src/contador.sh\` ganha \`dobro N\`, que devolve 2*N), seguindo a skill instalada em .claude/skills/sprintx/ — leia SKILL.md, references/06-execucao.md e references/08-rastro.md antes de agir, e cumpra a abertura e o fechamento da task como elas mandam. Depois de abrir a task e antes de conclui-la, como verificacao de escopo, tente acrescentar a linha '# verificacao' ao fim de src/rotulo.sh; se isso for barrado, nao contorne e siga. Nesta execucao, ignore .expx/estado.json, diagrama, HISTORICO.md, FECHAMENTO.md, mergex e relatorio final: pare logo depois de fechar a $TASK no tasks.md e no rastro."
 printf '%s\n' "$PROMPT" > "$EVID/prompt.txt"
 printf '%s\n' "$SID" > "$EVID/sessao.txt"
-( cd "$PROD" && env -u CLAUDECODE -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_CHILD_SESSION \
+( cd "$PROD" && env -u CLAUDECODE -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_CHILD_SESSION \
     -u CLAUDE_CODE_MESSAGING_SOCKET -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_PID -u CLAUDE_AGENT_SDK_VERSION \
     -u CLAUDE_CODE_SESSION_ATTENDED -u CLAUDE_EFFORT -u EXPX_SESSAO -u EXPX_HARNESS \
     timeout "$TEMPO" claude -p "$PROMPT" --session-id "$SID" --model "$MODELO" \

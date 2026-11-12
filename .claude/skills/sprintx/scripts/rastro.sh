@@ -168,7 +168,7 @@ if rastro_identidade_em SESSAO HARNESS; then
   rastro_json_escape_em SESSAO_E "$SESSAO"; rastro_json_escape_em HARNESS_E "$HARNESS"
   EXTRAS="\"sessao\":\"$SESSAO_E\",\"harness\":\"$HARNESS_E\""
 elif [ "$EXIGE_IDENTIDADE" = 1 ]; then
-  falha "$E_IDENTIDADE" "identidade da sessao indisponivel neste processo: o harness nao expos a sessao (EXPX_SESSAO ou CLAUDE_CODE_SESSION_ID). $EVENTO NAO foi gravado. Nao grave o evento a mao nem invente a sessao: registre um bloqueio prerequisito_ausente (scripts/bloqueios.sh registrar)."
+  falha "$E_IDENTIDADE" "identidade da sessao indisponivel neste processo: o harness nao expos a sessao (EXPX_SESSAO, CLAUDE_CODE_SESSION_ID ou CODEX_SESSION_ID). $EVENTO NAO foi gravado. Nao grave o evento a mao nem invente a sessao: registre um bloqueio prerequisito_ausente (scripts/bloqueios.sh registrar)."
 else
   EXTRAS='"sessao":null,"harness":null'
 fi

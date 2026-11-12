@@ -7,6 +7,10 @@
 # quando aplicavel, o conteudo de stderr (bloqueio) ou stdout (aviso).
 set -uo pipefail
 
+# A bancada controla explicitamente as identidades exercitadas. Nao herda a sessao do
+# harness que a executa; os casos Claude e Codex abaixo injetam seus ids de proposito.
+unset CODEX_SESSION_ID
+
 H="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BANCADA_CACHE="${XDG_CACHE_HOME:-${HOME:?HOME ausente}/.cache}/sprintx-bancada"
 mkdir -p "$BANCADA_CACHE" || { printf 'bancada: cache indisponivel: %s\n' "$BANCADA_CACHE" >&2; exit 1; }
@@ -245,6 +249,36 @@ if [ "$sessao_por_claude" = "claude-code@abc-123" ]; then
   ok=$((ok+1)); printf '  ok   %-46s => %s\n' "sessao-por-claude-code-env" "$sessao_por_claude"
 else
   falhou=$((falhou+1)); printf '  FALHA %-45s esperado=claude-code@abc-123 real=%s\n' "sessao-por-claude-code-env" "$sessao_por_claude"
+fi
+
+sessao_por_codex=$(cd "$W" && env -u EXPX_SESSAO -u EXPX_HARNESS -u CLAUDECODE -u CLAUDE_CODE_SESSION_ID CODEX_SESSION_ID="codex-456" bash -c "
+. '$H/comum/rastro.sh'
+rastro_sessao
+")
+if [ "$sessao_por_codex" = "codex@codex-456" ]; then
+  ok=$((ok+1)); printf '  ok   %-46s => %s\n' "sessao-por-codex-env" "$sessao_por_codex"
+else
+  falhou=$((falhou+1)); printf '  FALHA %-45s esperado=codex@codex-456 real=%s\n' "sessao-por-codex-env" "$sessao_por_codex"
+fi
+
+sessao_claude_em_codex=$(cd "$W" && env -u EXPX_SESSAO -u EXPX_HARNESS CLAUDECODE=1 CLAUDE_CODE_SESSION_ID="claude-789" CODEX_SESSION_ID="codex-herdado" bash -c "
+. '$H/comum/rastro.sh'
+rastro_sessao
+")
+if [ "$sessao_claude_em_codex" = "claude-code@claude-789" ]; then
+  ok=$((ok+1)); printf '  ok   %-46s => %s\n' "claude-ativo-vence-codex-herdado" "$sessao_claude_em_codex"
+else
+  falhou=$((falhou+1)); printf '  FALHA %-45s esperado=claude-code@claude-789 real=%s\n' "claude-ativo-vence-codex-herdado" "$sessao_claude_em_codex"
+fi
+
+sessao_claude_sem_id=$(cd "$W" && env -u EXPX_SESSAO -u EXPX_HARNESS -u CLAUDE_CODE_SESSION_ID CLAUDECODE=1 CODEX_SESSION_ID="codex-herdado" bash -c "
+. '$H/comum/rastro.sh'
+rastro_identidade_em sessao harness || printf 'indisponivel'
+")
+if [ "$sessao_claude_sem_id" = "indisponivel" ]; then
+  ok=$((ok+1)); printf '  ok   %-46s => %s\n' "claude-sem-id-nao-forma-hibrido" "$sessao_claude_sem_id"
+else
+  falhou=$((falhou+1)); printf '  FALHA %-45s esperado=indisponivel real=%s\n' "claude-sem-id-nao-forma-hibrido" "$sessao_claude_sem_id"
 fi
 
 echo "== contrato sprintx x mergex (F6) =="
@@ -1705,6 +1739,11 @@ u_wenv() { # u_wenv <arv> <dir> <env...> -- <args...> — o escritor com um ambi
   U_OUT="$(cd "$d" && env -u EXPX_SESSAO -u EXPX_HARNESS -u CLAUDE_CODE_SESSION_ID -u CLAUDECODE "${e[@]}" \
     bash "$a/.claude/skills/sprintx/scripts/rastro.sh" "$@" 2>&1)"; U_RC=$?
 }
+u_wc() { # u_wc <arv> <dir> <sessao> <args...> — escritor sob o harness Codex
+  local a="$1" d="$2" s="$3"; shift 3
+  U_OUT="$(cd "$d" && env -u EXPX_SESSAO -u EXPX_HARNESS -u CLAUDE_CODE_SESSION_ID -u CLAUDECODE \
+    CODEX_SESSION_ID="$s" bash "$a/.claude/skills/sprintx/scripts/rastro.sh" "$@" 2>&1)"; U_RC=$?
+}
 # u_h <arv> <dir> <sessao> <arquivo-relativo> [cwd-payload] [file_path-payload] — o escopo-da-task
 # da arvore, com o payload do runner (cwd/file_path podem vir na forma Windows).
 u_h() {
@@ -1712,6 +1751,12 @@ u_h() {
   U_OUT="$(printf '{"cwd":"%s","tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$(t_esc "$c")" "$(t_esc "$f")" \
     | (cd "$d" && env -u EXPX_SESSAO -u EXPX_HARNESS CLAUDECODE=1 CLAUDE_CODE_SESSION_ID="$s" \
         bash "$a/.claude/hooks/sprintx/escopo-da-task.sh") 2>&1)"; U_RC=$?
+}
+u_h_codex() { # u_h_codex <arv> <dir> <sessao> <arquivo-relativo>
+  local a="$1" d="$2" s="$3" rel="$4"
+  U_OUT="$(printf '{"cwd":"%s","tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$(t_esc "$d")" "$(t_esc "$d/$rel")" \
+    | (cd "$d" && env -u EXPX_SESSAO -u EXPX_HARNESS -u CLAUDE_CODE_SESSION_ID -u CLAUDECODE \
+        CODEX_SESSION_ID="$s" bash "$a/.claude/hooks/sprintx/escopo-da-task.sh") 2>&1)"; U_RC=$?
 }
 u_ok() { [ "$U_RC" -eq 0 ] && [ -z "$U_OUT" ]; }           # permitido, em silencio
 u_barra() { [ "$U_RC" -eq 2 ] && printf '%s' "$U_OUT" | grep -qF "$1"; }
@@ -1730,6 +1775,13 @@ u_a() { # A: escritor -> task_iniciada -> o escopo reconhece a task corrente
   [ "$(u_campo "$l" sessao)" = claude-code@s1 ] && [ "$(u_campo "$l" harness)" = claude-code ] || return 1
   printf '%s' "$l" | grep -qF '"origem":"skill"' || return 1
   u_h "$a" "$U_FX" s1 src/a.ts; u_ok
+}
+u_ac() { # A-Codex: a identidade oficial do Codex reivindica e o hook reconhece a mesma sessao
+  local a="$1" l; u_fx
+  u_wc "$a" "$U_FX" cx1 task-iniciada fx T-01.01; [ "$U_RC" -eq 0 ] || return 1
+  l="$(u_linha "$U_FX/docs/eventos/fx.jsonl" task_iniciada T-01.01)"
+  [ "$(u_campo "$l" sessao)" = codex@cx1 ] && [ "$(u_campo "$l" harness)" = codex ] || return 1
+  u_h_codex "$a" "$U_FX" cx1 src/a.ts; u_ok
 }
 u_b() { # B: escritor -> task_iniciada -> arquivo so da irma continua barrado
   local a="$1"; u_fx
@@ -1924,7 +1976,7 @@ $(u_tr_ev Bash '{"command":"bash .claude/skills/sprintx/scripts/rastro.sh task-c
   ( . "$a/.claude/hooks/testes/transcrito-agente.sh"; transcrito_verifica "$d/sem" 1111-2222 fx T-01.01 || : ) | grep -q '^sem_escritor_inicio:'
 }
 
-U_CASOS="u_a u_b u_c u_d u_e u_f u_g u_hc u_i u_j u_k u_l u_doc u_tr"
+U_CASOS="u_a u_ac u_b u_c u_d u_e u_f u_g u_hc u_i u_j u_k u_l u_doc u_tr"
 if ! command -v jq >/dev/null 2>&1; then
   pula_externo "u-verificador-de-transcrito" "jq"
   U_CASOS="${U_CASOS% u_tr}"
@@ -1932,6 +1984,7 @@ fi
 u_nome() {
   case "$1" in
     u_a) echo "ua-escritor-task-iniciada-escopo-reconhece-corrente" ;;
+    u_ac) echo "uac-codex-task-iniciada-escopo-reconhece-corrente" ;;
     u_b) echo "ub-escritor-task-iniciada-irma-continua-barrada" ;;
     u_c) echo "uc-sem-identidade-escritor-falha-e-nao-grava" ;;
     u_d) echo "ud-paths-windows-e-subdiretorio" ;;

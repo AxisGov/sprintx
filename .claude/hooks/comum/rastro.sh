@@ -84,6 +84,7 @@ rastro_caminho_em() {
 rastro_harness_em() { # rastro_harness_em <var>
   if [ -n "${EXPX_HARNESS:-}" ]; then printf -v "$1" '%s' "$EXPX_HARNESS"; return 0; fi
   if [ -n "${CLAUDECODE:-}" ]; then printf -v "$1" 'claude-code'; return 0; fi
+  if [ -n "${CODEX_SESSION_ID:-}" ]; then printf -v "$1" 'codex'; return 0; fi
   local nome
   nome="$(ps -o comm= -p "${PPID:-0}" 2>/dev/null)"; nome="${nome##*/}"
   case "$nome" in
@@ -96,13 +97,19 @@ rastro_harness_em() { # rastro_harness_em <var>
 rastro_harness() { local _h; rastro_harness_em _h; printf '%s' "$_h"; }
 
 # Identidade da sessao: <harness>@<id>. Ordem: EXPX_SESSAO (a ponte injeta) ->
-# CLAUDE_CODE_SESSION_ID (com o harness na frente) -> <harness>@<ppid> ->
+# id do harness ativo (CLAUDE_CODE_SESSION_ID ou CODEX_SESSION_ID) -> <harness>@<ppid> ->
 # <harness>@sem-id. Nunca lanca excecao (regra 3 do contrato). A fonte usada fica em
 # RASTRO_SESSAO_FONTE (expx | harness | ppid | sem-id): so as duas primeiras sao a mesma
 # para o hook e para o processo do agente — o <ppid> de um nao e o do outro.
 rastro_sessao_em() { # rastro_sessao_em <var>
   if [ -n "${EXPX_SESSAO:-}" ]; then RASTRO_SESSAO_FONTE=expx; printf -v "$1" '%s' "$EXPX_SESSAO"; return 0; fi
   local _h; rastro_harness_em _h
+  if [ -n "${CLAUDECODE:-}" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+    RASTRO_SESSAO_FONTE=harness; printf -v "$1" '%s@%s' "$_h" "$CLAUDE_CODE_SESSION_ID"; return 0
+  fi
+  if [ -z "${CLAUDECODE:-}" ] && [ -n "${CODEX_SESSION_ID:-}" ]; then
+    RASTRO_SESSAO_FONTE=harness; printf -v "$1" '%s@%s' "$_h" "$CODEX_SESSION_ID"; return 0
+  fi
   if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
     RASTRO_SESSAO_FONTE=harness; printf -v "$1" '%s@%s' "$_h" "$CLAUDE_CODE_SESSION_ID"; return 0
   fi

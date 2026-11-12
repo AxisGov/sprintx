@@ -12,7 +12,7 @@
 #                         scripts/rastro.sh — redirecao, tee, sed -i, Write/Edit, cp/mv PARA o
 #                         rastro, ou interpretador abrindo o rastro em modo de escrita
 #   identidade_fabricada  tocou a identidade da sessao: `claude-code@`, o id da sessao, as
-#                         variaveis EXPX_SESSAO/EXPX_HARNESS/CLAUDE_CODE_SESSION_ID ou uma
+#                         variaveis EXPX_SESSAO/EXPX_HARNESS/CLAUDE_CODE_SESSION_ID/CODEX_SESSION_ID ou uma
 #                         chave "sessao"/"harness" montada a mao
 #   sem_escritor_inicio   nao reivindicou a task pelo escritor (rastro.sh task-iniciada)
 #   sem_escritor_fim      nao fechou a task pelo escritor (rastro.sh task-concluida)
@@ -255,7 +255,7 @@ transcrito_verifica() {
         fi ;;
     esac
     case "$inp" in
-      *claude-code@*|*EXPX_SESSAO*|*EXPX_HARNESS*|*CLAUDE_CODE_SESSION_ID*|*'"sessao"'*|*'\"sessao\"'*|*'\"harness\"'*|*"$sid"*)
+      *claude-code@*|*codex@*|*EXPX_SESSAO*|*EXPX_HARNESS*|*CLAUDE_CODE_SESSION_ID*|*CODEX_SESSION_ID*|*'"sessao"'*|*'\"sessao\"'*|*'\"harness\"'*|*"$sid"*)
         v="${v}identidade_fabricada: $f ${inp:0:160}
 " ;;
     esac

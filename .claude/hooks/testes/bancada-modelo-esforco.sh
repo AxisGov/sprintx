@@ -30,7 +30,7 @@ an_w() {
   local amb=()
   while [ "$1" != -- ]; do amb+=("$1"); shift; done; shift
   (cd "$AN_T/fx" && env -u EXPX_SESSAO -u EXPX_HARNESS -u EXPX_MODEL -u EXPX_EFFORT -u EXPX_AGENTE \
-    -u CLAUDECODE -u CLAUDE_CODE_SESSION_ID -u CLAUDE_EFFORT "${amb[@]}" \
+    -u CLAUDECODE -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CLAUDE_EFFORT "${amb[@]}" \
     bash "$AN_SK/scripts/rastro.sh" "$@" >/dev/null 2>&1)
 }
 # an_snap <arquivo> <evento> — "model|effort" da ultima linha do evento; "ausente" sem as chaves
