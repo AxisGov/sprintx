@@ -4,7 +4,7 @@ set -euo pipefail
 raiz="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$raiz"
 
-legada_base='((github[.]com[/:]|raw[.]githubusercontent[.]com/)bittencourtthulio/(runx|mergex|sprintx|buildx|expxdev)([.]git)?|bittencourtthulio[.]github[.]io/expxdev)'
+legada_base='((github[.]com[/:]|raw[.]githubusercontent[.]com/)bittencourtthulio/(runx|mergex|sprintx|buildx|expxdev|legadox|stackx|memox|prodx|designx)([.]git)?|bittencourtthulio[.]github[.]io/expxdev|npx[ ]expxdev)'
 legada="$legada_base([^[:alnum:]_.-]|$)"
 allowlist='scripts/ci/proveniencia-allowlist.tsv'
 separador=$'\x1f'

@@ -122,6 +122,22 @@ caso_bloqueado filename_spaces 'docs/instalador legado.md' \
   "git clone https://$github_host/$proprietario/buildx.git"
 caso_bloqueado arbitrary_case bootstrap.sh \
   "https://$github_host/BiTtEnCoUrTtHuLiO/BuIlDx"
+# Todos os forks AxisGov, não só os cinco primeiros (conselhos, 2026-11-14): o
+# link do README, o asset do banner, o site e o npx do pacote expxdev (o npm é do upstream)
+caso_bloqueado fork_legadox docs/ecossistema.md \
+  "[legadox](https://$github_host/$proprietario/legadox)"
+caso_bloqueado fork_memox_maiusculo docs/ecossistema.md \
+  "[memox](https://$github_host/$proprietario/MemoX)"
+caso_bloqueado fork_designx_asset docs/ecossistema.md \
+  "<img src=\"https://$raw_host/$proprietario/designx/main/.github/assets/banner.svg\">"
+caso_bloqueado site_upstream docs/ecossistema.md \
+  "https://$proprietario.github.io/expxdev/#legadox"
+caso_bloqueado npx_upstream docs/ecossistema.md \
+  "npx ""expxdev init"
+repo_modulex="$(nova_fixture modulex_sem_fork)"
+rastrear_texto "$repo_modulex" docs/ecossistema.md \
+  "[modulex](https://$github_host/$proprietario/modulex)"
+esperar_sucesso modulex_sem_fork "$repo_modulex"
 
 repo_atributo="$(nova_fixture atributo_binary)"
 rastrear_texto "$repo_atributo" bootstrap.sh \
