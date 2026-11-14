@@ -61,7 +61,7 @@ A primeira transição gravada numa feature legada cria o `00-PLANEJAMENTO.md` c
 
 **Autorização tardia da F6.** Somente `orcamento_f6_nao_declarado` é recuperável por autorização tardia, sempre por decisão humana explícita e pelo comando
 `scripts/planejamento.sh autorizar-replanejamento-execucao <slug> <max_replanejamentos_f6> <autorizado_por>`. A autoridade fica em `autorizacao_tardia_f6_por`; o comando não altera
-`orcamento_declarado_por`. `classes_mistas`, legados e orçamentos esgotados continuam terminais.
+`orcamento_declarado_por`. `classes_mistas`, legados e orçamentos esgotados continuam terminais, e o teto da F6 não se amplia (DS-223): defeito que chega depois dele sai por trabalho sucessor (PR ainda aberto) ou por OC da runx (código já na main), conforme `references/06-execucao.md`.
 A transição declara o teto e abre a rodada 1 atomicamente pelas mesmas guardas do retorno normal;
 retomada e checkpoint são idempotentes (`references/06-execucao.md`).
 
