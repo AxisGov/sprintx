@@ -1110,13 +1110,29 @@ l_aut_concorrente() {
     && [ "$(fmv "$(kf "$d")/00-PLANEJAMENTO.md" replanejamentos_f6)" = 1 ] && [ ! -e "$lock" ]
 }
 
+# l_aut_legado_antigo <script> <repo> — o terminal planejamento_legado que uma versao anterior a
+# DS-225 gravava: max_replanejamentos_f6 null, sem rodada, defeito_de_plano aberto e a task
+# bloqueada, tudo commitado. Hoje nenhum comando o grava; a fixture o reproduz como ficou no
+# disco de quem ja estava preso. So orcamento_f6_nao_declarado e recuperavel: este nao.
+l_aut_legado_antigo() {
+  local s="$1" d="$2" a; a="$(kf "$d")/00-PLANEJAMENTO.md"
+  kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
+  kpl "$s" "$d" criar menu >/dev/null || return 1
+  awk '$0 == "estado: aprovado" { print "estado: replanejamento_execucao_recusado"; print "recusa_replanejamento_f6: planejamento_legado"; next } { print }' \
+    "$a" > "$K/antigo.tmp" && mv "$K/antigo.tmp" "$a" || return 1
+  git -C "$d" add -A && git -C "$d" commit -q -m "terminal planejamento_legado anterior a DS-225" || return 1
+  [ "$(kv "$(kpl "$s" "$d" fase menu)" recusa_replanejamento_f6)" = planejamento_legado ] \
+    && [ "$(fmv "$a" max_replanejamentos_f6)" = null ]
+}
+
 l_aut_terminais() {
   local s="$1" d rc caso a ck h
-  for caso in classes legado planejamento esgotado f5_esgotado schema teto_null rodada_zero; do
+  for caso in classes legado planejamento antigo esgotado f5_esgotado schema teto_null rodada_zero; do
     case "$caso" in
       classes) d="$(kcopia "$FXP")"; k_mistura "$s" "$d" || return 1 ;;
       legado) d="$(kcopia "$FXL")"; k_legado_orcamento "$s" "$d" || return 1 ;;
       planejamento) d="$(kcopia "$FXS")"; k_planejamento_legado "$s" "$d" || return 1 ;;
+      antigo) d="$(kcopia "$FXS")"; l_aut_legado_antigo "$s" "$d" || return 1 ;;
       esgotado) d="$(kcopia "$FXP")"; k_segundo_defeito "$s" "$d" || return 1 ;;
       f5_esgotado) d="$(kcopia "$FXP")"; k_f5_nao_esgota "$s" "$d" || return 1 ;;
       schema)
