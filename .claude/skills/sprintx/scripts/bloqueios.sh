@@ -265,11 +265,12 @@ EOF
       # Plano legado (DS-224): sem 00-PLANEJAMENTO.md nao ha rodada que resolva o B-NN. O
       # comando da migracao leva o slug; o orcamento e de quem o declara, nunca inventado aqui.
       # O comando leva a raiz que este resolver usou: com SPRINTX_RAIZ de uma chamada so, sem
-      # ela a migracao cairia em outra arvore (CodeAnt no sprintx#83).
-      local plc="bash \"$SK/scripts/planejamento.sh\""
-      [ -z "${SPRINTX_RAIZ:-}" ] || plc="SPRINTX_RAIZ=\"$RAIZ\" $plc"
+      # ela a migracao cairia em outra arvore (CodeAnt no sprintx#83). Raiz e caminho saem
+      # citados pela shell (%q): copiado, o comando nunca executa o que vier no nome.
+      local plc; plc="bash $(printf '%q' "$SK/scripts/planejamento.sh")"
+      [ -z "${SPRINTX_RAIZ:-}" ] || plc="SPRINTX_RAIZ=$(printf '%q' "$RAIZ") $plc"
       [ "$motivo" = sem_planejamento ] \
-        && falha "$E_TRANSICAO" "$alvo e defeito_de_plano num plano legado, sem 00-PLANEJAMENTO.md: nao ha rodada de replanejamento da execucao que o resolva. Migre o plano declarando o orcamento (DS-137, DS-146) — $plc criar $SLUG null <declarado_por> <max_replanejamentos_f6> — e depois $plc checkpoint $SLUG e $plc replanejar-execucao $SLUG; o $alvo se resolve quando a F5 aprovar o plano replanejado. Sem a migracao, o replanejar-execucao recusa (planejamento_legado) sem gravar nada (DS-225). A migracao nasce no estado que o disco mostra: se a ultima linha VEREDITO: de 00-AUDITORIA.md for NÃO, o plano volta a F3, e essas rodadas da F5 nao consomem o orcamento da F6. Nada foi gravado."
+        && falha "$E_TRANSICAO" "$alvo e defeito_de_plano num plano legado, sem 00-PLANEJAMENTO.md: nao ha rodada de replanejamento da execucao que o resolva. Migre o plano declarando o orcamento (DS-137, DS-146) — $plc criar $SLUG null <declarado_por> <max_replanejamentos_f6> — e depois $plc checkpoint $SLUG. A migracao nasce no estado que o disco mostra; confira com $plc fase $SLUG: em F6, rode $plc replanejar-execucao $SLUG; em F3 (a ultima linha VEREDITO: de 00-AUDITORIA.md e NÃO), o replanejar-execucao vem depois de F3, F4 e F5, rodadas que nao consomem o orcamento da F6. O $alvo se resolve quando a F5 aprovar o plano replanejado. Sem a migracao, o replanejar-execucao recusa (planejamento_legado) sem gravar nada (DS-225). Nada foi gravado."
       falha "$E_TRANSICAO" "$alvo e defeito_de_plano: so e resolvido quando a rodada de replanejamento da execucao que ele abriu volta a aprovado pela F5 (planejamento.sh pode-resolver recusou, motivo: ${motivo:-desconhecido}). Editar o plano nao resolve. Nada foi gravado."
     fi
   fi

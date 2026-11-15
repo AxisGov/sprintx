@@ -2041,12 +2041,13 @@ EOF
 
 # migracao_legado_msg — o comando da migracao de um plano legado, o mesmo texto do
 # `bloqueios.sh resolver` (DS-224): com o SPRINTX_RAIZ que veio do ambiente; teto e dono
-# sao marcadores, porque sao declaracao humana (DS-137, DS-146).
+# sao marcadores, porque sao declaracao humana (DS-137, DS-146). Raiz e caminho saem citados
+# pela shell (%q): copiado, o comando nunca executa o que vier no nome (CodeAnt no sprintx#83).
 migracao_legado_msg() {
-  local plc="bash \"$SK/scripts/planejamento.sh\""
-  [ -z "${SPRINTX_RAIZ:-}" ] || plc="SPRINTX_RAIZ=\"$RAIZ\" $plc"
-  printf 'Migre o plano declarando o orcamento (DS-137, DS-146) — %s criar %s null <declarado_por> <max_replanejamentos_f6> — e depois %s checkpoint %s e %s replanejar-execucao %s' \
-    "$plc" "$SLUG" "$plc" "$SLUG" "$plc" "$SLUG"
+  local plc; plc="bash $(printf '%q' "$SK/scripts/planejamento.sh")"
+  [ -z "${SPRINTX_RAIZ:-}" ] || plc="SPRINTX_RAIZ=$(printf '%q' "$RAIZ") $plc"
+  printf 'Migre o plano declarando o orcamento (DS-137, DS-146) — %s criar %s null <declarado_por> <max_replanejamentos_f6> — e depois %s checkpoint %s. A migracao nasce no estado que o disco mostra; confira com %s fase %s: em F6, rode %s replanejar-execucao %s; em F3 (a ultima linha VEREDITO: de 00-AUDITORIA.md e NÃO), o replanejar-execucao vem depois de F3, F4 e F5, rodadas que nao consomem o orcamento da F6' \
+    "$plc" "$SLUG" "$plc" "$SLUG" "$plc" "$SLUG" "$plc" "$SLUG"
 }
 
 # recusa_legado <abertos> — plano sem 00-PLANEJAMENTO.md com defeito_de_plano aberto: recusa
