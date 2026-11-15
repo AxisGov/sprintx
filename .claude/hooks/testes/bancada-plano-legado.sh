@@ -104,9 +104,53 @@ ar_ck="$(ar_pl "$AR_N" checkpoint menu)"
   && [ "$(ar_kv "$(ar_pl "$AR_N" fase menu)" fase)" = F3 ]
 afirma "ar5-veredito-nao-volta-a-f3-sem-tocar-a-f6" $? "$(printf '%s' "$ar_out" | tr '\n' ' ' | cut -c1-160)"
 
+# AR7. o replanejar-execucao num plano legado recusa SEM GRAVAR (DS-225): nenhum
+# 00-PLANEJAMENTO.md, nenhum checkpoint, codigo 5, e o mesmo comando da migracao do resolver
+# (com o SPRINTX_RAIZ que veio do ambiente). Repetir da o mesmo, e a migracao continua aberta.
+AR_L="$AR/legado"; ar_legado "$AR_L" SIM
+AR_FL="$AR_L/docs/sprintx/features/menu"; ar_h="$(git -C "$AR_L" rev-parse HEAD)"
+ar_out="$(SPRINTX_RAIZ="$AR_L" bash "$AR_PL" replanejar-execucao menu 2>&1)"; ar_rc=$?
+[ "$ar_rc" -eq 5 ] && [ ! -e "$AR_FL/00-PLANEJAMENTO.md" ] && [ "$(git -C "$AR_L" rev-parse HEAD)" = "$ar_h" ] \
+  && [ -z "$(git -C "$AR_L" status --porcelain -- docs/sprintx)" ] \
+  && [ "$(ar_kv "$ar_out" replanejamento)" = recusado ] && [ "$(ar_kv "$ar_out" motivo)" = planejamento_legado ] \
+  && [ "$(ar_kv "$ar_out" persistencia)" = disco ] && ar_tem "$ar_out" 'plano legado' \
+  && ar_tem "$ar_out" "/scripts/planejamento.sh\" criar menu null <declarado_por> <max_replanejamentos_f6>" \
+  && ar_tem "$ar_out" "/scripts/planejamento.sh\" checkpoint menu" \
+  && ar_tem "$ar_out" "/scripts/planejamento.sh\" replanejar-execucao menu" \
+  && [ "$(grep -oF -- "SPRINTX_RAIZ=\"$AR_L\" bash \"" <<<"$ar_out" | wc -l)" -eq 3 ] \
+  && ar_tem "$ar_out" 'Nada foi gravado'
+afirma "ar7-legado-recusa-sem-gravar-o-terminal" $? "rc=$ar_rc: $(printf '%s' "$ar_out" | tr '\n' ' ' | cut -c1-200)"
+ar_out="$(ar_pl "$AR_L" replanejar-execucao menu)"; ar_rc=$?
+[ "$ar_rc" -eq 5 ] && [ ! -e "$AR_FL/00-PLANEJAMENTO.md" ] && [ "$(git -C "$AR_L" rev-parse HEAD)" = "$ar_h" ] \
+  && [ "$(ar_kv "$ar_out" motivo)" = planejamento_legado ] && ! ar_tem "$ar_out" 'SPRINTX_RAIZ=' \
+  && ar_tem "$ar_out" "/scripts/planejamento.sh\" criar menu null <declarado_por> <max_replanejamentos_f6>" \
+  && [ "$(ar_kv "$(ar_pl "$AR_L" criar menu null flavio 1)" planejamento)" = migrado_legado ] \
+  && ar_pl "$AR_L" checkpoint menu >/dev/null \
+  && [ "$(ar_kv "$(ar_pl "$AR_L" replanejar-execucao menu)" replanejamento)" = iniciado ]
+afirma "ar7b-repetir-recusa-igual-e-a-migracao-continua-aberta" $? "rc=$ar_rc: $(printf '%s' "$ar_out" | tr '\n' ' ' | cut -c1-200)"
+
+# AR8. quem ja ficou preso: um 00-PLANEJAMENTO.md que uma versao anterior gravou no terminal
+# planejamento_legado continua como esta. Nenhum comando da sprintx sai dele (o criar nao muda o
+# teto, a autorizacao tardia so parte de orcamento_f6_nao_declarado), e a recusa diz isso.
+AR_P="$AR/preso"; ar_legado "$AR_P" SIM; AR_FP="$AR_P/docs/sprintx/features/menu"
+ar_pl "$AR_P" criar menu >/dev/null
+awk '$0 == "estado: aprovado" { print "estado: replanejamento_execucao_recusado"; print "recusa_replanejamento_f6: planejamento_legado"; next } { print }' \
+  "$AR_FP/00-PLANEJAMENTO.md" > "$AR/p.tmp" && mv "$AR/p.tmp" "$AR_FP/00-PLANEJAMENTO.md"
+git -C "$AR_P" add -A && git -C "$AR_P" commit -q -m "terminal planejamento_legado de uma versao anterior"
+ar_h="$(git -C "$AR_P" rev-parse HEAD)"; ar_ck="$(cksum < "$AR_FP/00-PLANEJAMENTO.md")"
+ar_out="$(ar_pl "$AR_P" replanejar-execucao menu)"; ar_rc=$?
+ar_pl "$AR_P" criar menu null flavio 1 >/dev/null; ar_rc_criar=$?
+ar_pl "$AR_P" autorizar-replanejamento-execucao menu 1 flavio >/dev/null; ar_rc_aut=$?
+[ "$ar_rc" -eq 5 ] && [ "$(ar_kv "$ar_out" motivo)" = planejamento_legado ] && [ "$(ar_kv "$ar_out" estado)" = replanejamento_execucao_recusado ] \
+  && ar_tem "$ar_out" 'versao anterior' && ar_tem "$ar_out" 'Nenhum comando da sprintx sai deste terminal' && ar_tem "$ar_out" 'decisao humana' \
+  && [ "$ar_rc_criar" -eq 4 ] && [ "$ar_rc_aut" -eq 5 ] \
+  && [ "$(git -C "$AR_P" rev-parse HEAD)" = "$ar_h" ] && [ "$(cksum < "$AR_FP/00-PLANEJAMENTO.md")" = "$ar_ck" ]
+afirma "ar8-preso-no-terminal-antigo-fica-e-a-recusa-diz" $? "rc=$ar_rc criar=$ar_rc_criar aut=$ar_rc_aut: $(printf '%s' "$ar_out" | tr '\n' ' ' | cut -c1-200)"
+
 # AR6. o contrato escrito: a DS-224 e a orientacao da F6.
 ar_ds="$(cat "$SK/DECISOES-DA-SKILL.md")"; ar_ex="$(cat "$SK/references/06-execucao.md")"
-ar_tem "$ar_ds" '| DS-224' && ar_tem "$ar_ex" 'Plano legado (sem `00-PLANEJAMENTO.md`)'
-afirma "ar6-contrato-escrito" $? "DS-224 e 06-execucao"
+ar_tem "$ar_ds" '| DS-224' && ar_tem "$ar_ds" '| DS-225' && ar_tem "$ar_ex" 'Plano legado (sem `00-PLANEJAMENTO.md`)' \
+  && ar_tem "$ar_ex" 'Se o plano for legado (sem `00-PLANEJAMENTO.md`), migre antes'
+afirma "ar6-contrato-escrito" $? "DS-224, DS-225 e 06-execucao"
 
 rm -rf "$AR"

@@ -737,15 +737,22 @@ k_task_nao_bloqueada() {
   kpl "$s" "$d" replanejar-execucao menu >/dev/null; rc=$?
   [ "$rc" -eq 4 ] && [ "$(cksum < "$f/00-PLANEJAMENTO.md")" = "$ck" ]
 }
-# K24. Feature sem 00-PLANEJAMENTO.md: recusa duravel `planejamento_legado`; o arquivo nasce pela
-# migracao ja no terminal, sem orcamento nenhum inventado.
+# K24. Feature sem 00-PLANEJAMENTO.md: recusa `planejamento_legado` SEM GRAVAR (DS-225) — nenhum
+# arquivo, terminal ou checkpoint, nenhum orcamento inventado; repetir da o mesmo. A migracao
+# continua aberta (a secao AR prova o comando dela).
 k_planejamento_legado() {
-  local s="$1" d="$2" f; f="$(kf "$d")"
+  local s="$1" d="$2" f h out rc i; f="$(kf "$d")"
   kbl "$s" "$d" registrar menu T-04.03 defeito_de_plano 'arquivo da task irma' 'ampliar ownership' >/dev/null || return 1
-  k_recusa_duravel "$s" "$d" planejamento_legado || return 1
-  [ "$(fmv "$f/00-PLANEJAMENTO.md" max_replanejamentos_f6)" = null ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" replanejamentos_f6)" = 0 ] \
-    && [ "$(fmv "$f/00-PLANEJAMENTO.md" max_reprovacoes_f5)" = null ] && [ "$(fmv "$f/00-PLANEJAMENTO.md" orcamento_declarado_por)" = null ] \
-    && [ "$(kbloq "$d" B-01)" = "defeito_de_plano|aberto" ]
+  git -C "$d" add -A && git -C "$d" commit -q -m "B-01" || return 1
+  h="$(git -C "$d" rev-parse HEAD)"
+  for i in 1 2; do
+    out="$(kpl "$s" "$d" replanejar-execucao menu)"; rc=$?
+    [ "$rc" -eq 5 ] && [ "$(kv "$out" replanejamento)" = recusado ] && [ "$(kv "$out" motivo)" = planejamento_legado ] \
+      && [ ! -e "$f/00-PLANEJAMENTO.md" ] && [ ! -L "$f/00-PLANEJAMENTO.md" ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] \
+      && [ -z "$(git -C "$d" status --porcelain -- docs/sprintx/features/menu)" ] || return 1
+  done
+  [ "$(kbloq "$d" B-01)" = "defeito_de_plano|aberto" ] && [ "$(kst "$d" T-04.03)" = bloqueada ] \
+    && [ "$(kv "$(kpl "$s" "$d" fase menu)" fonte)" = legado ]
 }
 # K25. Sem worktree: a recusa e o motivo sobrevivem so no que foi commitado. A arvore da execucao
 # e perdida; um clone da branch (sem rastro, sem sessao) reconhece o mesmo terminal.
@@ -945,7 +952,7 @@ for par in k_inicia:k1-piloto-entra-em-replanejar-execucao k_retomada:k2-retomad
   k_prerequisito:k7-prerequisito-ausente-nao-replaneja k_legado_bloqueio:k8-bloqueio-legado-nao-replaneja \
   k_mistura:k9-classes-mistas-nao-replaneja k_varios:k10-varios-defeitos-uma-rodada-ordenada \
   k_legado_orcamento:k11-planejamento-legado-sem-orcamento-inventado k_sem_orcamento:k12-orcamento-f6-nao-declarado-nao-abre \
-  k_planejamento_legado:k24-sem-planejamento-recusa-duravel-sem-orcamento k_sem_worktree:k25-recusa-sobrevive-sem-worktree \
+  k_planejamento_legado:k24-sem-planejamento-recusa-sem-gravar k_sem_worktree:k25-recusa-sobrevive-sem-worktree \
   k_sem_bloqueio:k26-sem-bloqueio-aberto-nao-grava k_registro_invalido:k26-registro-invalido-nao-grava \
   k_recusa_schema:k27-terminal-recusado-no-schema \
   k_fronteira:k13-produto-sujo-fronteira-insegura k_f5_nao_continua:k14-f5-nao-durante-rodada-continua \
@@ -1120,10 +1127,11 @@ l_aut_terminais() {
       rodada_zero)
         d="$(kcopia "$FX2")"; a="$(kf "$d")/00-PLANEJAMENTO.md"; k_aut_trio "$a" usuario || return 1 ;;
     esac
-    a="$(kf "$d")/00-PLANEJAMENTO.md"; ck="$(cksum < "$a")"; h="$(git -C "$d" rev-parse HEAD)"
+    # planejamento: sem 00-PLANEJAMENTO.md desde a DS-225 — a soma do arquivo ausente e vazia
+    a="$(kf "$d")/00-PLANEJAMENTO.md"; ck="$( { cksum < "$a"; } 2>/dev/null)"; h="$(git -C "$d" rev-parse HEAD)"
     kpl "$s" "$d" autorizar-replanejamento-execucao menu 2 usuario >/dev/null; rc=$?
     case "$caso" in schema|teto_null|rodada_zero) [ "$rc" -eq 4 ] || return 1 ;; *) [ "$rc" -eq 5 ] || return 1 ;; esac
-    [ "$(cksum < "$a")" = "$ck" ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] || return 1
+    [ "$( { cksum < "$a"; } 2>/dev/null)" = "$ck" ] && [ "$(git -C "$d" rev-parse HEAD)" = "$h" ] || return 1
   done
 }
 
@@ -1702,7 +1710,7 @@ mutante_k "km-mutante-8-inventa-orcamento-no-legado" $? "$M" k_legado_orcamento
 # A recusa operacional como era antes: so no stdout, nada gravado.
 M="$(copia_skill_k i)"; muta_lit "$PL" "$M" '  local motivo="$1" abertos="$2"' \
   '  local motivo="$1" abertos="$2"; printf '"'"'replanejamento=recusado\nmotivo=%s\nestado=%s\n'"'"' "$motivo" "$P_ESTADO"; falha "$E_TRANSICAO" recusado'
-mutante_k "km-mutante-9-recusa-so-no-stdout" $? "$M" k_mistura k_sem_orcamento k_legado_orcamento k_planejamento_legado k_sem_worktree
+mutante_k "km-mutante-9-recusa-so-no-stdout" $? "$M" k_mistura k_sem_orcamento k_legado_orcamento k_sem_worktree
 # Grava o terminal, mas nao faz o checkpoint: some com o worktree.
 M="$(copia_skill_k j)"; muta_lit "$PL" "$M" '; estado terminal replanejamento_execucao_recusado gravado"' \
   '; estado terminal replanejamento_execucao_recusado gravado"; checkpoint() { printf '"'"'checkpoint=ignorado\n'"'"'; }'
@@ -1721,10 +1729,10 @@ mutante_k "km-mutante-13-contrato-vira-recusa-gravada" $? "$M" k_lacuna k_legado
 M="$(copia_skill_k n)"; muta_lit "$PL" "$M" '    evento replanejamento_execucao_recusado f6 - bloqueado "fronteira insegura: produto sujo na arvore:$sujos"' \
   '    recusa_duravel classes_mistas "$sujos"'
 mutante_k "km-mutante-14-fronteira-vira-recusa-gravada" $? "$M" k_fronteira
-# Sem 00-PLANEJAMENTO.md, a recusa inventa o teto da F6 do BuildX.
-M="$(copia_skill_k o)"; muta_lit "$PL" "$M" '    migra_legado null null null replanejamento_execucao_recusado "$motivo"' \
-  '    migra_legado 3 buildx 1 replanejamento_execucao_recusado orcamento_f6_nao_declarado'
-mutante_k "km-mutante-15-legado-inventa-orcamento-na-recusa" $? "$M" k_planejamento_legado
+# Sem 00-PLANEJAMENTO.md, a recusa volta a gravar o terminal pela migracao (o beco da DS-225).
+M="$(copia_skill_k o)"; muta_lit "$PL" "$M" '  if [ "$E_FONTE" = legado ]; then recusa_legado "$defeitos${outros:+ }$outros"; fi' \
+  '  if [ "$E_FONTE" = legado ]; then migra_legado null null null replanejamento_execucao_recusado planejamento_legado; checkpoint >/dev/null; recusa_legado "$defeitos"; fi'
+mutante_k "km-mutante-15-legado-grava-o-terminal" $? "$M" k_planejamento_legado
 # Registro invalido lido so dentro do subshell: vira "nenhum bloqueio aberto" em vez de contrato.
 M="$(copia_skill_k p)"; muta_lit "$PL" "$M" '  le_bloqueios || falha "$E_CONTRATO" "00-BLOQUEIOS.md invalido"' '  :'
 mutante_k "km-mutante-16-registro-invalido-vira-sem-bloqueio" $? "$M" k_registro_invalido
