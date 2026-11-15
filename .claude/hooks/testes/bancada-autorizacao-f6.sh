@@ -74,6 +74,14 @@ afirma "ds175-contrato-template" $? "tupla opcional e autoridade canonica coment
   && al_tem "$AL_DSF" 'autorizacao_tardia_f6_por'
 afirma "ds175-decisao-append-only" $? "uma linha DS-175 fiel a spec e decisoes anteriores intactas"
 
+# DS-223 (conselhos, onda 2): o teto da F6 não se amplia, e a rota depois dele é escrita
+al_tem "$AL_EXEC" '**O teto da F6 não se amplia** (DS-223)' \
+  && al_tem "$AL_EXEC" 'PR ainda aberto com achado de revisão válido' \
+  && al_tem "$AL_EXEC" 'Uma OC só corrige o que já está na main' \
+  && al_tem "$AL_SKILL" 'o teto da F6 não se amplia (DS-223)' \
+  && [ "$(grep -c '^| DS-223 ' "$AL_DSF")" -eq 1 ]
+afirma "ds223-rota-depois-do-teto" $? "teto F6 fixo; PR aberto vai a trabalho sucessor, codigo na main vai a OC"
+
 # --------------------------------------------------------- mutantes DS-175
 # Cada copia leva planejamento + bloqueios + helper de caminho + trava. O controle
 # intacto percorre todos os oraculos usados pelos 21 mutantes; cada mutante muda
