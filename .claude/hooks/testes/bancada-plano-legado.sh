@@ -55,10 +55,18 @@ ar_ck="$(cksum < "$AR_F/00-BLOQUEIOS.md")"
 ar_out="$(ar_bl "$AR_S" resolver menu B-01)"; ar_rc=$?
 [ "$ar_rc" -eq 5 ] && [ "$(cksum < "$AR_F/00-BLOQUEIOS.md")" = "$ar_ck" ] && [ ! -e "$AR_F/00-PLANEJAMENTO.md" ] \
   && ar_tem "$ar_out" 'plano legado' && ar_tem "$ar_out" 'sem 00-PLANEJAMENTO.md' \
-  && ar_tem "$ar_out" "scripts/planejamento.sh\" criar menu null <declarado_por> <max_replanejamentos_f6>" \
-  && ar_tem "$ar_out" 'planejamento.sh replanejar-execucao menu' \
+  && ar_tem "$ar_out" "/scripts/planejamento.sh\" criar menu null <declarado_por> <max_replanejamentos_f6>" \
+  && ar_tem "$ar_out" "/scripts/planejamento.sh\" checkpoint menu" \
+  && ar_tem "$ar_out" "/scripts/planejamento.sh\" replanejar-execucao menu" \
+  && [ "$(grep -oF -- "SPRINTX_RAIZ=\"$AR_S\" bash \"" <<<"$ar_out" | wc -l)" -eq 3 ] \
   && ar_tem "$ar_out" 'planejamento_legado' && ar_tem "$ar_out" 'Nada foi gravado'
 afirma "ar1-legado-diz-o-comando-da-migracao" $? "rc=$ar_rc: $(printf '%s' "$ar_out" | tr '\n' ' ' | cut -c1-160)"
+
+# AR1b. chamado de dentro do repositorio, sem SPRINTX_RAIZ, o comando nao a inventa; com ela, o
+# comando leva a mesma raiz que o resolver usou (CodeAnt no sprintx#83).
+ar_out="$( (cd "$AR_S" && bash "$AR_BL" resolver menu B-01) 2>&1)"; ar_rc=$?
+[ "$ar_rc" -eq 5 ] && ar_tem "$ar_out" "— bash \"" && ar_tem "$ar_out" "/scripts/planejamento.sh\" criar menu null" && ! ar_tem "$ar_out" 'SPRINTX_RAIZ='
+afirma "ar1b-sem-raiz-explicita-o-comando-nao-a-inventa" $? "rc=$ar_rc: $(printf '%s' "$ar_out" | tr '\n' ' ' | cut -c1-160)"
 
 # AR2. o comando dado, com o orcamento declarado, migra: estado aprovado (o disco tem
 # VEREDITO: SIM), nenhuma rodada aberta, nenhum replanejamento consumido.
