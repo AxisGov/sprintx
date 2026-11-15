@@ -25,7 +25,8 @@
 # sufixo " · resolvido em AAAA-MM-DD" da linha B-NN da prosa. A classe nunca muda.
 # `defeito_de_plano` so e resolvido quando `planejamento.sh pode-resolver` aceita:
 # o B-NN abriu a rodada de replanejamento da execucao e o plano replanejado ja
-# voltou a `aprovado`. Editar o plano nao basta.
+# voltou a `aprovado`. Editar o plano nao basta. A recusa diz o motivo do pode-resolver; no
+# plano legado (sem 00-PLANEJAMENTO.md), da o comando da migracao (DS-224).
 #
 # Codigos de saida:
 #   0  ok (inclusive resolver um B-NN ja resolvido: nada muda)
@@ -258,8 +259,15 @@ EOF
   esac
   # A classe (a chave, nunca a descricao) decide quem pode resolver.
   if [ "$lida" = defeito_de_plano ]; then
-    SPRINTX_RAIZ="$RAIZ" bash "$SK/scripts/planejamento.sh" pode-resolver "$SLUG" "$alvo" >/dev/null 2>&1 \
-      || falha "$E_TRANSICAO" "$alvo e defeito_de_plano: so e resolvido quando a rodada de replanejamento da execucao que ele abriu volta a aprovado pela F5 (planejamento.sh pode-resolver recusou). Editar o plano nao resolve. Nada foi gravado."
+    local pr motivo
+    if ! pr="$(SPRINTX_RAIZ="$RAIZ" bash "$SK/scripts/planejamento.sh" pode-resolver "$SLUG" "$alvo" 2>/dev/null)"; then
+      motivo="$(printf '%s\n' "$pr" | sed -n 's/^motivo=//p' | tail -1)"
+      # Plano legado (DS-224): sem 00-PLANEJAMENTO.md nao ha rodada que resolva o B-NN. O
+      # comando da migracao leva o slug; o orcamento e de quem o declara, nunca inventado aqui.
+      [ "$motivo" = sem_planejamento ] \
+        && falha "$E_TRANSICAO" "$alvo e defeito_de_plano num plano legado, sem 00-PLANEJAMENTO.md: nao ha rodada de replanejamento da execucao que o resolva. Migre o plano declarando o orcamento (DS-137, DS-146) — bash \"$SK/scripts/planejamento.sh\" criar $SLUG null <declarado_por> <max_replanejamentos_f6> — e depois rode planejamento.sh checkpoint $SLUG e planejamento.sh replanejar-execucao $SLUG; o $alvo se resolve quando a F5 aprovar o plano replanejado. Migre antes do replanejar-execucao: sem a migracao, ele grava o terminal planejamento_legado. A migracao nasce no estado que o disco mostra: se a ultima linha VEREDITO: de 00-AUDITORIA.md for NÃO, o plano volta a F3, e essas rodadas da F5 nao consomem o orcamento da F6. Nada foi gravado."
+      falha "$E_TRANSICAO" "$alvo e defeito_de_plano: so e resolvido quando a rodada de replanejamento da execucao que ele abriu volta a aprovado pela F5 (planejamento.sh pode-resolver recusou, motivo: ${motivo:-desconhecido}). Editar o plano nao resolve. Nada foi gravado."
+    fi
   fi
   tr -d '\r' < "$ARQ" | BL_ALVO="$alvo" BL_HOJE="$(hoje)" awk '
     BEGIN { alvo = ENVIRON["BL_ALVO"]; hoje = ENVIRON["BL_HOJE"] }
