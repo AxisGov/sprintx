@@ -4,8 +4,8 @@ set -euo pipefail
 raiz="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$raiz"
 
-legada_base='((github[.]com[/:]|raw[.]githubusercontent[.]com/)bittencourtthulio/(runx|mergex|sprintx|buildx|expxdev)([.]git)?|bittencourtthulio[.]github[.]io/expxdev)'
-legada="$legada_base([^[:alnum:]_.-]|$)"
+legada_base='((github[.]com[/:]|raw[.]githubusercontent[.]com/)bittencourtthulio/(runx|mergex|sprintx|buildx|expxdev|legadox|stackx|memox|prodx|designx)([.]git)?|bittencourtthulio[.]github[.]io/expxdev|npx([[:space:]]+-[^[:space:]/:]+)*[[:space:]]+(--package=)?expxdev)'
+legada="$legada_base([^[:alnum:]_.-]|[.]([^[:alnum:]_-]|$)|$)"
 allowlist='scripts/ci/proveniencia-allowlist.tsv'
 separador=$'\x1f'
 declare -A encontrados=()
@@ -24,8 +24,13 @@ registrar_ocorrencia() {
   local chave
 
   [ -n "$ocorrencia" ] || return 0
-  if [[ "$ocorrencia" =~ [^[:alnum:]_.-]$ ]]; then
+  # o delimitador que fechou a ocorrencia (espaco, aspas, ponto final de frase) sai
+  while [[ "$ocorrencia" =~ [^[:alnum:]_-]$ ]]; do
     ocorrencia="${ocorrencia%?}"
+  done
+  # toda forma do npx do pacote expxdev (opcoes, espacos, tab) e a mesma ocorrencia
+  if [[ "$ocorrencia" =~ ^[Nn][Pp][Xx][[:space:]] ]]; then
+    ocorrencia='npx'" "'expxdev'
   fi
   normalizada="$(printf '%s' "$ocorrencia" | LC_ALL=C tr '[:upper:]' '[:lower:]')"
   chave="$arquivo$separador$normalizada"
@@ -127,12 +132,13 @@ while IFS=$'\t' read -r arquivo ocorrencia quantidade finalidade justificativa e
       exit 1
       ;;
   esac
-  [[ "$quantidade" =~ ^[1-9][0-9]*$ ]] || {
+  [[ "$quantidade" =~ ^[1-9][0-9]{0,8}$ ]] || {
     printf 'quantidade invalida na allowlist, linha %d: %s\n' "$numero_linha" "$quantidade" >&2
     exit 1
   }
 
   decodificada="${ocorrencia//%2E/.}"
+  decodificada="${decodificada//%20/ }"
   normalizada="$(printf '%s' "$decodificada" | LC_ALL=C tr '[:upper:]' '[:lower:]')"
   [ "$decodificada" = "$normalizada" ] || {
     printf 'ocorrencia da allowlist deve estar normalizada em lowercase, linha %d\n' "$numero_linha" >&2
@@ -182,7 +188,7 @@ done
 
 if [ -f src/nucleo/catalogo.ts ]; then
   for repo in runx mergex sprintx buildx; do
-    grep -q "https://github.com/AxisGov/$repo" src/nucleo/catalogo.ts || {
+    grep -Eq "https://github[.]com/AxisGov/$repo([.]git)?([^[:alnum:]_.-]|[.]([^[:alnum:]_-]|$)|$)" src/nucleo/catalogo.ts || {
       printf 'catalogo sem origem canonica AxisGov/%s\n' "$repo" >&2
       exit 1
     }
@@ -190,7 +196,7 @@ if [ -f src/nucleo/catalogo.ts ]; then
   grep -q 'https://github.com/AxisGov/expxdev' package.json
 else
   for repo in runx mergex sprintx buildx expxdev; do
-    grep -q "https://github.com/AxisGov/$repo" README.md || {
+    grep -Eq "https://github[.]com/AxisGov/$repo([.]git)?([^[:alnum:]_.-]|[.]([^[:alnum:]_-]|$)|$)" README.md || {
       printf 'README sem origem canonica AxisGov/%s\n' "$repo" >&2
       exit 1
     }
@@ -231,6 +237,15 @@ LC_ALL=C awk '
   printf 'evento pull_request ausente ou filtrado no workflow de proveniencia\n' >&2
   exit 1
 }
+if [ "$workflow" = .github/workflows/proveniencia.yml ] && grep -Eq "[\"']?if[\"']?[[:space:]]*:" "$workflow"; then
+  printf 'if no workflow de proveniencia: o guarda deixaria de rodar em parte dos eventos\n' >&2
+  exit 1
+fi
+# a chave em qualquer grafia YAML: com ou sem aspas, em bloco ou em mapa de fluxo (Codex)
+if grep -Eq "[\"']?continue-on-error[\"']?[[:space:]]*:" "$workflow"; then
+  printf 'continue-on-error no workflow de proveniencia: a falha do guarda deixaria de reprovar o job\n' >&2
+  exit 1
+fi
 grep -Eq '^[[:space:]]*(-[[:space:]]+)?run:[[:space:]]+bash[[:space:]]+scripts/ci/test-proveniencia[.]sh[[:space:]]*(#[^[:cntrl:]]*)?$' "$workflow" || {
   printf 'workflow nao executa scripts/ci/test-proveniencia.sh\n' >&2
   exit 1

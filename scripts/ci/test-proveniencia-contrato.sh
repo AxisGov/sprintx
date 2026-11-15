@@ -122,6 +122,88 @@ caso_bloqueado filename_spaces 'docs/instalador legado.md' \
   "git clone https://$github_host/$proprietario/buildx.git"
 caso_bloqueado arbitrary_case bootstrap.sh \
   "https://$github_host/BiTtEnCoUrTtHuLiO/BuIlDx"
+# Todos os forks AxisGov, não só os cinco primeiros (conselhos, 2026-11-14): o
+# link do README, o asset do banner, o site e o npx do pacote expxdev (o npm é do upstream)
+caso_bloqueado fork_legadox docs/ecossistema.md \
+  "[legadox](https://$github_host/$proprietario/legadox)"
+caso_bloqueado fork_memox_maiusculo docs/ecossistema.md \
+  "[memox](https://$github_host/$proprietario/MemoX)"
+caso_bloqueado fork_designx_asset docs/ecossistema.md \
+  "<img src=\"https://$raw_host/$proprietario/designx/main/.github/assets/banner.svg\">"
+caso_bloqueado site_upstream docs/ecossistema.md \
+  "https://$proprietario.github.io/expxdev/#legadox"
+caso_bloqueado npx_upstream docs/ecossistema.md \
+  "npx ""expxdev init"
+repo_modulex="$(nova_fixture modulex_sem_fork)"
+rastrear_texto "$repo_modulex" docs/ecossistema.md \
+  "[modulex](https://$github_host/$proprietario/modulex)"
+esperar_sucesso modulex_sem_fork "$repo_modulex"
+# CodeAnt/CodeRabbit nos PRs de 2026-11-14: o npx do pacote expxdev com opções,
+# espaços a mais ou tab; o link fechado por ponto final; o README com um fork de
+# nome parecido; continue-on-error no passo do guarda; quantidade sem limite
+caso_bloqueado npx_opcao_longa docs/ecossistema.md "npx --yes ""expxdev init"
+caso_bloqueado npx_opcao_curta docs/ecossistema.md "npx -y ""expxdev init"
+caso_bloqueado npx_dois_espacos docs/ecossistema.md "npx  ""expxdev init"
+caso_bloqueado npx_tab docs/ecossistema.md "npx"$'\t'"expxdev init"
+caso_bloqueado npx_pacote_upstream docs/ecossistema.md "npx --package ""expxdev expx init"
+caso_bloqueado link_com_ponto_final docs/ecossistema.md \
+  "Veja https://$github_host/$proprietario/legadox."
+repo_release="$(nova_fixture npx_da_release)"
+rastrear_texto "$repo_release" docs/instalar.md \
+  "npx --yes --package ~/expx-cli/v0.14.7/expxdev-0.14.7.tgz expx init --skills runx --yes"
+esperar_sucesso npx_da_release "$repo_release"
+repo_parecido="$(nova_fixture readme_fork_parecido)"
+sed "s#AxisGov/runx\$#AxisGov/runx-fork#" "$repo_parecido/README.md" > "$repo_parecido/README.tmp" \
+  && mv "$repo_parecido/README.tmp" "$repo_parecido/README.md"
+git -C "$repo_parecido" add README.md
+git -C "$repo_parecido" -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm 'fixture: fork de nome parecido'
+esperar_falha readme_fork_parecido "$repo_parecido"
+repo_coe="$(nova_fixture continue_on_error)"
+printf '%s\n' '        continue-on-error: true' >> "$repo_coe/.github/workflows/proveniencia.yml"
+git -C "$repo_coe" add .github/workflows/proveniencia.yml
+git -C "$repo_coe" -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm 'fixture: continue-on-error'
+esperar_falha continue_on_error "$repo_coe"
+for grafia in coe_aspas_duplas coe_aspas_simples coe_fluxo; do
+  repo_g="$(nova_fixture "$grafia")"
+  case "$grafia" in
+    coe_aspas_duplas) linha='        "continue-on-error": true' ;;
+    coe_aspas_simples) linha="        'continue-on-error': true" ;;
+    coe_fluxo) linha='      - { run: "true", continue-on-error: true }' ;;
+  esac
+  printf '%s\n' "$linha" >> "$repo_g/.github/workflows/proveniencia.yml"
+  git -C "$repo_g" add .github/workflows/proveniencia.yml
+  git -C "$repo_g" -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm "fixture: $grafia"
+  esperar_falha "$grafia" "$repo_g"
+done
+repo_qtd="$(nova_fixture quantidade_grande)"
+rastrear_texto "$repo_qtd" docs/historico.md "https://$github_host/$proprietario/runx"
+printf 'docs/historico.md\tgithub%%2Ecom/bittencourtthulio/runx\t99999999999999999999\thistorico\tquantidade alem do inteiro do shell\n' \
+  >> "$repo_qtd/scripts/ci/proveniencia-allowlist.tsv"
+git -C "$repo_qtd" add scripts/ci/proveniencia-allowlist.tsv
+git -C "$repo_qtd" -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm 'fixture: quantidade grande'
+esperar_falha quantidade_grande "$repo_qtd"
+# Segunda rodada do CodeRabbit: `--package=expxdev`; a URL do upstream dentro de uma
+# opção do npx não se esconde atrás da exceção do npx; a origem canônica com `.git`;
+# `if:` no workflow dedicado ao guarda
+caso_bloqueado npx_package_igual docs/ecossistema.md "npx --package=""expxdev expx init"
+repo_url_opcao="$(nova_fixture npx_url_na_opcao)"
+rastrear_texto "$repo_url_opcao" docs/historico.md \
+  "npx --package=https://$github_host/$proprietario/runx ""expxdev init"
+adicionar_excecao "$repo_url_opcao" docs/historico.md 'npx%20expxdev' 'historico' 'so o npx autorizado'
+esperar_falha npx_url_na_opcao "$repo_url_opcao"
+repo_git="$(nova_fixture readme_com_ponto_git)"
+sed "s#AxisGov/runx\$#AxisGov/runx.git#" "$repo_git/README.md" > "$repo_git/README.tmp" \
+  && mv "$repo_git/README.tmp" "$repo_git/README.md"
+git -C "$repo_git" add README.md
+git -C "$repo_git" -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm 'fixture: origem com .git'
+esperar_sucesso readme_com_ponto_git "$repo_git"
+repo_if="$(nova_fixture if_no_workflow)"
+sed 's#^    steps:#    if: github.event_name == '"'"'push'"'"'\n    steps:#' "$repo_if/.github/workflows/proveniencia.yml" > "$repo_if/wf.tmp" \
+  && mv "$repo_if/wf.tmp" "$repo_if/.github/workflows/proveniencia.yml"
+grep -q "if: github.event_name" "$repo_if/.github/workflows/proveniencia.yml" || { echo "FALHA: fixture if_no_workflow nao montou" >&2; exit 1; }
+git -C "$repo_if" add .github/workflows/proveniencia.yml
+git -C "$repo_if" -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm 'fixture: if no job'
+esperar_falha if_no_workflow "$repo_if"
 
 repo_atributo="$(nova_fixture atributo_binary)"
 rastrear_texto "$repo_atributo" bootstrap.sh \

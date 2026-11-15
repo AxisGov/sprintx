@@ -207,5 +207,5 @@
   </g>
 
   <!-- barra inferior -->
-  <text x="500" y="530" text-anchor="middle" class="eco-sans eco-edge"><tspan fill="#e6edf3" font-weight="600">expxdev</tspan> · <tspan class="eco-mono">npx expxdev init</tspan> · instala, atualiza e diagnostica tudo</text>
+  <text x="500" y="530" text-anchor="middle" class="eco-sans eco-edge"><tspan fill="#e6edf3" font-weight="600">expxdev</tspan> · <tspan class="eco-mono">expx init</tspan> · instala, atualiza e diagnostica tudo</text>
 </svg>
