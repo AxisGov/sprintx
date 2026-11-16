@@ -53,6 +53,9 @@ mkdir -p "$R/.unica"; printf 'x
 ' > "$R/.unica/so.yml"
 g -C "$R" add .unica/so.yml; g -C "$R" commit -q -m unica; g -C "$R" rm -q .unica/so.yml
 ! rastro_fora_do_projeto "$R" .unica/so.yml; afirma 'git rm preparado do ultimo arquivo da pasta continua do projeto' $?
+# a funcao nunca escreve no stderr: um teste quebrado que cai no `||` seguinte nao passa calado
+err="$( { rastro_fora_do_projeto "$R" .expxv/x/src/b.ts; rastro_fora_do_projeto "$R" .github/b.ts; rastro_fora_do_projeto "$R" vendor/sub; } 2>&1 >/dev/null)"
+[ -z "$err" ]; afirma 'rastro_fora_do_projeto nao escreve no stderr' $?
 
 echo
 echo "  $ok ok, $falhou falhas"
