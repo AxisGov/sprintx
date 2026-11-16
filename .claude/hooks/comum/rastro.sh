@@ -92,12 +92,17 @@ rastro_fora_do_projeto() {
   topo="${rel%%/*}"
   case "$topo" in
     .?*) [ "$topo" != "$rel" ] || return 1
-         [ -n "$(git -C "$raiz" ls-files -- "$topo" 2>/dev/null)" ] || return 0 ;;
+         # versionado no indice OU em HEAD: o `git rm` preparado do ultimo arquivo continua do projeto
+         [ -n "$(git -C "$raiz" ls-files -- "$topo" 2>/dev/null)" ] \n           || [ -n "$(git -C "$raiz" ls-tree -r --name-only HEAD -- "$topo" 2>/dev/null)" ] || return 0 ;;
   esac
   git -C "$raiz" check-ignore -q -- "$rel" 2>/dev/null && return 0
-  d="${rel%/*}"
-  while [ "$d" != "$rel" ] && [ -n "$d" ]; do
-    [ -e "$raiz/$d/.git" ] && return 0
+  # os ancestrais e, quando e pasta, ela mesma; submodulo versionado (160000) continua do projeto
+  d="${rel%/}"; [ -d "$raiz/$d" ] || d="${rel%/*}"
+  while [ -n "$d" ]; do
+    if [ -e "$raiz/$d/.git" ]; then
+      case "$(git -C "$raiz" ls-files --stage -- "$d" 2>/dev/null)" in 160000*) return 1 ;; esac
+      return 0
+    fi
     case "$d" in */*) d="${d%/*}" ;; *) break ;; esac
   done
   return 1

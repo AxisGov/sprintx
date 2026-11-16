@@ -6,6 +6,7 @@
 #
 #   bash scripts/ci/test-hooks-fora-do-projeto.sh
 set -uo pipefail
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
 
 RAIZ_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 H="$RAIZ_SRC/.claude/hooks"
@@ -47,6 +48,11 @@ tdd "$R/.github/b.ts";             afirma 'pasta oculta versionada (.github) con
 rastro_fora_do_projeto "$R" .pylot-tmp/wt/;  afirma 'git status: a pasta do repositorio aninhado (.pylot-tmp/wt/) e de fora' $?
 ! rastro_fora_do_projeto "$R" .env;          afirma '.env sujo no topo continua sendo do projeto' $?
 ! rastro_fora_do_projeto "$R" src/a.ts;      afirma 'arquivo versionado e do projeto' $?
+rastro_fora_do_projeto "$R" vendor/sub;      afirma 'repositorio aninhado pela propria pasta, sem barra (vendor/sub)' $?
+mkdir -p "$R/.unica"; printf 'x
+' > "$R/.unica/so.yml"
+g -C "$R" add .unica/so.yml; g -C "$R" commit -q -m unica; g -C "$R" rm -q .unica/so.yml
+! rastro_fora_do_projeto "$R" .unica/so.yml; afirma 'git rm preparado do ultimo arquivo da pasta continua do projeto' $?
 
 echo
 echo "  $ok ok, $falhou falhas"
