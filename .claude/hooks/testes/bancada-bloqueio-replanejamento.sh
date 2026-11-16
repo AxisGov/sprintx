@@ -292,7 +292,7 @@ MJ="$J/mut"
 muta_lit() { # muta_lit <origem> <destino> <trecho> <troca> — troca literal; falha se o trecho nao existe
   ML_A="$3" ML_B="$4" awk '{ a = ENVIRON["ML_A"]; i = index($0, a); if (i) { $0 = substr($0, 1, i - 1) ENVIRON["ML_B"] substr($0, i + length(a)); n++ } print } END { exit n ? 0 : 1 }' "$1" > "$2"
 }
-copia_skill() { mkdir -p "$MJ/$1/scripts/lib" "$MJ/$1/assets"; cp "$TPLB" "$MJ/$1/assets/"; cp "$SK/scripts/caminho-git.sh" "$MJ/$1/scripts/"; cp "$SK/scripts/lib/execucao.sh" "$MJ/$1/scripts/lib/"; printf '%s/%s/scripts/bloqueios.sh' "$MJ" "$1"; }
+copia_skill() { mkdir -p "$MJ/$1/scripts/lib" "$MJ/$1/assets"; cp "$TPLB" "$MJ/$1/assets/"; cp "$SK/scripts/caminho-git.sh" "$MJ/$1/scripts/"; cp "$SK/scripts/lib/execucao.sh" "$SK/scripts/lib/trava-autorizacao-f6.sh" "$MJ/$1/scripts/lib/"; printf '%s/%s/scripts/bloqueios.sh' "$MJ" "$1"; }
 mata() { local c; for c in $CASOS_J; do roda_caso "$c" "$1" || { printf '%s' "$c"; return; }; done; }
 mutante() { # mutante <nome> <rc da geracao> <script> <caso que TEM de matar>... — nao vale morrer de carona
   local nome="$1" rc="$2" s="$3" c vivos=""; shift 3

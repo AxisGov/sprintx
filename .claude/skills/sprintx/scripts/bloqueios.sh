@@ -50,6 +50,20 @@ falha() { local c="$1"; shift; printf 'bloqueios: %s\n' "$*" >&2; exit "$c"; }
 
 . "$SK/scripts/caminho-git.sh" || falha "$E_USO" "scripts/caminho-git.sh ausente"
 . "$SK/scripts/lib/execucao.sh" || falha "$E_USO" "scripts/lib/execucao.sh ausente"
+. "$SK/scripts/lib/trava-autorizacao-f6.sh" || falha "$E_USO" "scripts/lib/trava-autorizacao-f6.sh ausente"
+
+# trava_bloqueios — registrar e resolver mudam os bloqueios abertos sob a mesma trava da F6
+# que o recusa_duravel do planejamento.sh usa para reler e gravar a recusa terminal: assim
+# a recusa nunca sai de uma leitura velha (CodeAnt no sprintx#85). Ocupada, espera ate 10 s;
+# sem Git (trava indisponivel no ambiente), segue sem ela, como antes.
+trava_bloqueios() {
+  local i rc
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    adquire_trava_autorizacao_f6 "$RAIZ" "$SLUG"; rc=$?
+    case "$rc" in 2) sleep 1 ;; *) return 0 ;; esac
+  done
+  falha "$E_TRANSICAO" "a trava da F6 de $SLUG continua ocupada (replanejar-execucao ou autorizacao tardia em andamento): nada foi gravado; repita"
+}
 
 resolve_raiz() {
   # A raiz relativa que comeca com `-` ganha `./`: sem isso, mkdir, grep e awk a leriam
@@ -191,6 +205,7 @@ cmd_registrar() { # <task|null> <classe> <descricao> <destravaria>
   [ "$task" = null ] || grep -Eq '^T-[0-9]{2,}\.[0-9]{2,}$' <<<"$task" \
     || falha "$E_CONTRATO" "task invalida: '$task' (T-NN.MM ou null)"
   uma_linha descricao "$desc"; uma_linha "o que destravaria" "$dest"
+  trava_bloqueios
 
   if [ ! -f "$ARQ" ]; then
     mkdir -p "$PASTA" || falha "$E_CONTRATO" "nao consegui criar $PASTA"
@@ -274,6 +289,7 @@ EOF
       falha "$E_TRANSICAO" "$alvo e defeito_de_plano: so e resolvido quando a rodada de replanejamento da execucao que ele abriu volta a aprovado pela F5 (planejamento.sh pode-resolver recusou, motivo: ${motivo:-desconhecido}). Editar o plano nao resolve. Nada foi gravado."
     fi
   fi
+  trava_bloqueios
   tr -d '\r' < "$ARQ" | BL_ALVO="$alvo" BL_HOJE="$(hoje)" awk '
     BEGIN { alvo = ENVIRON["BL_ALVO"]; hoje = ENVIRON["BL_HOJE"] }
     NR == 1 { print; next }
