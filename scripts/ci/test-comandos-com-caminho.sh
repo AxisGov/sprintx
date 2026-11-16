@@ -9,8 +9,9 @@ set -uo pipefail
 R="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ALVO="$R/.claude/skills/sprintx/references/06-execucao.md"
 scripts="$(cd "$R/.claude/skills/sprintx/scripts" && ls -- *.sh | sed 's/\.sh$//' | paste -sd'|' -)"
-# trecho de codigo inline que comeca pelo nome do script, sem o caminho antes
-soltos="$(grep -noE "\`($scripts)\.sh [^\`]*\`" "$ALVO")"
+# comando para copiar: trecho de codigo inline que comeca pelo nome do script, sem o caminho
+# antes, e leva argumento (`<slug>` e afins); o nome sozinho (`bloqueios.sh resolver`) e citacao
+soltos="$(grep -noE "\`($scripts)\.sh [^\`]*<[^\`]*\`" "$ALVO")"
 if [ -z "$soltos" ]; then
   echo '  ok    nenhum comando de script solto no 06-execucao.md'
   exit 0
