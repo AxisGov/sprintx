@@ -48,9 +48,11 @@
 #   5  transicao invalida para o estado atual (inclui estado terminal, replanejamento
 #      recusado pela classe dos bloqueios ou pela falta de orcamento da F6, e
 #      resolucao de defeito_de_plano fora de uma rodada aprovada). A recusa
-#      OPERACIONAL (classes_mistas, orcamento_f6_legado, orcamento_f6_nao_declarado,
-#      planejamento_legado) e gravada como o terminal replanejamento_execucao_recusado
-#      e persistida pelo checkpoint; repeti-la devolve o mesmo terminal, sem gravar.
+#      OPERACIONAL (classes_mistas, orcamento_f6_legado, orcamento_f6_nao_declarado)
+#      e gravada como o terminal replanejamento_execucao_recusado e persistida pelo
+#      checkpoint; repeti-la devolve o mesmo terminal, sem gravar. Plano legado (sem
+#      00-PLANEJAMENTO.md) recusa planejamento_legado SEM gravar nada, com o comando da
+#      migracao (DS-225); o terminal planejamento_legado de versao anterior continua lido.
 #   64 uso incorreto
 
 set -uo pipefail
@@ -1956,6 +1958,11 @@ cmd_replanejar_execucao() {
     printf 'replanejamento=recusado\nmotivo=%s\nestado=%s\nreprovacoes=%s\nmax_reprovacoes_f5=%s\nproxima=PARAR\npersistencia=%s\n' \
       "$P_RECUSA" "$P_ESTADO" "$P_REPROV" "$P_MAX" "$PERSIST"
     saida_f6
+    # planejamento_legado so foi gravado por versao anterior a DS-225: o arquivo fica como esta
+    # (historico nao se reescreve), e a recusa diz que nao ha comando que saia dele.
+    if [ "$P_RECUSA" = planejamento_legado ]; then
+      falha "$E_TRANSICAO" "replanejamento da execucao ja recusado (planejamento_legado): este terminal foi gravado por uma versao anterior a DS-225, que criava o 00-PLANEJAMENTO.md com max_replanejamentos_f6: null. Hoje o plano legado recusa sem gravar; este arquivo continua como esta. Nenhum comando da sprintx sai deste terminal: o criar nao muda o teto ja gravado, e a autorizacao tardia so parte de orcamento_f6_nao_declarado. A saida e decisao humana. Nada foi gravado de novo. PARE e relate."
+    fi
     falha "$E_TRANSICAO" "replanejamento da execucao ja recusado ($P_RECUSA): estado terminal $P_ESTADO. Nada foi gravado de novo. PARE e relate."
   fi
   if [ "$P_ESTADO" != aprovado ]; then
@@ -1988,10 +1995,12 @@ EOF
     evento replanejamento_execucao_recusado f6 - bloqueado "$motivo: abertos [$outros]; estado $P_ESTADO mantido"
     falha "$E_TRANSICAO" "replanejamento da execucao recusado ($motivo): nada foi gravado; o estado continua $P_ESTADO. PARE e relate os bloqueios abertos."
   fi
+  # Plano legado (sem 00-PLANEJAMENTO.md): recusa SEM GRAVAR (DS-225). Gravar o terminal
+  # criaria o arquivo com max_replanejamentos_f6: null, e nenhum comando sai dele depois.
+  if [ "$E_FONTE" = legado ]; then recusa_legado "$defeitos${outros:+ }$outros"; fi
   # Ha defeito_de_plano aberto e a rodada nao pode abrir: recusa OPERACIONAL,
   # gravada como terminal e persistida.
   if [ -n "$outros" ]; then motivo=classes_mistas
-  elif [ "$E_FONTE" = legado ]; then motivo=planejamento_legado
   elif [ "$P_F6" = legado ]; then motivo=orcamento_f6_legado
   elif [ "$P_MAX6" = null ]; then motivo=orcamento_f6_nao_declarado
   fi
@@ -2030,18 +2039,35 @@ EOF
   saida_f6
 }
 
+# migracao_legado_msg — o comando da migracao de um plano legado, o mesmo texto do
+# `bloqueios.sh resolver` (DS-224): com o SPRINTX_RAIZ que veio do ambiente; teto e dono
+# sao marcadores, porque sao declaracao humana (DS-137, DS-146). Raiz e caminho saem citados
+# pela shell (%q): copiado, o comando nunca executa o que vier no nome (CodeAnt no sprintx#83).
+migracao_legado_msg() {
+  local plc; plc="bash $(printf '%q' "$SK/scripts/planejamento.sh")"
+  [ -z "${SPRINTX_RAIZ:-}" ] || plc="SPRINTX_RAIZ=$(printf '%q' "$RAIZ") $plc"
+  printf 'Migre o plano declarando o orcamento (DS-137, DS-146) — %s criar %s null <declarado_por> <max_replanejamentos_f6> — e depois %s checkpoint %s. A migracao nasce no estado que o disco mostra; confira com %s fase %s: em F6, rode %s replanejar-execucao %s; em F3 (a ultima linha VEREDITO: de 00-AUDITORIA.md e NÃO), o replanejar-execucao vem depois de F3, F4 e F5, rodadas que nao consomem o orcamento da F6' \
+    "$plc" "$SLUG" "$plc" "$SLUG" "$plc" "$SLUG" "$plc" "$SLUG"
+}
+
+# recusa_legado <abertos> — plano sem 00-PLANEJAMENTO.md com defeito_de_plano aberto: recusa
+# sem gravar arquivo, terminal nem checkpoint (DS-225), com o comando da migracao. O evento e
+# rastro da tentativa, como nas recusas de contrato.
+recusa_legado() {
+  printf 'replanejamento=recusado\nmotivo=planejamento_legado\nestado=%s\nfonte=legado\npersistencia=disco\nabertos=%s\n' \
+    "$E_ESTADO" "$(printf '%s' "$1" | tr ' ' ',')"
+  evento replanejamento_execucao_recusado f6 - bloqueado "planejamento_legado: abertos [$1]; nada gravado: o plano precisa ser migrado (planejamento.sh criar) antes do replanejamento da execucao"
+  falha "$E_TRANSICAO" "replanejamento da execucao recusado (planejamento_legado): plano legado, sem 00-PLANEJAMENTO.md, e o orcamento da F6 so existe depois da migracao. $(migracao_legado_msg). Nao invente teto nem dono: sem declaracao humana, PARE e relate o comando como pauta. Nada foi gravado."
+}
+
 # recusa_duravel <motivo> <abertos> — grava o terminal replanejamento_execucao_recusado
 # com o motivo, faz o checkpoint (a mesma disciplina do esgotado) e sai com o codigo
-# da recusa. Sem 00-PLANEJAMENTO.md o arquivo nasce pela migracao, sem orcamento
-# inventado. Nenhuma rodada, nenhum contador, nenhuma task: so o terminal.
+# da recusa. Nenhuma rodada, nenhum contador, nenhuma task: so o terminal. O plano
+# legado nunca chega aqui: recusa_legado sai antes, sem gravar (DS-225).
 recusa_duravel() {
   local motivo="$1" abertos="$2"
-  if [ "$E_FONTE" = legado ]; then
-    migra_legado null null null replanejamento_execucao_recusado "$motivo"
-  else
-    f6_herda; W_RECUSA="$motivo"
-    escreve "$P_MAX" "$P_POR" replanejamento_execucao_recusado "$P_REPROV" "$P_HIST"
-  fi
+  f6_herda; W_RECUSA="$motivo"
+  escreve "$P_MAX" "$P_POR" replanejamento_execucao_recusado "$P_REPROV" "$P_HIST"
   evento replanejamento_execucao_recusado f6 - bloqueado "$motivo: abertos [$abertos]; estado terminal replanejamento_execucao_recusado gravado"
   checkpoint
   le_planejamento

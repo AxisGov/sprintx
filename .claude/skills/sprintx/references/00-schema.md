@@ -995,9 +995,11 @@ não é o `replanejar` da F5 e não mexe no orçamento dela.
   checkpoint — a mesma disciplina do `replanejamento_execucao_esgotado`. O motivo é um de
   `classes_mistas` (há aberto de outra classe ou legado junto do `defeito_de_plano`),
   `orcamento_f6_legado` (arquivo sem o eixo F6), `orcamento_f6_nao_declarado`
-  (`max_replanejamentos_f6: null`) ou `planejamento_legado` (feature sem `00-PLANEJAMENTO.md`: o
-  arquivo nasce na recusa, pela migração da tabela antiga, com as cinco chaves do eixo e
-  `max_replanejamentos_f6: null` — nenhum orçamento inventado). A recusa não abre rodada, não
+  (`max_replanejamentos_f6: null`) ou `planejamento_legado` (só em arquivo gravado antes da
+  DS-225, que criava o arquivo na recusa, pela migração da tabela antiga, com
+  `max_replanejamentos_f6: null`; continua válido e lido como está). Hoje a feature sem
+  `00-PLANEJAMENTO.md` recusa `planejamento_legado` **sem gravar nada** — nem arquivo, nem
+  terminal, nem checkpoint — e dá o comando da migração (DS-225). A recusa não abre rodada, não
   consome `replanejamentos_f6`, não reabre nem cria task. `recusa_replanejamento_f6` existe **se e
   somente se** o estado é `replanejamento_execucao_recusado`, fica logo depois de `estado`, e é
   coerente com o eixo gravado: `orcamento_f6_legado` só sem as cinco chaves;

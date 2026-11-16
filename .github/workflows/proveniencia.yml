@@ -25,6 +25,8 @@ jobs:
       # do padrao, e a secao AN da bancada prova as conversoes com entrada de 1 MB
       - run: bash scripts/ci/lint-consumidor-precoce.sh
       - run: bash scripts/ci/test-pipefail.sh
+      # defeito_de_plano num plano legado (DS-224): a secao AR da bancada
+      - run: bash scripts/ci/test-plano-legado.sh
       # espaço e linha em branco no fim de arquivo, na árvore inteira: o `git diff --check`
       # do consumidor acusava as bancadas que a skill instala (relato do Login na 0.12.3)
       - run: git diff --check "$(git hash-object -t tree /dev/null)" HEAD
