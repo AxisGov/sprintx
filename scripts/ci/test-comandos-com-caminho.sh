@@ -4,14 +4,21 @@
 # caminho `<raiz-da-skill>/scripts/`: o script nao esta no PATH (DM-314), e um `planejamento.sh
 # criar ...` solto nao executa (CodeAnt no login#95).
 #
-#   bash scripts/ci/test-comandos-com-caminho.sh
+#   bash scripts/ci/test-comandos-com-caminho.sh [arquivo]
 set -uo pipefail
 R="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-ALVO="$R/.claude/skills/sprintx/references/06-execucao.md"
-scripts="$(cd "$R/.claude/skills/sprintx/scripts" && ls -- *.sh | sed 's/\.sh$//' | paste -sd'|' -)"
-# comando para copiar: trecho de codigo inline que comeca pelo nome do script, sem o caminho
-# antes, e leva argumento (`<slug>` e afins); o nome sozinho (`bloqueios.sh resolver`) e citacao
-soltos="$(grep -noE "\`($scripts)\.sh [^\`]*<[^\`]*\`" "$ALVO")"
+ALVO="${1:-$R/.claude/skills/sprintx/references/06-execucao.md}"
+scripts=""; for f in "$R"/.claude/skills/sprintx/scripts/*.sh; do b="${f##*/}"; scripts="$scripts${scripts:+|}${b%.sh}"; done
+# comando para copiar: trecho de codigo inline (que pode quebrar linha) comecando pelo nome do
+# script, sem o caminho antes, e com argumento (`<slug>` e afins); o nome sozinho
+# (`bloqueios.sh resolver`) e citacao. O arquivo e lido inteiro, nao linha a linha (CodeAnt no sprintx#85)
+soltos="$(SCRIPTS="$scripts" perl -0777 -ne '
+  my $re = $ENV{SCRIPTS};
+  while (/`((?:$re)\.sh [^`]*<[^`]*)`/g) {
+    my $linha = 1 + (substr($_, 0, $-[0]) =~ tr/\n//);
+    (my $t = $1) =~ s/\s+/ /g;
+    print "$linha:`$t`\n";
+  }' "$ALVO")"
 if [ -z "$soltos" ]; then
   echo '  ok    nenhum comando de script solto no 06-execucao.md'
   exit 0

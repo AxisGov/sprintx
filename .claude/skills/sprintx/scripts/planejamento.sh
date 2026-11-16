@@ -2067,8 +2067,13 @@ recusa_legado() {
 recusa_duravel() {
   local motivo="$1" abertos="$2" trava_rc b t c defeitos="" outros="" agora=""
   # Costura so de teste: uma pausa entre a primeira leitura e a releitura, para a bancada
-  # resolver um bloqueio nesse intervalo. So aceita segundos inteiros; nunca executa nada.
-  case "${SPRINTX_TESTE_PAUSA_ANTES_DA_RECUSA:-}" in ''|*[!0-9]*) ;; *) sleep "$SPRINTX_TESTE_PAUSA_ANTES_DA_RECUSA" ;; esac
+  # resolver um bloqueio nesse intervalo. So aceita 1 a 30 segundos inteiros, nunca executa
+  # nada, e marca em .git/ que chegou aqui, para o teste nao depender de um atraso fixo.
+  case "${SPRINTX_TESTE_PAUSA_ANTES_DA_RECUSA:-}" in
+    [1-9]|[12][0-9]|30)
+      : > "$(git -C "$RAIZ" rev-parse --absolute-git-dir 2>/dev/null)/sprintx-teste-pausa" 2>/dev/null
+      sleep "$SPRINTX_TESTE_PAUSA_ANTES_DA_RECUSA" ;;
+  esac
   # A recusa e terminal: so se grava se a condicao continuar valendo. Os bloqueios sao relidos
   # sob a trava da F6, e uma mudanca no intervalo nao deixa recusa desatualizada (CodeAnt no login#95).
   adquire_trava_autorizacao_f6 "$RAIZ" "$SLUG"; trava_rc=$?

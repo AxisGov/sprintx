@@ -50,8 +50,9 @@ afirma 'controle: classes_mistas gravada como terminal' $? "rc=$rc $(printf '%s'
 
 # o B-02 e resolvido entre a leitura e a gravacao: nada e gravado, o estado continua aprovado
 B="$aux/b"; fixture "$B" >/dev/null
-( cd "$B" && env -u SPRINTX_RAIZ SPRINTX_TESTE_PAUSA_ANTES_DA_RECUSA=4 bash "$PL" replanejar-execucao menu > "$aux/b.out" 2>&1; echo $? > "$aux/b.rc" ) &
-sleep 1
+( cd "$B" && env -u SPRINTX_RAIZ SPRINTX_TESTE_PAUSA_ANTES_DA_RECUSA=6 bash "$PL" replanejar-execucao menu > "$aux/b.out" 2>&1; echo $? > "$aux/b.rc" ) &
+# espera o processo chegar a pausa (depois da primeira leitura), nunca um atraso fixo (CodeAnt no sprintx#85)
+for _ in $(seq 1 60); do [ -e "$B/.git/sprintx-teste-pausa" ] && break; sleep 0.5; done
 bl "$B" resolver menu B-02 > "$aux/b-res.out"; rres=$?
 wait
 rc="$(cat "$aux/b.rc")"; out="$(cat "$aux/b.out")"
@@ -65,6 +66,20 @@ C="$aux/c"; fixture "$C" >/dev/null
 out="$( (cd "$C" && env -u SPRINTX_RAIZ SPRINTX_TESTE_PAUSA_ANTES_DA_RECUSA='1; touch PWNED' bash "$PL" replanejar-execucao menu) 2>&1)"; rc=$?
 [ "$rc" -eq 5 ] && [ "$(kv "$out" motivo)" = classes_mistas ] && [ ! -e "$C/PWNED" ]
 afirma 'a costura de teste ignora valor que nao e numero' $?
+
+# a costura tem teto: valor acima de 30 s e ignorado (nenhuma recusa dorme horas)
+D="$aux/d"; fixture "$D" >/dev/null
+ini=$(date +%s); out="$( (cd "$D" && env -u SPRINTX_RAIZ SPRINTX_TESTE_PAUSA_ANTES_DA_RECUSA=99999 bash "$PL" replanejar-execucao menu) 2>&1)"; rc=$?; dur=$(( $(date +%s) - ini ))
+[ "$rc" -eq 5 ] && [ "$(kv "$out" motivo)" = classes_mistas ] && [ "$dur" -lt 20 ] && [ ! -e "$D/.git/sprintx-teste-pausa" ]
+afirma 'a costura de teste ignora valor acima de 30 s' $? "rc=$rc dur=${dur}s"
+
+# o resolver respeita a trava da F6: com ela ocupada, nao grava e diz que esta ocupada
+E="$aux/e"; fixture "$E" >/dev/null
+mkdir -p "$(git -C "$E" rev-parse --absolute-git-dir)/sprintx/travas/autorizacao-f6-menu.lock"
+ck="$(cksum < "$E/docs/sprintx/features/menu/00-BLOQUEIOS.md")"
+out="$(bl "$E" resolver menu B-02)"; rc=$?
+[ "$rc" -eq 5 ] && grep -q 'trava da F6' <<<"$out" && [ "$(cksum < "$E/docs/sprintx/features/menu/00-BLOQUEIOS.md")" = "$ck" ]
+afirma 'bloqueios.sh resolver com a trava da F6 ocupada: nao grava' $? "rc=$rc"
 
 echo
 echo "  $ok ok, $falhou falhas"

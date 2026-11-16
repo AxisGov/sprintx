@@ -225,11 +225,12 @@ Surgiu algo que impede a task de seguir. **O caminho que te trouxe aqui fixa a c
        - **Código já na main** (uma sprint anterior mesclada, ou o PR mesclado por decisão humana fora do método): a correção sai por OC da runx, a partir da main. Uma OC só corrige o que já está na main: ela não serve para código que só existe no PR aberto.
    - `replanejamento=recusado` com `estado=replanejamento_execucao_recusado` e `proxima=PARAR` (código `5`) — recusa **operacional**, gravada e persistida: `classes_mistas` (há bloqueio aberto de outra classe ou legado; nenhuma precedência é inventada), `orcamento_f6_nao_declarado` ou `orcamento_f6_legado` (e `planejamento_legado`, só num arquivo gravado por versão anterior à DS-225: nenhum comando sai dele, e a saída é decisão humana). O estado terminal e o motivo (`recusa_replanejamento_f6`) estão no `HEAD` da `feature/<slug>`: uma sessão nova, ou outra árvore, lê o mesmo resultado em `fase` e em `replanejar-execucao`, que o repete sem gravar nada. **Não abra task nova**: encerre com o relatório final, com o motivo e os bloqueios abertos como pauta.
      - **Somente uma decisão humana explícita** pode autorizar o orçamento tardio da F6, e apenas
-       quando o motivo durável é `orcamento_f6_nao_declarado`. Nesse caso execute
-       `planejamento.sh autorizar-replanejamento-execucao <slug> <max_replanejamentos_f6>
-       <autorizado_por>`. Não edite o YAML e não reutilize `orcamento_declarado_por` como autoridade
-       tardia. A resposta pode ser `autorizacao_f6=aplicada`, `autorizacao_f6=retomada` ou
-       `autorizacao_f6=checkpoint_pendente`; nesta última, rode `checkpoint <slug>` e repita.
+       quando o motivo durável é `orcamento_f6_nao_declarado`. Nesse caso execute o
+       `autorizar-replanejamento-execucao` pela instrução canônica do `references/03-plano.md`
+       (com `bash`, o caminho do script, o teto e quem autorizou). Não edite o YAML e não reutilize
+       `orcamento_declarado_por` como autoridade tardia. A resposta pode ser
+       `autorizacao_f6=aplicada`, `autorizacao_f6=retomada` ou `autorizacao_f6=checkpoint_pendente`;
+       nesta última, rode o checkpoint (instrução canônica no `references/02-descoberta.md`) e repita.
        A ordem de uma repetição é `argumentos → congeladas/parciais → B-NN/task se pendente → persistência`. O próprio `checkpoint <slug>` repete as provas antes de preparar o índice.
        Códigos: `0` aplicada/retomada; `2` trava existente, fronteira ou parcial (com `motivo=` estruturado); `3` checkpoint; `4` contrato; `5` transição ou indisponibilidade da trava; `64` uso.
        Qualquer outro motivo permanece terminal.
