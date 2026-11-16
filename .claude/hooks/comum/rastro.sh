@@ -76,6 +76,33 @@ rastro_caminho_em() {
   printf -v "$1" '%s' "$_c"
 }
 
+# rastro_fora_do_projeto <raiz> <caminho> — 0 quando o caminho NAO e do projeto e o hook de
+# aviso deve ignora-lo: fora da raiz (scratchpad, ~/.claude), ignorado pelo Git, dentro de outro
+# repositorio ou worktree aninhado (.pylot-tmp/wt-*), ou numa pasta oculta de topo sem nenhum
+# arquivo versionado (.pylot-tmp, .expxv: copias e rascunhos de ferramenta). No conselhos,
+# 85% dos avisos de tdd-teste-antes, escopo e arvore-limpa eram desses caminhos (2026-11-16).
+rastro_fora_do_projeto() {
+  local raiz="$1" c="$2" rel topo d
+  case "$c" in
+    "$raiz"/*) rel="${c#"$raiz"/}" ;;
+    /*|[A-Za-z]:/*) return 0 ;;
+    *) rel="$c" ;;
+  esac
+  rel="${rel#./}"
+  topo="${rel%%/*}"
+  case "$topo" in
+    .?*) [ "$topo" != "$rel" ] || return 1
+         [ -n "$(git -C "$raiz" ls-files -- "$topo" 2>/dev/null)" ] || return 0 ;;
+  esac
+  git -C "$raiz" check-ignore -q -- "$rel" 2>/dev/null && return 0
+  d="${rel%/*}"
+  while [ "$d" != "$rel" ] && [ -n "$d" ]; do
+    [ -e "$raiz/$d/.git" ] && return 0
+    case "$d" in */*) d="${d%/*}" ;; *) break ;; esac
+  done
+  return 1
+}
+
 # ------------------------------------------------------------- identidade
 
 # Nome do harness: EXPX_HARNESS (a ponte OpenCode injeta isso) -> CLAUDECODE

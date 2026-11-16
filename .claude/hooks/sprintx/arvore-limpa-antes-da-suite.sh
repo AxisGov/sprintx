@@ -92,6 +92,8 @@ while IFS= read -r caminho; do
   case "$caminho" in
     docs/sprintx/*|docs/eventos/*|docs/entregas/*|.expx/*) continue ;;
   esac
+  # Rascunho de ferramenta ou worktree aninhado nao e trabalho deste projeto
+  rastro_fora_do_projeto "$RAIZ" "$caminho" && continue
   # Isencao de arquivo de teste, mesmo espirito de escopo-da-task.sh: o metodo
   # MANDA escrever teste antes do codigo (regra 3), e cobrar escopo dele
   # avisaria justamente quem esta obedecendo a regra.
