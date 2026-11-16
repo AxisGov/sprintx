@@ -55,6 +55,8 @@ rastro_caminho_em ALVO "$ALVO"
 
 # Caminho relativo a raiz do repo — e assim que o plano declara `arquivos`.
 REL="${ALVO#"$RAIZ"/}"
+# Caminho que nao e do projeto (fora da raiz, ignorado, worktree aninhado, rascunho de ferramenta)
+rastro_fora_do_projeto "$RAIZ" "$ALVO" && exit 0
 
 # ------------------------------------------------------------------ isencoes
 # Os proprios artefatos da skill nunca sao "fora de escopo": a F6 escreve em
