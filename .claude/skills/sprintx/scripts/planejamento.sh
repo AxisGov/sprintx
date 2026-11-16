@@ -2065,7 +2065,37 @@ recusa_legado() {
 # da recusa. Nenhuma rodada, nenhum contador, nenhuma task: so o terminal. O plano
 # legado nunca chega aqui: recusa_legado sai antes, sem gravar (DS-225).
 recusa_duravel() {
-  local motivo="$1" abertos="$2"
+  local motivo="$1" abertos="$2" trava_rc b t c defeitos="" outros="" agora=""
+  # Costura so de teste: uma pausa entre a primeira leitura e a releitura, para a bancada
+  # resolver um bloqueio nesse intervalo. So aceita segundos inteiros; nunca executa nada.
+  case "${SPRINTX_TESTE_PAUSA_ANTES_DA_RECUSA:-}" in ''|*[!0-9]*) ;; *) sleep "$SPRINTX_TESTE_PAUSA_ANTES_DA_RECUSA" ;; esac
+  # A recusa e terminal: so se grava se a condicao continuar valendo. Os bloqueios sao relidos
+  # sob a trava da F6, e uma mudanca no intervalo nao deixa recusa desatualizada (CodeAnt no login#95).
+  adquire_trava_autorizacao_f6 "$RAIZ" "$SLUG"; trava_rc=$?
+  case "$trava_rc" in
+    0) ;;
+    2) falha "$E_RECUSADO" "replanejamento da execucao: trava da F6 existente para $SLUG; nada foi gravado. Rode de novo quando a outra operacao terminar." ;;
+    *) falha "$E_TRANSICAO" "replanejamento da execucao: o ambiente nao permite adquirir a trava da F6 para $SLUG; nada foi gravado." ;;
+  esac
+  le_bloqueios || falha "$E_CONTRATO" "00-BLOQUEIOS.md invalido"
+  while IFS="$(printf '\t')" read -r b t c; do
+    [ -n "$b" ] || continue
+    if [ "$c" = defeito_de_plano ]; then defeitos="$defeitos $b"; else outros="$outros $b:$c"; fi
+  done <<EOF2
+$(abertos_ordenados)
+EOF2
+  defeitos="${defeitos# }"; outros="${outros# }"
+  if [ -n "$defeitos" ]; then
+    if [ -n "$outros" ]; then agora=classes_mistas
+    elif [ "$P_F6" = legado ]; then agora=orcamento_f6_legado
+    elif [ "$P_MAX6" = null ]; then agora=orcamento_f6_nao_declarado
+    fi
+  fi
+  if [ "$agora" != "$motivo" ]; then
+    printf 'replanejamento=recusado\nmotivo=bloqueios_mudaram\nestado=%s\nproxima=REPETIR\n' "$P_ESTADO"
+    falha "$E_TRANSICAO" "replanejamento da execucao: os bloqueios abertos mudaram entre a leitura e a gravacao ($motivo -> ${agora:-sem recusa}); nada foi gravado e o estado continua $P_ESTADO. Rode replanejar-execucao de novo."
+  fi
+  abertos="$defeitos${outros:+ }$outros"
   f6_herda; W_RECUSA="$motivo"
   escreve "$P_MAX" "$P_POR" replanejamento_execucao_recusado "$P_REPROV" "$P_HIST"
   evento replanejamento_execucao_recusado f6 - bloqueado "$motivo: abertos [$abertos]; estado terminal replanejamento_execucao_recusado gravado"

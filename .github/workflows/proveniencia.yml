@@ -29,6 +29,9 @@ jobs:
       - run: bash scripts/ci/test-plano-legado.sh
       # os hooks de aviso ignoram o que nao e do projeto (DS-226)
       - run: bash scripts/ci/test-hooks-fora-do-projeto.sh
+      # recusa terminal relida sob a trava e comandos com caminho no 06-execucao (CodeAnt no login#95)
+      - run: bash scripts/ci/test-recusa-duravel.sh
+      - run: bash scripts/ci/test-comandos-com-caminho.sh
       # espaço e linha em branco no fim de arquivo, na árvore inteira: o `git diff --check`
       # do consumidor acusava as bancadas que a skill instala (relato do Login na 0.12.3)
       - run: git diff --check "$(git hash-object -t tree /dev/null)" HEAD
