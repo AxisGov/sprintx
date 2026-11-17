@@ -81,6 +81,42 @@ out="$(bl "$E" resolver menu B-02)"; rc=$?
 [ "$rc" -eq 5 ] && grep -q 'trava da F6' <<<"$out" && [ "$(cksum < "$E/docs/sprintx/features/menu/00-BLOQUEIOS.md")" = "$ck" ]
 afirma 'bloqueios.sh resolver com a trava da F6 ocupada: nao grava' $? "rc=$rc"
 
+# a trava que nao se monta num repositorio (um arquivo no lugar de .git/sprintx) nao e sucesso:
+# o resolver recusa e nao grava (CodeAnt no conselhos#346)
+F="$aux/f"; fixture "$F" >/dev/null
+gd="$(git -C "$F" rev-parse --absolute-git-dir)"; rm -rf "$gd/sprintx"; printf 'x\n' > "$gd/sprintx"
+ck="$(cksum < "$F/docs/sprintx/features/menu/00-BLOQUEIOS.md")"
+out="$(bl "$F" resolver menu B-02)"; rc=$?
+[ "$rc" -ne 0 ] && grep -q 'trava da F6' <<<"$out" && [ "$(cksum < "$F/docs/sprintx/features/menu/00-BLOQUEIOS.md")" = "$ck" ]
+afirma 'bloqueios.sh resolver com a trava que falha ao montar: recusa, nao grava' $? "rc=$rc $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)"
+
+# o planejamento muda entre a leitura e a gravacao (autorizacao tardia aplicada na pausa): a
+# recusa nao sobrescreve a rodada autorizada (CodeAnt no conselhos#346)
+G="$aux/g"; f="$G/docs/sprintx/features/menu"
+git init -q -b main "$G"; git -C "$G" config user.email t@t.local; git -C "$G" config user.name teste
+git -C "$G" config commit.gpgsign false; git -C "$G" config core.autocrlf false
+printf 'docs/eventos/\n' >> "$G/.git/info/exclude"
+mkdir -p "$G/src" "$f/base" "$f/sprint-01"; printf 'export const x = 1\n' > "$G/src/app.ts"
+git -C "$G" add -A; git -C "$G" commit -q -m init; git -C "$G" switch -q -c feature/menu
+printf 'indice\n' > "$f/base/00-INDICE.md"; printf 'decisoes\n' > "$f/00-DECISOES.md"; printf 'orquestrador\n' > "$f/ORQUESTRADOR.md"
+printf -- '---\nkind: tasks\ntrabalho_id: menu\nsprint_id: sprint-01\ntasks:\n  - id: T-01.01\n    status: bloqueada\n    arquivos:\n      cria: [src/menu.ts]\n      altera: []\n---\n\n# Tasks\n' > "$f/sprint-01/tasks.md"
+printf '# Auditoria\n\n| severidade | arquivo | problema | correção sugerida |\n|---|---|---|---|\n\nVEREDITO: SIM — o plano está pronto para execução autônoma.\n' > "$f/00-AUDITORIA.md"
+git -C "$G" add -A; git -C "$G" commit -q -m plano
+pl "$G" criar menu 3 flavio >/dev/null && pl "$G" checkpoint menu >/dev/null \
+  && bl "$G" registrar menu T-01.01 defeito_de_plano 'T-01.01 precisa de src/app.ts' 'acrescentar o arquivo' >/dev/null \
+  && git -C "$G" add -A && git -C "$G" commit -q -m bloqueio
+afirma 'fixture: aprovado, sem orcamento da F6, B-01 defeito_de_plano aberto' $?
+( cd "$G" && env -u SPRINTX_RAIZ SPRINTX_TESTE_PAUSA_ANTES_DA_RECUSA=15 bash "$PL" replanejar-execucao menu > "$aux/g.out" 2>&1; echo $? > "$aux/g.rc" ) &
+for _ in $(seq 1 60); do [ -e "$G/.git/sprintx-teste-pausa" ] && break; sleep 0.5; done
+# na pausa, outra sessao grava a recusa durável e o dono autoriza o orcamento tardio
+pl "$G" replanejar-execucao menu > "$aux/g-rec.out"; rrec=$?
+pl "$G" autorizar-replanejamento-execucao menu 1 dono > "$aux/g-aut.out"; raut=$?
+wait
+rc="$(cat "$aux/g.rc")"; out="$(cat "$aux/g.out")"
+[ "$rrec" -eq 5 ] && [ "$raut" -eq 0 ] && [ "$rc" -ne 0 ] && [ "$(kv "$out" motivo)" = planejamento_mudou ] \
+  && [ "$(fm "$f/00-PLANEJAMENTO.md" estado)" != replanejamento_execucao_recusado ]
+afirma 'autorizacao tardia na pausa: a recusa relida sob a trava nao a sobrescreve' $? "rrec=$rrec raut=$raut rc=$rc $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-240) | $(tr '\n' ' ' < "$aux/g-aut.out" | cut -c1-200)"
+
 echo
 echo "  $ok ok, $falhou falhas"
 [ "$falhou" -eq 0 ] && [ "$ok" -gt 0 ]

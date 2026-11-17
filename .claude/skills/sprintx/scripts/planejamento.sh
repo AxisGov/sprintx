@@ -2071,7 +2071,10 @@ recusa_duravel() {
   # nada, e marca em .git/ que chegou aqui, para o teste nao depender de um atraso fixo.
   case "${SPRINTX_TESTE_PAUSA_ANTES_DA_RECUSA:-}" in
     [1-9]|[12][0-9]|30)
-      : > "$(git -C "$RAIZ" rev-parse --absolute-git-dir 2>/dev/null)/sprintx-teste-pausa" 2>/dev/null
+      # fora de um repositorio nao ha .git/: sem o diretorio, nada e marcado (nunca /sprintx-teste-pausa)
+      b="$(git -C "$RAIZ" rev-parse --absolute-git-dir 2>/dev/null)" && [ -n "$b" ] \
+        && : > "$b/sprintx-teste-pausa" 2>/dev/null
+      b=""
       sleep "$SPRINTX_TESTE_PAUSA_ANTES_DA_RECUSA" ;;
   esac
   # A recusa e terminal: so se grava se a condicao continuar valendo. Os bloqueios sao relidos
@@ -2082,6 +2085,14 @@ recusa_duravel() {
     2) falha "$E_RECUSADO" "replanejamento da execucao: trava da F6 existente para $SLUG; nada foi gravado. Rode de novo quando a outra operacao terminar." ;;
     *) falha "$E_TRANSICAO" "replanejamento da execucao: o ambiente nao permite adquirir a trava da F6 para $SLUG; nada foi gravado." ;;
   esac
+  # O estado do planejamento tambem e relido sob a trava: uma autorizacao tardia aplicada no
+  # intervalo nao e sobrescrita pela recusa montada sobre o P_* velho (CodeAnt no conselhos#346).
+  local antes="$P_ESTADO|$P_MAX|$P_POR|$P_REPROV|$P_F6|$P_MAX6|$P_N6|$P_AUT6|$P_BLQ"
+  le_planejamento
+  if [ "$P_ESTADO|$P_MAX|$P_POR|$P_REPROV|$P_F6|$P_MAX6|$P_N6|$P_AUT6|$P_BLQ" != "$antes" ]; then
+    printf 'replanejamento=recusado\nmotivo=planejamento_mudou\nestado=%s\nproxima=REPETIR\n' "$P_ESTADO"
+    falha "$E_TRANSICAO" "replanejamento da execucao: 00-PLANEJAMENTO.md mudou entre a leitura e a gravacao (estado $P_ESTADO); nada foi gravado. Rode replanejar-execucao de novo."
+  fi
   le_bloqueios || falha "$E_CONTRATO" "00-BLOQUEIOS.md invalido"
   while IFS="$(printf '\t')" read -r b t c; do
     [ -n "$b" ] || continue

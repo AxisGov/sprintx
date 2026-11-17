@@ -60,7 +60,14 @@ trava_bloqueios() {
   local i rc
   for i in 1 2 3 4 5 6 7 8 9 10; do
     adquire_trava_autorizacao_f6 "$RAIZ" "$SLUG"; rc=$?
-    case "$rc" in 2) sleep 1 ;; *) return 0 ;; esac
+    case "$rc" in
+      0) return 0 ;;
+      2) sleep 1 ;;
+      # sem Git a trava nao existe e o registro segue sem ela; num repositorio, a trava que
+      # falha ao ser montada nao e sucesso: segui-la reabriria a corrida (CodeAnt no conselhos#346)
+      *) git -C "$RAIZ" rev-parse --git-dir >/dev/null 2>&1 || return 0
+         falha "$E_TRANSICAO" "nao foi possivel montar a trava da F6 de $SLUG (${TRAVA_AUT6_MOTIVO:-rc $rc}): nada foi gravado" ;;
+    esac
   done
   falha "$E_TRANSICAO" "a trava da F6 de $SLUG continua ocupada (replanejar-execucao ou autorizacao tardia em andamento): nada foi gravado; repita"
 }
