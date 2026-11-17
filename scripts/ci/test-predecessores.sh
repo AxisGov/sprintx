@@ -179,6 +179,19 @@ grupo_registro() {
   caso_rc 'manifesto conserva as duas entradas depois da contencao' 0 pred --validar ft-pre
 
   nova_fixture
+  local ambiente_pid="$K/ambiente-pid-$fx_n"
+  cat > "$ambiente_pid" <<'EOF'
+printf() {
+  if [ "$1" = '%s\n' ] && [ "$2" = "$$" ]; then return 1; fi
+  builtin printf "$@"
+}
+EOF
+  BASH_ENV="$ambiente_pid" caso_falha_com 'falha ao escrever PID solta marca e trava' 'nao consegui registrar o dono da trava' registra especificacao "$SPEC"
+  trava="$(git -C "$FX" rev-parse --absolute-git-dir)/sprintx/predecessores-ft-pre.lock"
+  [ ! -e "$trava" ]
+  afirma 'falha ao escrever PID nao deixa trava orfa' $? "sobrou: $trava"
+
+  nova_fixture
   local fora="$K/fora-$fx_n"
   mkdir -p "$fora"
   rm -rf "$FX/docs/sprintx/features/ft-pre"

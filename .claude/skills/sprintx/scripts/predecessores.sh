@@ -264,18 +264,25 @@ adquire_trava_registro() {
   # chega durante a aquisicao fica adiado ate a posse estar em LOCK_DIR: o `limpa` sempre conhece a
   # trava que este processo criou, e nenhum registro futuro fica preso (CodeAnt no conselhos#354)
   trap 'sinal=HUP' HUP; trap 'sinal=INT' INT; trap 'sinal=TERM' TERM
-  # A marca que nao se cria deixa a pasta: se outra marca ja existe, a trava e de outro (no uutils
-  # o perdedor tambem recebe 0 do mkdir) e nada e tocado; sem marca nenhuma, a pasta e nossa e sai,
-  # para nao virar trava orfa (CodeAnt no login#100)
-  if ( trap '' HUP INT TERM
-       mkdir "$candidata" 2>/dev/null || exit 2
-       ( set -C; printf '%s\n' "$$" > "$candidata/.dono" ) 2>/dev/null && exit 0
-       [ -e "$candidata/.dono" ] && exit 2
-       rmdir "$candidata" 2>/dev/null; exit 1 ); then
-    LOCK_DIR="$candidata"
-  fi
+  # A criacao exclusiva so toma posse; a escrita do PID precisa terminar antes de a marca valer.
+  # Se a escrita falha, remove a marca e a pasta para nao deixar uma trava orfa (DS-231).
+  # Se a marca nem se cria: com outra marca, a trava e de outro (no uutils o perdedor tambem
+  # recebe 0 do mkdir) e nada e tocado; sem marca nenhuma, a pasta e nossa e sai.
+  local rc_trava=0
+  ( trap '' HUP INT TERM
+    mkdir "$candidata" 2>/dev/null || exit 2
+    ( set -C; : > "$candidata/.dono" ) 2>/dev/null || {
+      [ -e "$candidata/.dono" ] && exit 2
+      rmdir "$candidata" 2>/dev/null; exit 1
+    }
+    printf '%s\n' "$$" > "$candidata/.dono" 2>/dev/null && exit 0
+    rm -f "$candidata/.dono" 2>/dev/null
+    rmdir "$candidata" 2>/dev/null; exit 3 ) || rc_trava=$?
+  [ "$rc_trava" != 0 ] || LOCK_DIR="$candidata"
   trap limpa HUP INT TERM
   case "$sinal" in HUP) exit 129 ;; INT) exit 130 ;; TERM) exit 143 ;; esac
+  # 3: a marca e nossa, mas o PID nao se escreveu; marca e pasta ja sairam (DS-231)
+  [ "$rc_trava" != 3 ] || falha "$E_CONTRATO" 'nao consegui registrar o dono da trava de registro'
   [ -n "$LOCK_DIR" ] || falha "$E_CONTRATO" 'trava de registro ocupada'
 }
 
