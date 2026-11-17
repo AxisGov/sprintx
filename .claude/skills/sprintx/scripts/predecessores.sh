@@ -259,7 +259,10 @@ adquire_trava_registro() {
   local candidata
   candidata="$(git -C "$RAIZ" rev-parse --absolute-git-dir 2>/dev/null)/sprintx/predecessores-$SLUG.lock"
   mkdir -p "$(dirname "$candidata")" || falha "$E_CONTRATO" 'nao consegui preparar a trava de registro'
-  mkdir "$candidata" 2>/dev/null || falha "$E_CONTRATO" 'trava de registro ocupada'
+  # o `mkdir` do uutils coreutils (Ubuntu 26.04) sai 0 nos dois processos que criam a mesma pasta
+  # no mesmo instante: a posse e a marca `.dono`, criada com O_EXCL pelo bash (DS-229)
+  { mkdir "$candidata" && ( set -C; printf '%s\n' "$$" > "$candidata/.dono" ); } 2>/dev/null \
+    || falha "$E_CONTRATO" 'trava de registro ocupada'
   LOCK_DIR="$candidata"
 }
 
@@ -444,7 +447,7 @@ limpa() {
   local rc=$?
   trap - EXIT HUP INT TERM
   [ -z "$TMP_ATOMICO" ] || rm -f "$TMP_ATOMICO"
-  [ -z "$LOCK_DIR" ] || rmdir "$LOCK_DIR" 2>/dev/null || true
+  [ -z "$LOCK_DIR" ] || { rm -f -- "$LOCK_DIR/.dono"; rmdir "$LOCK_DIR" 2>/dev/null; } || true
   rm -rf "$TMP_BASE"
   exit "$rc"
 }
