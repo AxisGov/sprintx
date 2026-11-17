@@ -82,14 +82,14 @@ rastro_caminho_em() {
 # arquivo versionado (.pylot-tmp, .expxv: copias e rascunhos de ferramenta). No conselhos,
 # 85% dos avisos de tdd-teste-antes, escopo e arvore-limpa eram desses caminhos (2026-11-16).
 rastro_fora_do_projeto() {
-  local raiz="$1" c="$2" rel topo d fis rfis n t
+  local raiz="$1" c="$2" rel topo d fis rfis n t resto
   RASTRO_REL=""
   case "$c" in
-    "$raiz"/*) rel="${c#"$raiz"/}" ;;
     /*|[A-Za-z]:/*)
-      # o caminho que chega por link simbólico (a raiz por outro nome, ou um link de fora que
-      # aponta para dentro) é do projeto se a pasta dele, resolvida, estiver dentro da raiz
-      # resolvida (CodeAnt no conselhos-municipais#346)
+      # o caminho absoluto vale pelo lugar fisico: chega por link simbolico (a raiz por outro
+      # nome, um link de fora que aponta para dentro, ou um link de dentro que aponta para fora)
+      # e e do projeto so se, resolvido, estiver dentro da raiz resolvida (CodeAnt no
+      # conselhos-municipais#346 e #350)
       # o proprio arquivo pode ser o link: segue a cadeia (ate 8) antes de resolver a pasta
       n=0
       while [ -L "$c" ] && [ "$n" -lt 8 ]; do
@@ -97,12 +97,22 @@ rastro_fora_do_projeto() {
         case "$t" in /*|[A-Za-z]:/*) c="$t" ;; *) c="${c%/*}/$t" ;; esac
         n=$((n+1))
       done
-      d="${c%/*}"; [ -n "$d" ] || d=/
-      fis="$(cd -P -- "$d" 2>/dev/null && pwd -P)" && rfis="$(cd -P -- "$raiz" 2>/dev/null && pwd -P)" || return 0
-      case "$fis/" in
-        "$rfis"/*) rel="${fis#"$rfis"}/${c##*/}"; rel="${rel#/}" ;;
-        *) return 0 ;;
-      esac ;;
+      # a pasta pode ainda nao existir (Write numa pasta nova): resolve o ancestral que existe
+      d="${c%/*}"; [ -n "$d" ] || d=/; resto="${c##*/}"
+      n=0
+      while [ ! -d "$d" ] && [ "$n" -lt 64 ]; do
+        resto="${d##*/}/$resto"; d="${d%/*}"; [ -n "$d" ] || d=/
+        n=$((n+1))
+      done
+      if fis="$(cd -P -- "$d" 2>/dev/null && pwd -P)" && rfis="$(cd -P -- "$raiz" 2>/dev/null && pwd -P)"; then
+        case "$fis/" in
+          "$rfis"/*) rel="${fis#"$rfis"}/$resto"; rel="${rel#/}" ;;
+          *) return 0 ;;
+        esac
+      else
+        # sem como resolver, vale o texto: dentro da raiz e do projeto, fora nao e
+        case "$c" in "$raiz"/*) rel="${c#"$raiz"/}" ;; *) return 0 ;; esac
+      fi ;;
     *) rel="$c" ;;
   esac
   rel="${rel#./}"

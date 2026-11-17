@@ -54,20 +54,8 @@ falha() { local c="$1"; shift; printf 'bloqueios: %s\n' "$*" >&2; exit "$c"; }
 
 # trava_bloqueios — registrar e resolver mudam os bloqueios abertos sob a mesma trava da F6
 # que o recusa_duravel do planejamento.sh usa para reler e gravar a recusa terminal: assim
-# a recusa nunca sai de uma leitura velha (CodeAnt no sprintx#85). Ocupada, espera ate 10 s;
-# sem Git (trava indisponivel no ambiente), segue sem ela, como antes.
-# tem_git_no_caminho <pasta> — 0 quando a pasta ou um ancestral tem `.git` (pasta ou arquivo)
-tem_git_no_caminho() {
-  local d p
-  d="$(cd -P -- "$1" 2>/dev/null && pwd -P)" || return 1
-  while :; do
-    [ -e "$d/.git" ] && return 0
-    p="${d%/*}"; [ -n "$p" ] || p=/
-    [ "$p" != "$d" ] || return 1
-    d="$p"
-  done
-}
-
+# a recusa nunca sai de uma leitura velha (CodeAnt no sprintx#85). Ocupada, espera ate 10 s.
+# Sem Git, a trava fica em docs/sprintx/.travas/ (CodeAnt no sprintx#87).
 trava_bloqueios() {
   local i rc
   for i in 1 2 3 4 5 6 7 8 9 10; do
@@ -75,12 +63,9 @@ trava_bloqueios() {
     case "$rc" in
       0) return 0 ;;
       2) sleep 1 ;;
-      # sem Git a trava nao existe e o registro segue sem ela; num repositorio, a trava que
-      # falha ao ser montada nao e sucesso: segui-la reabriria a corrida (CodeAnt no conselhos#346)
-      # o Git pode recusar o repositorio (dono diferente, safe.directory): o criterio e a
-      # pasta .git no caminho, nao a resposta do Git (CodeAnt no sprintx#86)
-      *) tem_git_no_caminho "$RAIZ" || return 0
-         falha "$E_TRANSICAO" "nao foi possivel montar a trava da F6 de $SLUG (${TRAVA_AUT6_MOTIVO:-rc $rc}): nada foi gravado" ;;
+      # a trava que falha ao ser montada nao e sucesso: segui-la reabriria a corrida (CodeAnt no
+      # conselhos#346), inclusive com o Git recusando o repositorio (CodeAnt no sprintx#86)
+      *) falha "$E_TRANSICAO" "nao foi possivel montar a trava da F6 de $SLUG (${TRAVA_AUT6_MOTIVO:-rc $rc}): nada foi gravado" ;;
     esac
   done
   falha "$E_TRANSICAO" "a trava da F6 de $SLUG continua ocupada (replanejar-execucao ou autorizacao tardia em andamento): nada foi gravado; repita"
@@ -295,9 +280,14 @@ EOF
   esac
   # A classe (a chave, nunca a descricao) decide quem pode resolver.
   if [ "$lida" = defeito_de_plano ]; then
-    local pr motivo
-    if ! pr="$(SPRINTX_RAIZ="$RAIZ" bash "$SK/scripts/planejamento.sh" pode-resolver "$SLUG" "$alvo" 2>/dev/null)"; then
+    local pr motivo prc
+    pr="$(SPRINTX_RAIZ="$RAIZ" bash "$SK/scripts/planejamento.sh" pode-resolver "$SLUG" "$alvo" 2>&1)"; prc=$?
+    if [ "$prc" -ne 0 ]; then
       motivo="$(printf '%s\n' "$pr" | sed -n 's/^motivo=//p' | tail -1)"
+      # so a recusa da regra (codigo 5, com motivo=) e "ainda nao pode"; outro codigo e o
+      # planejamento invalido, que nao se mascara como recusa (CodeAnt no conselhos-municipais#350)
+      [ "$prc" = "$E_TRANSICAO" ] \
+        || falha "$E_CONTRATO" "$alvo: planejamento.sh pode-resolver falhou com codigo $prc ($(printf '%s\n' "$pr" | grep -v '^[a-z_]*=' | tail -1 | tr -d '\000-\037\177')). Nada foi gravado."
       # Plano legado (DS-224): sem 00-PLANEJAMENTO.md nao ha rodada que resolva o B-NN. O
       # comando da migracao leva o slug; o orcamento e de quem o declara, nunca inventado aqui.
       # O comando leva a raiz que este resolver usou: com SPRINTX_RAIZ de uma chamada so, sem
@@ -306,11 +296,23 @@ EOF
       local plc; plc="bash $(printf '%q' "$SK/scripts/planejamento.sh")"
       [ -z "${SPRINTX_RAIZ:-}" ] || plc="SPRINTX_RAIZ=$(printf '%q' "$RAIZ") $plc"
       [ "$motivo" = sem_planejamento ] \
-        && falha "$E_TRANSICAO" "$alvo e defeito_de_plano num plano legado, sem 00-PLANEJAMENTO.md: nao ha rodada de replanejamento da execucao que o resolva. Migre o plano declarando o orcamento (DS-137, DS-146) — $plc criar $SLUG null <declarado_por> <max_replanejamentos_f6> — e depois $plc checkpoint $SLUG. A migracao nasce no estado que o disco mostra; confira com $plc fase $SLUG: em F6, rode $plc replanejar-execucao $SLUG; em F3 (a ultima linha VEREDITO: de 00-AUDITORIA.md e NÃO), o replanejar-execucao vem depois de F3, F4 e F5, rodadas que nao consomem o orcamento da F6. O $alvo se resolve quando a F5 aprovar o plano replanejado. Sem a migracao, o replanejar-execucao recusa (planejamento_legado) sem gravar nada (DS-225). Nada foi gravado."
+        && falha "$E_TRANSICAO" "$alvo e defeito_de_plano num plano legado, sem 00-PLANEJAMENTO.md: nao ha rodada de replanejamento da execucao que o resolva. Migre o plano declarando o orcamento (DS-137, DS-146) — $plc criar $SLUG null DECLARADO_POR MAX_REPLANEJAMENTOS_F6 — e depois $plc checkpoint $SLUG. A migracao nasce no estado que o disco mostra; confira com $plc fase $SLUG: em F6, rode $plc replanejar-execucao $SLUG; em F3 (a ultima linha VEREDITO: de 00-AUDITORIA.md e NÃO), o replanejar-execucao vem depois de F3, F4 e F5, rodadas que nao consomem o orcamento da F6. O $alvo se resolve quando a F5 aprovar o plano replanejado. Sem a migracao, o replanejar-execucao recusa (planejamento_legado) sem gravar nada (DS-225). Nada foi gravado."
       falha "$E_TRANSICAO" "$alvo e defeito_de_plano: so e resolvido quando a rodada de replanejamento da execucao que ele abriu volta a aprovado pela F5 (planejamento.sh pode-resolver recusou, motivo: ${motivo:-desconhecido}). Editar o plano nao resolve. Nada foi gravado."
     fi
   fi
   trava_bloqueios
+  # relido sob a trava: outro resolvedor pode ter terminado durante a espera, e a leitura
+  # velha nao pode virar erro de contrato (CodeAnt no conselhos-municipais#350)
+  valida
+  linha="$(entradas "$ARQ" | awk -F'\t' -v b="$alvo" '$1 == b')"
+  [ -n "$linha" ] || falha "$E_CONTRATO" "$alvo nao existe em 00-BLOQUEIOS.md"
+  IFS=$'\t' read -r _ _ _ resolvido _ <<EOF
+$linha
+EOF
+  case "$resolvido" in
+    null|-) ;;
+    *) printf 'id=%s\nresolvido=ja_resolvido\nresolvido_em=%s\nclasse=%s\n' "$alvo" "$resolvido" "$lida"; return 0 ;;
+  esac
   tr -d '\r' < "$ARQ" | BL_ALVO="$alvo" BL_HOJE="$(hoje)" awk '
     BEGIN { alvo = ENVIRON["BL_ALVO"]; hoje = ENVIRON["BL_HOJE"] }
     NR == 1 { print; next }

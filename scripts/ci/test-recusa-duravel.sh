@@ -125,6 +125,43 @@ rc="$(cat "$aux/g.rc")"; out="$(cat "$aux/g.out")"
   && [ "$(fm "$f/00-PLANEJAMENTO.md" estado)" != replanejamento_execucao_recusado ]
 afirma 'autorizacao tardia na pausa: a recusa relida sob a trava nao a sobrescreve' $? "rrec=$rrec raut=$raut rc=$rc $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-240) | $(tr '\n' ' ' < "$aux/g-aut.out" | cut -c1-200)"
 
+# feature so em disco, sem .git no caminho: a recusa operacional grava o terminal, como o
+# checkpoint sem Git (CodeAnt no conselhos-municipais#350), sob a trava da propria arvore
+I="$aux/i"; fixture "$I" >/dev/null
+mkdir -p "$aux/isg"; cp -R "$I/docs" "$aux/isg/"
+out="$(pl "$aux/isg" replanejar-execucao menu)"; rc=$?
+[ "$rc" -eq 5 ] && [ "$(kv "$out" motivo)" = classes_mistas ] \
+  && [ "$(fm "$aux/isg/docs/sprintx/features/menu/00-PLANEJAMENTO.md" estado)" = replanejamento_execucao_recusado ] \
+  && [ ! -e "$aux/isg/docs/sprintx/.travas/autorizacao-f6-menu.lock" ]
+afirma 'sem Git: a recusa classes_mistas e gravada, e a trava e solta' $? "rc=$rc $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)"
+# ...e a trava sem Git exclui: ocupada, o registro de bloqueio espera e nao grava (CodeAnt no sprintx#87)
+mkdir -p "$aux/isg2"; cp -R "$I/docs" "$aux/isg2/"; mkdir -p "$aux/isg2/docs/sprintx/.travas/autorizacao-f6-menu.lock"
+ck="$(cksum < "$aux/isg2/docs/sprintx/features/menu/00-BLOQUEIOS.md")"
+out="$(bl "$aux/isg2" registrar menu null lacuna_de_decisao 'falta decidir' 'a decisao')"; rc=$?
+[ "$rc" -eq 5 ] && grep -q 'continua ocupada' <<<"$out" && [ "$(cksum < "$aux/isg2/docs/sprintx/features/menu/00-BLOQUEIOS.md")" = "$ck" ]
+afirma 'sem Git: com a trava da arvore ocupada, o registro nao grava' $? "rc=$rc $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)"
+
+# dois resolvedores do mesmo bloqueio esperando a trava: o que chega depois rele sob a trava e
+# sai ja_resolvido (0), nunca erro de contrato pela leitura velha (CodeAnt no conselhos-municipais#350)
+J="$aux/j"; fixture "$J" >/dev/null
+tv="$(git -C "$J" rev-parse --absolute-git-dir)/sprintx/travas/autorizacao-f6-menu.lock"; mkdir -p "$tv"
+( bl "$J" resolver menu B-02 > "$aux/j1.out"; echo $? > "$aux/j1.rc" ) &
+( bl "$J" resolver menu B-02 > "$aux/j2.out"; echo $? > "$aux/j2.rc" ) &
+# um rmdir so, como o dono da trava a solta: o `rm -rf` podia levar junto a trava recem-criada
+sleep 2; rmdir "$tv"; wait
+r1="$(cat "$aux/j1.rc")"; r2="$(cat "$aux/j2.rc")"
+[ "$r1" -eq 0 ] && [ "$r2" -eq 0 ] && [ "$(cat "$aux/j1.out" "$aux/j2.out" | grep -c '^resolvido=sim$')" -eq 1 ] \
+  && [ "$(cat "$aux/j1.out" "$aux/j2.out" | grep -c '^resolvido=ja_resolvido$')" -eq 1 ]
+afirma 'dois resolvedores na espera da trava: um resolve, o outro sai ja_resolvido' $? "r1=$r1 r2=$r2 $(cat "$aux/j1.out" "$aux/j2.out" | tr '\n' ' ' | cut -c1-240)"
+
+# planejamento invalido: o pode-resolver sai com erro de contrato, e o resolver nao o mascara
+# como recusa da regra (CodeAnt no conselhos-municipais#350)
+K="$aux/k"; fixture "$K" >/dev/null
+sed -i.bak 's/^estado: .*/estado: xyz/' "$K/docs/sprintx/features/menu/00-PLANEJAMENTO.md"
+out="$(bl "$K" resolver menu B-01)"; rc=$?
+[ "$rc" -eq 4 ] && grep -q 'pode-resolver falhou' <<<"$out"
+afirma 'pode-resolver com planejamento invalido: erro de contrato (4), nao recusa (5)' $? "rc=$rc $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)"
+
 echo
 echo "  $ok ok, $falhou falhas"
 [ "$falhou" -eq 0 ] && [ "$ok" -gt 0 ]
