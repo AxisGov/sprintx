@@ -76,6 +76,15 @@ rastro_caminho_em() {
   printf -v "$1" '%s' "$_c"
 }
 
+# _rastro_fisico <pasta> <variavel> — o caminho fisico da pasta, inteiro: a substituicao de
+# comando cortaria a quebra de linha final do nome (CodeAnt no login#100)
+_rastro_fisico() {
+  local _p
+  _p="$(cd -P -- "$1" 2>/dev/null && pwd -P && printf x)" || return 1
+  _p="${_p%x}"; _p="${_p%$'\n'}"
+  printf -v "$2" '%s' "$_p"
+}
+
 # rastro_fora_do_projeto <raiz> <caminho> — 0 quando o caminho NAO e do projeto e o hook de
 # aviso deve ignora-lo: fora da raiz (scratchpad, ~/.claude), ignorado pelo Git, dentro de outro
 # repositorio ou worktree aninhado (.pylot-tmp/wt-*), ou numa pasta oculta de topo sem nenhum
@@ -104,7 +113,7 @@ rastro_fora_do_projeto() {
         resto="${d##*/}/$resto"; d="${d%/*}"; [ -n "$d" ] || d=/
         n=$((n+1))
       done
-      if fis="$(cd -P -- "$d" 2>/dev/null && pwd -P)" && rfis="$(cd -P -- "$raiz" 2>/dev/null && pwd -P)"; then
+      if _rastro_fisico "$d" fis && _rastro_fisico "$raiz" rfis; then
         case "$fis/" in
           "$rfis"/*) rel="${fis#"$rfis"}/$resto"; rel="${rel#/}" ;;
           *) return 0 ;;

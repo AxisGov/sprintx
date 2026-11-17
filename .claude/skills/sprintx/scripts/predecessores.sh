@@ -256,14 +256,27 @@ parse_manifesto() { # parse_manifesto <file> <tsv>
 }
 
 adquire_trava_registro() {
-  local candidata
+  local candidata sinal=""
   candidata="$(git -C "$RAIZ" rev-parse --absolute-git-dir 2>/dev/null)/sprintx/predecessores-$SLUG.lock"
   mkdir -p "$(dirname "$candidata")" || falha "$E_CONTRATO" 'nao consegui preparar a trava de registro'
   # o `mkdir` do uutils coreutils (Ubuntu 26.04) sai 0 nos dois processos que criam a mesma pasta
-  # no mesmo instante: a posse e a marca `.dono`, criada com O_EXCL pelo bash (DS-229)
-  { mkdir "$candidata" && ( set -C; printf '%s\n' "$$" > "$candidata/.dono" ); } 2>/dev/null \
-    || falha "$E_CONTRATO" 'trava de registro ocupada'
-  LOCK_DIR="$candidata"
+  # no mesmo instante: a posse e a marca `.dono`, criada com O_EXCL pelo bash (DS-229). O sinal que
+  # chega durante a aquisicao fica adiado ate a posse estar em LOCK_DIR: o `limpa` sempre conhece a
+  # trava que este processo criou, e nenhum registro futuro fica preso (CodeAnt no conselhos#354)
+  trap 'sinal=HUP' HUP; trap 'sinal=INT' INT; trap 'sinal=TERM' TERM
+  # A marca que nao se cria deixa a pasta: se outra marca ja existe, a trava e de outro (no uutils
+  # o perdedor tambem recebe 0 do mkdir) e nada e tocado; sem marca nenhuma, a pasta e nossa e sai,
+  # para nao virar trava orfa (CodeAnt no login#100)
+  if ( trap '' HUP INT TERM
+       mkdir "$candidata" 2>/dev/null || exit 2
+       ( set -C; printf '%s\n' "$$" > "$candidata/.dono" ) 2>/dev/null && exit 0
+       [ -e "$candidata/.dono" ] && exit 2
+       rmdir "$candidata" 2>/dev/null; exit 1 ); then
+    LOCK_DIR="$candidata"
+  fi
+  trap limpa HUP INT TERM
+  case "$sinal" in HUP) exit 129 ;; INT) exit 130 ;; TERM) exit 143 ;; esac
+  [ -n "$LOCK_DIR" ] || falha "$E_CONTRATO" 'trava de registro ocupada'
 }
 
 valida_diretorio_manifesto() {
