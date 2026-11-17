@@ -57,6 +57,7 @@ rastro_caminho_em ALVO "$ALVO"
 REL="${ALVO#"$RAIZ"/}"
 # Caminho que nao e do projeto (fora da raiz, ignorado, worktree aninhado, rascunho de ferramenta)
 rastro_fora_do_projeto "$RAIZ" "$ALVO" && exit 0
+REL="$RASTRO_REL"
 
 # ------------------------------------------------------------------ isencoes
 # Os proprios artefatos da skill nunca sao "fora de escopo": a F6 escreve em

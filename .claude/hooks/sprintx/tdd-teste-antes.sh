@@ -43,7 +43,7 @@ ALVO="$(rastro_tool_input_get "$ENTRADA" file_path)"
 rastro_caminho_em ALVO "$ALVO"
 [ -f "$ALVO" ] || exit 0
 rastro_fora_do_projeto "$RAIZ" "$ALVO" && exit 0
-REL="${ALVO#"$RAIZ"/}"
+REL="$RASTRO_REL"
 
 # Artefatos da skill e o proprio teste nao entram.
 case "$REL" in

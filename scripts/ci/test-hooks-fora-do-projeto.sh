@@ -57,6 +57,23 @@ g -C "$R" add .unica/so.yml; g -C "$R" commit -q -m unica; g -C "$R" rm -q .unic
 err="$( { rastro_fora_do_projeto "$R" .expxv/x/src/b.ts; rastro_fora_do_projeto "$R" .github/b.ts; rastro_fora_do_projeto "$R" vendor/sub; } 2>&1 >/dev/null)"
 [ -z "$err" ]; afirma 'rastro_fora_do_projeto nao escreve no stderr' $?
 
+# caminho por link simbolico (CodeAnt no conselhos-municipais#346): a raiz por outro nome e um link
+# de fora que aponta para dentro sao do projeto, com o caminho relativo resolvido
+if ln -s "$R" "$aux/apelido" 2>/dev/null && ln -s "$R/src" "$aux/fora/link-src" 2>/dev/null \
+  && [ -L "$aux/apelido" ]; then
+  ! rastro_fora_do_projeto "$R" "$aux/apelido/src/b.ts" && [ "$RASTRO_REL" = src/b.ts ]
+  afirma 'a raiz por um link simbolico continua do projeto (src/b.ts)' $?
+  ! rastro_fora_do_projeto "$R" "$aux/fora/link-src/b.ts" && [ "$RASTRO_REL" = src/b.ts ]
+  afirma 'link de fora da raiz que aponta para dentro nao escapa' $?
+  ln -s "$R/src/b.ts" "$aux/fora/b-link.ts" \
+    && ! rastro_fora_do_projeto "$R" "$aux/fora/b-link.ts" && [ "$RASTRO_REL" = src/b.ts ]
+  afirma 'o proprio arquivo como link de fora para dentro nao escapa (src/b.ts)' $?
+  tdd "$aux/apelido/src/b.ts"; afirma 'tdd-teste-antes avisa pelo caminho com link' $?
+  rastro_fora_do_projeto "$R" "$aux/fora/src/b.ts"; afirma 'fora de verdade continua fora, mesmo com links ao lado' $?
+else
+  echo '  (sem links simbolicos neste ambiente: casos de link pulados)'
+fi
+
 echo
 echo "  $ok ok, $falhou falhas"
 [ "$falhou" -eq 0 ] && [ "$ok" -gt 0 ]
