@@ -125,14 +125,21 @@ rc="$(cat "$aux/g.rc")"; out="$(cat "$aux/g.out")"
   && [ "$(fm "$f/00-PLANEJAMENTO.md" estado)" != replanejamento_execucao_recusado ]
 afirma 'autorizacao tardia na pausa: a recusa relida sob a trava nao a sobrescreve' $? "rrec=$rrec raut=$raut rc=$rc $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-240) | $(tr '\n' ' ' < "$aux/g-aut.out" | cut -c1-200)"
 
-# feature so em disco, sem .git no caminho: a recusa operacional segue sem a trava e grava o
-# terminal, como o checkpoint sem Git (CodeAnt no conselhos-municipais#350)
+# feature so em disco, sem .git no caminho: a recusa operacional grava o terminal, como o
+# checkpoint sem Git (CodeAnt no conselhos-municipais#350), sob a trava da propria arvore
 I="$aux/i"; fixture "$I" >/dev/null
 mkdir -p "$aux/isg"; cp -R "$I/docs" "$aux/isg/"
 out="$(pl "$aux/isg" replanejar-execucao menu)"; rc=$?
 [ "$rc" -eq 5 ] && [ "$(kv "$out" motivo)" = classes_mistas ] \
-  && [ "$(fm "$aux/isg/docs/sprintx/features/menu/00-PLANEJAMENTO.md" estado)" = replanejamento_execucao_recusado ]
-afirma 'sem Git: a recusa classes_mistas e gravada sem a trava' $? "rc=$rc $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)"
+  && [ "$(fm "$aux/isg/docs/sprintx/features/menu/00-PLANEJAMENTO.md" estado)" = replanejamento_execucao_recusado ] \
+  && [ ! -e "$aux/isg/docs/sprintx/.travas/autorizacao-f6-menu.lock" ]
+afirma 'sem Git: a recusa classes_mistas e gravada, e a trava e solta' $? "rc=$rc $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)"
+# ...e a trava sem Git exclui: ocupada, o registro de bloqueio espera e nao grava (CodeAnt no sprintx#87)
+mkdir -p "$aux/isg2"; cp -R "$I/docs" "$aux/isg2/"; mkdir -p "$aux/isg2/docs/sprintx/.travas/autorizacao-f6-menu.lock"
+ck="$(cksum < "$aux/isg2/docs/sprintx/features/menu/00-BLOQUEIOS.md")"
+out="$(bl "$aux/isg2" registrar menu null lacuna_de_decisao 'falta decidir' 'a decisao')"; rc=$?
+[ "$rc" -eq 5 ] && grep -q 'continua ocupada' <<<"$out" && [ "$(cksum < "$aux/isg2/docs/sprintx/features/menu/00-BLOQUEIOS.md")" = "$ck" ]
+afirma 'sem Git: com a trava da arvore ocupada, o registro nao grava' $? "rc=$rc $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)"
 
 # dois resolvedores do mesmo bloqueio esperando a trava: o que chega depois rele sob a trava e
 # sai ja_resolvido (0), nunca erro de contrato pela leitura velha (CodeAnt no conselhos-municipais#350)

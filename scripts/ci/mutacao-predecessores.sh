@@ -99,8 +99,8 @@ mata SCALARASCII caminhos
 
 prepara LOCKRMW
 substitui "$CASO/.claude/skills/sprintx/scripts/predecessores.sh" \
-  '  mkdir "$candidata" 2>/dev/null || falha "$E_CONTRATO" '"'"'trava de registro ocupada'"'"'' \
-  '  mkdir "$candidata" 2>/dev/null || true # mutante LOCKRMW ignora contencao'
+  '    || falha "$E_CONTRATO" '"'"'trava de registro ocupada'"'"'' \
+  '    || true # mutante LOCKRMW ignora contencao'
 mata LOCKRMW registro
 
 prepara DIRSYMLINK

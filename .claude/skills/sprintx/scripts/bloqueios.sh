@@ -54,8 +54,8 @@ falha() { local c="$1"; shift; printf 'bloqueios: %s\n' "$*" >&2; exit "$c"; }
 
 # trava_bloqueios — registrar e resolver mudam os bloqueios abertos sob a mesma trava da F6
 # que o recusa_duravel do planejamento.sh usa para reler e gravar a recusa terminal: assim
-# a recusa nunca sai de uma leitura velha (CodeAnt no sprintx#85). Ocupada, espera ate 10 s;
-# sem Git (trava indisponivel no ambiente), segue sem ela, como antes.
+# a recusa nunca sai de uma leitura velha (CodeAnt no sprintx#85). Ocupada, espera ate 10 s.
+# Sem Git, a trava fica em docs/sprintx/.travas/ (CodeAnt no sprintx#87).
 trava_bloqueios() {
   local i rc
   for i in 1 2 3 4 5 6 7 8 9 10; do
@@ -63,12 +63,9 @@ trava_bloqueios() {
     case "$rc" in
       0) return 0 ;;
       2) sleep 1 ;;
-      # sem Git a trava nao existe e o registro segue sem ela; num repositorio, a trava que
-      # falha ao ser montada nao e sucesso: segui-la reabriria a corrida (CodeAnt no conselhos#346)
-      # o Git pode recusar o repositorio (dono diferente, safe.directory): o criterio e a
-      # pasta .git no caminho, nao a resposta do Git (CodeAnt no sprintx#86)
-      *) tem_git_no_caminho "$RAIZ" || return 0
-         falha "$E_TRANSICAO" "nao foi possivel montar a trava da F6 de $SLUG (${TRAVA_AUT6_MOTIVO:-rc $rc}): nada foi gravado" ;;
+      # a trava que falha ao ser montada nao e sucesso: segui-la reabriria a corrida (CodeAnt no
+      # conselhos#346), inclusive com o Git recusando o repositorio (CodeAnt no sprintx#86)
+      *) falha "$E_TRANSICAO" "nao foi possivel montar a trava da F6 de $SLUG (${TRAVA_AUT6_MOTIVO:-rc $rc}): nada foi gravado" ;;
     esac
   done
   falha "$E_TRANSICAO" "a trava da F6 de $SLUG continua ocupada (replanejar-execucao ou autorizacao tardia em andamento): nada foi gravado; repita"

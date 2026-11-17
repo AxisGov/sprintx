@@ -93,11 +93,19 @@ adquire_trava_autorizacao_f6() {
   [ "${TRAVA_AUT6_ADQUIRIDA:-nao}" != sim ] || { TRAVA_AUT6_MOTIVO=existente; return 2; }
   local repo="$1" slug="$2" raiz caminho pai bruto mkdir_rc=0
   case "$slug" in ""|-*|*-|*--*|*[!a-z0-9-]*) return 64 ;; esac
-  bruto="$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" || { TRAVA_AUT6_MOTIVO=ambiente; return 1; }
-  raiz="$(caminho_git "$bruto")" || { TRAVA_AUT6_MOTIVO=ambiente; return 1; }
-  bruto="$(git -C "$raiz" rev-parse --git-path "sprintx/travas/autorizacao-f6-$slug.lock" 2>/dev/null)" || { TRAVA_AUT6_MOTIVO=ambiente; return 1; }
-  caminho="$(caminho_git "$bruto")" || { TRAVA_AUT6_MOTIVO=ambiente; return 1; }
-  case "$caminho" in /*) ;; *) caminho="$raiz/$caminho" ;; esac
+  if bruto="$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)"; then
+    raiz="$(caminho_git "$bruto")" || { TRAVA_AUT6_MOTIVO=ambiente; return 1; }
+    bruto="$(git -C "$raiz" rev-parse --git-path "sprintx/travas/autorizacao-f6-$slug.lock" 2>/dev/null)" || { TRAVA_AUT6_MOTIVO=ambiente; return 1; }
+    caminho="$(caminho_git "$bruto")" || { TRAVA_AUT6_MOTIVO=ambiente; return 1; }
+    case "$caminho" in /*) ;; *) caminho="$raiz/$caminho" ;; esac
+  elif ! tem_git_no_caminho "$repo"; then
+    # feature so em disco: sem .git, a trava fica na propria arvore, e o registro de bloqueios e
+    # a recusa duravel continuam se excluindo (CodeAnt no sprintx#87)
+    caminho="$repo/docs/sprintx/.travas/autorizacao-f6-$slug.lock"
+  else
+    # ha .git, mas o Git recusa o repositorio: falha fechada
+    TRAVA_AUT6_MOTIVO=ambiente; return 1
+  fi
   pai="${caminho%/*}"
   mkdir -p "$pai" || { TRAVA_AUT6_MOTIVO=ambiente; return 1; }
 

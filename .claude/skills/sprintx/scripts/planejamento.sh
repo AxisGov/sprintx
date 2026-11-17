@@ -2083,9 +2083,9 @@ recusa_duravel() {
   case "$trava_rc" in
     0) ;;
     2) falha "$E_RECUSADO" "replanejamento da execucao: trava da F6 existente para $SLUG; nada foi gravado. Rode de novo quando a outra operacao terminar." ;;
-    # feature so em disco, sem .git no caminho: nao ha trava, e a recusa segue sem ela, como o
-    # checkpoint (CodeAnt no conselhos-municipais#350). Num repositorio, a trava que falha recusa
-    *) tem_git_no_caminho "$RAIZ" && falha "$E_TRANSICAO" "replanejamento da execucao: o ambiente nao permite adquirir a trava da F6 para $SLUG; nada foi gravado." ;;
+    # a feature so em disco tem a trava em docs/sprintx/.travas/ (CodeAnt no conselhos#350 e no
+    # sprintx#87); a trava que falha recusa
+    *) falha "$E_TRANSICAO" "replanejamento da execucao: o ambiente nao permite adquirir a trava da F6 para $SLUG; nada foi gravado." ;;
   esac
   # O estado do planejamento tambem e relido sob a trava: uma autorizacao tardia aplicada no
   # intervalo nao e sobrescrita pela recusa montada sobre o P_* velho (CodeAnt no conselhos#346).
