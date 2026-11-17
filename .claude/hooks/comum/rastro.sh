@@ -82,7 +82,7 @@ rastro_caminho_em() {
 # arquivo versionado (.pylot-tmp, .expxv: copias e rascunhos de ferramenta). No conselhos,
 # 85% dos avisos de tdd-teste-antes, escopo e arvore-limpa eram desses caminhos (2026-11-16).
 rastro_fora_do_projeto() {
-  local raiz="$1" c="$2" rel topo d fis rfis
+  local raiz="$1" c="$2" rel topo d fis rfis n t
   RASTRO_REL=""
   case "$c" in
     "$raiz"/*) rel="${c#"$raiz"/}" ;;
@@ -90,6 +90,13 @@ rastro_fora_do_projeto() {
       # o caminho que chega por link simbólico (a raiz por outro nome, ou um link de fora que
       # aponta para dentro) é do projeto se a pasta dele, resolvida, estiver dentro da raiz
       # resolvida (CodeAnt no conselhos-municipais#346)
+      # o proprio arquivo pode ser o link: segue a cadeia (ate 8) antes de resolver a pasta
+      n=0
+      while [ -L "$c" ] && [ "$n" -lt 8 ]; do
+        t="$(readlink -- "$c")" || break
+        case "$t" in /*|[A-Za-z]:/*) c="$t" ;; *) c="${c%/*}/$t" ;; esac
+        n=$((n+1))
+      done
       d="${c%/*}"; [ -n "$d" ] || d=/
       fis="$(cd -P -- "$d" 2>/dev/null && pwd -P)" && rfis="$(cd -P -- "$raiz" 2>/dev/null && pwd -P)" || return 0
       case "$fis/" in

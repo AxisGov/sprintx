@@ -56,6 +56,18 @@ falha() { local c="$1"; shift; printf 'bloqueios: %s\n' "$*" >&2; exit "$c"; }
 # que o recusa_duravel do planejamento.sh usa para reler e gravar a recusa terminal: assim
 # a recusa nunca sai de uma leitura velha (CodeAnt no sprintx#85). Ocupada, espera ate 10 s;
 # sem Git (trava indisponivel no ambiente), segue sem ela, como antes.
+# tem_git_no_caminho <pasta> — 0 quando a pasta ou um ancestral tem `.git` (pasta ou arquivo)
+tem_git_no_caminho() {
+  local d p
+  d="$(cd -P -- "$1" 2>/dev/null && pwd -P)" || return 1
+  while :; do
+    [ -e "$d/.git" ] && return 0
+    p="${d%/*}"; [ -n "$p" ] || p=/
+    [ "$p" != "$d" ] || return 1
+    d="$p"
+  done
+}
+
 trava_bloqueios() {
   local i rc
   for i in 1 2 3 4 5 6 7 8 9 10; do
@@ -65,7 +77,9 @@ trava_bloqueios() {
       2) sleep 1 ;;
       # sem Git a trava nao existe e o registro segue sem ela; num repositorio, a trava que
       # falha ao ser montada nao e sucesso: segui-la reabriria a corrida (CodeAnt no conselhos#346)
-      *) git -C "$RAIZ" rev-parse --git-dir >/dev/null 2>&1 || return 0
+      # o Git pode recusar o repositorio (dono diferente, safe.directory): o criterio e a
+      # pasta .git no caminho, nao a resposta do Git (CodeAnt no sprintx#86)
+      *) tem_git_no_caminho "$RAIZ" || return 0
          falha "$E_TRANSICAO" "nao foi possivel montar a trava da F6 de $SLUG (${TRAVA_AUT6_MOTIVO:-rc $rc}): nada foi gravado" ;;
     esac
   done

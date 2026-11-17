@@ -90,6 +90,14 @@ out="$(bl "$F" resolver menu B-02)"; rc=$?
 [ "$rc" -ne 0 ] && grep -q 'trava da F6' <<<"$out" && [ "$(cksum < "$F/docs/sprintx/features/menu/00-BLOQUEIOS.md")" = "$ck" ]
 afirma 'bloqueios.sh resolver com a trava que falha ao montar: recusa, nao grava' $? "rc=$rc $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)"
 
+# o Git que recusa o repositorio (dono diferente; aqui, GIT_DIR invalido) nao vira "sem Git":
+# com .git na raiz, o registro recusa e nao grava (CodeAnt no sprintx#86)
+H="$aux/h"; fixture "$H" >/dev/null
+ck="$(cksum < "$H/docs/sprintx/features/menu/00-BLOQUEIOS.md")"
+out="$(GIT_DIR="$aux/nao-existe" bl "$H" registrar menu null lacuna_de_decisao 'falta decidir' 'a decisao')"; rc=$?
+[ "$rc" -ne 0 ] && grep -q 'trava da F6' <<<"$out" && [ "$(cksum < "$H/docs/sprintx/features/menu/00-BLOQUEIOS.md")" = "$ck" ]
+afirma 'bloqueios.sh registrar com o Git recusando o repositorio: recusa, nao grava' $? "rc=$rc $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)"
+
 # o planejamento muda entre a leitura e a gravacao (autorizacao tardia aplicada na pausa): a
 # recusa nao sobrescreve a rodada autorizada (CodeAnt no conselhos#346)
 G="$aux/g"; f="$G/docs/sprintx/features/menu"
