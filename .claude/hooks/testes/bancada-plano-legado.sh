@@ -55,7 +55,7 @@ ar_ck="$(cksum < "$AR_F/00-BLOQUEIOS.md")"
 ar_out="$(ar_bl "$AR_S" resolver menu B-01)"; ar_rc=$?
 [ "$ar_rc" -eq 5 ] && [ "$(cksum < "$AR_F/00-BLOQUEIOS.md")" = "$ar_ck" ] && [ ! -e "$AR_F/00-PLANEJAMENTO.md" ] \
   && ar_tem "$ar_out" 'plano legado' && ar_tem "$ar_out" 'sem 00-PLANEJAMENTO.md' \
-  && ar_tem "$ar_out" "/scripts/planejamento.sh criar menu null <declarado_por> <max_replanejamentos_f6>" \
+  && ar_tem "$ar_out" "/scripts/planejamento.sh criar menu null DECLARADO_POR MAX_REPLANEJAMENTOS_F6" \
   && ar_tem "$ar_out" "/scripts/planejamento.sh checkpoint menu" \
   && ar_tem "$ar_out" "/scripts/planejamento.sh replanejar-execucao menu" \
   && [ "$(grep -oF -- "SPRINTX_RAIZ=$AR_S bash " <<<"$ar_out" | wc -l)" -eq 4 ] \
@@ -114,7 +114,7 @@ ar_out="$(SPRINTX_RAIZ="$AR_L" bash "$AR_PL" replanejar-execucao menu 2>&1)"; ar
   && [ -z "$(git -C "$AR_L" status --porcelain -- docs/sprintx)" ] \
   && [ "$(ar_kv "$ar_out" replanejamento)" = recusado ] && [ "$(ar_kv "$ar_out" motivo)" = planejamento_legado ] \
   && [ "$(ar_kv "$ar_out" persistencia)" = disco ] && ar_tem "$ar_out" 'plano legado' \
-  && ar_tem "$ar_out" "/scripts/planejamento.sh criar menu null <declarado_por> <max_replanejamentos_f6>" \
+  && ar_tem "$ar_out" "/scripts/planejamento.sh criar menu null DECLARADO_POR MAX_REPLANEJAMENTOS_F6" \
   && ar_tem "$ar_out" "/scripts/planejamento.sh checkpoint menu" \
   && ar_tem "$ar_out" "/scripts/planejamento.sh replanejar-execucao menu" \
   && [ "$(grep -oF -- "SPRINTX_RAIZ=$AR_L bash " <<<"$ar_out" | wc -l)" -eq 4 ] \
@@ -123,7 +123,7 @@ afirma "ar7-legado-recusa-sem-gravar-o-terminal" $? "rc=$ar_rc: $(printf '%s' "$
 ar_out="$(ar_pl "$AR_L" replanejar-execucao menu)"; ar_rc=$?
 [ "$ar_rc" -eq 5 ] && [ ! -e "$AR_FL/00-PLANEJAMENTO.md" ] && [ "$(git -C "$AR_L" rev-parse HEAD)" = "$ar_h" ] \
   && [ "$(ar_kv "$ar_out" motivo)" = planejamento_legado ] && ! ar_tem "$ar_out" 'SPRINTX_RAIZ=' \
-  && ar_tem "$ar_out" "/scripts/planejamento.sh criar menu null <declarado_por> <max_replanejamentos_f6>" \
+  && ar_tem "$ar_out" "/scripts/planejamento.sh criar menu null DECLARADO_POR MAX_REPLANEJAMENTOS_F6" \
   && [ "$(ar_kv "$(ar_pl "$AR_L" criar menu null flavio 1)" planejamento)" = migrado_legado ] \
   && ar_pl "$AR_L" checkpoint menu >/dev/null \
   && [ "$(ar_kv "$(ar_pl "$AR_L" replanejar-execucao menu)" replanejamento)" = iniciado ]

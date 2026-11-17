@@ -2046,7 +2046,7 @@ EOF
 migracao_legado_msg() {
   local plc; plc="bash $(printf '%q' "$SK/scripts/planejamento.sh")"
   [ -z "${SPRINTX_RAIZ:-}" ] || plc="SPRINTX_RAIZ=$(printf '%q' "$RAIZ") $plc"
-  printf 'Migre o plano declarando o orcamento (DS-137, DS-146) — %s criar %s null <declarado_por> <max_replanejamentos_f6> — e depois %s checkpoint %s. A migracao nasce no estado que o disco mostra; confira com %s fase %s: em F6, rode %s replanejar-execucao %s; em F3 (a ultima linha VEREDITO: de 00-AUDITORIA.md e NÃO), o replanejar-execucao vem depois de F3, F4 e F5, rodadas que nao consomem o orcamento da F6' \
+  printf 'Migre o plano declarando o orcamento (DS-137, DS-146) — %s criar %s null DECLARADO_POR MAX_REPLANEJAMENTOS_F6 — e depois %s checkpoint %s. A migracao nasce no estado que o disco mostra; confira com %s fase %s: em F6, rode %s replanejar-execucao %s; em F3 (a ultima linha VEREDITO: de 00-AUDITORIA.md e NÃO), o replanejar-execucao vem depois de F3, F4 e F5, rodadas que nao consomem o orcamento da F6' \
     "$plc" "$SLUG" "$plc" "$SLUG" "$plc" "$SLUG" "$plc" "$SLUG"
 }
 
@@ -2083,7 +2083,9 @@ recusa_duravel() {
   case "$trava_rc" in
     0) ;;
     2) falha "$E_RECUSADO" "replanejamento da execucao: trava da F6 existente para $SLUG; nada foi gravado. Rode de novo quando a outra operacao terminar." ;;
-    *) falha "$E_TRANSICAO" "replanejamento da execucao: o ambiente nao permite adquirir a trava da F6 para $SLUG; nada foi gravado." ;;
+    # feature so em disco, sem .git no caminho: nao ha trava, e a recusa segue sem ela, como o
+    # checkpoint (CodeAnt no conselhos-municipais#350). Num repositorio, a trava que falha recusa
+    *) tem_git_no_caminho "$RAIZ" && falha "$E_TRANSICAO" "replanejamento da execucao: o ambiente nao permite adquirir a trava da F6 para $SLUG; nada foi gravado." ;;
   esac
   # O estado do planejamento tambem e relido sob a trava: uma autorizacao tardia aplicada no
   # intervalo nao e sobrescrita pela recusa montada sobre o P_* velho (CodeAnt no conselhos#346).

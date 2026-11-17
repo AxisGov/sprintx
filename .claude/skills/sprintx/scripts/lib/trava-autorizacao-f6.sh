@@ -19,6 +19,7 @@ fi
 libera_trava_autorizacao_f6() {
   [ "${TRAVA_AUT6_ADQUIRIDA:-nao}" = sim ] || return 0
   [ -n "${TRAVA_AUT6_DIR:-}" ] || return 1
+  rm -f -- "$TRAVA_AUT6_DIR/.dono" 2>/dev/null
   rmdir "$TRAVA_AUT6_DIR" 2>/dev/null || return 1
   TRAVA_AUT6_ADQUIRIDA=nao
   TRAVA_AUT6_DIR=""
@@ -72,6 +73,20 @@ _trava_aut6_adia_hup() { TRAVA_AUT6_SINAL_PENDENTE=HUP; }
 _trava_aut6_adia_int() { TRAVA_AUT6_SINAL_PENDENTE=INT; }
 _trava_aut6_adia_term() { TRAVA_AUT6_SINAL_PENDENTE=TERM; }
 
+# tem_git_no_caminho <pasta> — 0 quando a pasta ou um ancestral tem `.git` (pasta ou arquivo).
+# Sem `.git` no caminho, a trava nao existe e quem a pede segue sem ela; com `.git`, a trava
+# que falha recusa, mesmo quando o Git rejeita o repositorio (CodeAnt no sprintx#86)
+tem_git_no_caminho() {
+  local d p
+  d="$(cd -P -- "$1" 2>/dev/null && pwd -P)" || return 1
+  while :; do
+    [ -e "$d/.git" ] && return 0
+    p="${d%/*}"; [ -n "$p" ] || p=/
+    [ "$p" != "$d" ] || return 1
+    d="$p"
+  done
+}
+
 adquire_trava_autorizacao_f6() {
   [ $# -eq 2 ] || return 64
   TRAVA_AUT6_MOTIVO=""
@@ -96,7 +111,10 @@ adquire_trava_autorizacao_f6() {
 
   # O filho nao pode morrer depois de criar o diretorio e antes de devolver 0.
   # O shell pai continua adiando o sinal e o reemite depois de registrar a posse.
-  ( trap '' HUP INT TERM; mkdir "$caminho" ) 2>/dev/null || mkdir_rc=$?
+  # O `mkdir` nem sempre exclui: o do uutils coreutils (Ubuntu 26.04) sai 0 nos dois processos
+  # que criam a mesma pasta no mesmo instante. A posse e a marca `.dono`, criada com O_EXCL pelo
+  # proprio bash (`set -C`): so um a cria, e o outro ve a trava existente (conselhos#350).
+  ( trap '' HUP INT TERM; mkdir "$caminho" && ( set -C; printf '%s\n' "$$" > "$caminho/.dono" ) ) 2>/dev/null || mkdir_rc=$?
   if [ "$mkdir_rc" -ne 0 ]; then
     _trava_aut6_restaura_sinais
     if [ -n "$TRAVA_AUT6_SINAL_PENDENTE" ]; then

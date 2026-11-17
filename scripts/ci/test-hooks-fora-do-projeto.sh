@@ -70,9 +70,17 @@ if ln -s "$R" "$aux/apelido" 2>/dev/null && ln -s "$R/src" "$aux/fora/link-src" 
   afirma 'o proprio arquivo como link de fora para dentro nao escapa (src/b.ts)' $?
   tdd "$aux/apelido/src/b.ts"; afirma 'tdd-teste-antes avisa pelo caminho com link' $?
   rastro_fora_do_projeto "$R" "$aux/fora/src/b.ts"; afirma 'fora de verdade continua fora, mesmo com links ao lado' $?
+  # o link de dentro da raiz que aponta para fora: o arquivo fisico e de fora (CodeAnt no conselhos#350)
+  ln -s "$aux/fora" "$R/link-fora" \
+    && rastro_fora_do_projeto "$R" "$R/link-fora/src/b.ts"
+  afirma 'link de dentro da raiz que aponta para fora: fora' $?
+  rm -f "$R/link-fora"
 else
   echo '  (sem links simbolicos neste ambiente: casos de link pulados)'
 fi
+# arquivo numa pasta que ainda nao existe, dentro da raiz: continua do projeto, com o relativo certo
+! rastro_fora_do_projeto "$R" "$R/src/nova/sub/c.ts" && [ "$RASTRO_REL" = src/nova/sub/c.ts ]
+afirma 'pasta nova dentro da raiz continua do projeto (src/nova/sub/c.ts)' $?
 
 echo
 echo "  $ok ok, $falhou falhas"
