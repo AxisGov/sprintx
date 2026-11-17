@@ -81,6 +81,12 @@ fi
 # arquivo numa pasta que ainda nao existe, dentro da raiz: continua do projeto, com o relativo certo
 ! rastro_fora_do_projeto "$R" "$R/src/nova/sub/c.ts" && [ "$RASTRO_REL" = src/nova/sub/c.ts ]
 afirma 'pasta nova dentro da raiz continua do projeto (src/nova/sub/c.ts)' $?
+# pasta cujo nome termina em quebra de linha: o relativo e o caminho inteiro (CodeAnt no login#100)
+nl=$'\n'
+if mkdir -p "$R/src/x$nl" 2>/dev/null; then
+  ! rastro_fora_do_projeto "$R" "$R/src/x$nl/c.ts" && [ "$RASTRO_REL" = "src/x$nl/c.ts" ]
+  afirma 'pasta com quebra de linha no fim do nome: o relativo nao perde a quebra' $?
+fi
 
 echo
 echo "  $ok ok, $falhou falhas"

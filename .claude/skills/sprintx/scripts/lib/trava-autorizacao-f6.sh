@@ -122,7 +122,13 @@ adquire_trava_autorizacao_f6() {
   # O `mkdir` nem sempre exclui: o do uutils coreutils (Ubuntu 26.04) sai 0 nos dois processos
   # que criam a mesma pasta no mesmo instante. A posse e a marca `.dono`, criada com O_EXCL pelo
   # proprio bash (`set -C`): so um a cria, e o outro ve a trava existente (conselhos#350).
-  ( trap '' HUP INT TERM; mkdir "$caminho" && ( set -C; printf '%s\n' "$$" > "$caminho/.dono" ) ) 2>/dev/null || mkdir_rc=$?
+  # A marca que nao se cria deixa a pasta: com outra marca, a trava e de outro e nada e tocado; sem
+  # marca nenhuma, a pasta e nossa e sai, para nao virar trava orfa (CodeAnt no login#100).
+  ( trap '' HUP INT TERM
+    mkdir "$caminho" 2>/dev/null || exit 1
+    ( set -C; printf '%s\n' "$$" > "$caminho/.dono" ) 2>/dev/null && exit 0
+    [ -e "$caminho/.dono" ] && exit 1
+    rmdir "$caminho" 2>/dev/null; exit 1 ) || mkdir_rc=$?
   if [ "$mkdir_rc" -ne 0 ]; then
     _trava_aut6_restaura_sinais
     if [ -n "$TRAVA_AUT6_SINAL_PENDENTE" ]; then
