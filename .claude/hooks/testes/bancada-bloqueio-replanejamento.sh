@@ -1632,6 +1632,35 @@ l_lock_sem_janela_default_na_restauracao() {
   ' _ "$TRAVA_AUT6" "$W" >/dev/null 2>&1 || rc=$?
   return "$rc"
 }
+l_lock_pid_falha_nao_deixa_orfa() {
+  [ -f "$TRAVA_AUT6" ] || return 1
+  local p rc=0
+  p="$(git -C "$W" rev-parse --git-path sprintx/travas/autorizacao-f6-pid-falha.lock)" || return 1
+  case "$p" in /*) ;; *) p="$W/$p" ;; esac
+  bash -c '
+    . "$1" || exit 1
+    printf() {
+      if [ "$1" = "%s\\n" ] && [ "$2" = "$$" ]; then return 1; fi
+      builtin printf "$@"
+    }
+    adquire_trava_autorizacao_f6 "$2" pid-falha
+  ' _ "$TRAVA_AUT6" "$W" >/dev/null 2>&1 || rc=$?
+  [ "$rc" -eq 1 ] && [ ! -e "$p" ]
+}
+# o chamador com noclobber (`set -C`) nao impede a escrita do PID na marca recem-criada
+# (CodeAnt no sprintx#89)
+l_lock_chamador_noclobber() {
+  [ -f "$TRAVA_AUT6" ] || return 1
+  local rc=0
+  bash -c '
+    set -C
+    . "$1" || exit 1
+    adquire_trava_autorizacao_f6 "$2" noclobber || exit 1
+    [ "$(cat "$TRAVA_AUT6_DIR/.dono")" = "$$" ] || exit 1
+    libera_trava_autorizacao_f6
+  ' _ "$TRAVA_AUT6" "$W" >/dev/null 2>&1 || rc=$?
+  return "$rc"
+}
 l_lock_caminho; afirma "l-lock-1-caminho-por-worktree-e-slug" $? "git-path distingue worktree e slug"
 l_lock_concorrente; afirma "l-lock-2-concorrente-recusada" $? "uma aquisicao vence e a outra falha fechada"
 l_lock_trap; afirma "l-lock-3-trap-remove-so-a-propria" $? "exit 7 preservado e lock adquirido removido"
@@ -1641,6 +1670,8 @@ l_lock_mkdir_interrompido_depois_de_criar; afirma "l-lock-5b-mkdir-interrompido-
 l_lock_preserva_traps_de_sinal; afirma "l-lock-6-preserva-traps-de-sinal-do-chamador" $? "handlers HUP INT TERM anteriores continuam executaveis"
 l_lock_sinal_com_trava_alheia; afirma "l-lock-7-sinal-nao-remove-trava-alheia" $? "TERM depois do mkdir recusado preserva lock e dono de outra execucao"
 l_lock_sem_janela_default_na_restauracao; afirma "l-lock-8-restauracao-sem-janela-default" $? "restauracao nao limpa os tres handlers antes de repor o chamador"
+l_lock_pid_falha_nao_deixa_orfa; afirma "l-lock-9-pid-falha-nao-deixa-trava-orfa" $? "falha de escrita do PID retorna ambiente e remove marca e trava"
+l_lock_chamador_noclobber; afirma "l-lock-10-chamador-com-noclobber-adquire" $? "set -C no chamador nao vira falha de ambiente"
 
 # Contrato nos documentos: estados, comando da F6, resolucao, congelamento e decisoes.
 SCHK="$SK/references/00-schema.md"
