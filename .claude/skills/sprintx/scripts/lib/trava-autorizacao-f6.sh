@@ -125,15 +125,21 @@ adquire_trava_autorizacao_f6() {
   # juntas, para nao transformar uma falha de ambiente em trava ocupada (DS-231).
   # Se a marca nao se cria: com outra marca, a trava e de outro e nada e tocado; sem marca
   # nenhuma, a pasta e nossa e sai, para nao virar trava orfa (CodeAnt no login#100).
-  ( trap '' HUP INT TERM
-    mkdir "$caminho" 2>/dev/null || exit 1
-    ( set -C; : > "$caminho/.dono" ) 2>/dev/null || {
-      [ -e "$caminho/.dono" ] && exit 1
-      rmdir "$caminho" 2>/dev/null; exit 1
-    }
-    printf '%s\n' "$$" >| "$caminho/.dono" 2>/dev/null && exit 0
-    rm -f "$caminho/.dono" 2>/dev/null
-    rmdir "$caminho" 2>/dev/null; exit 3 ) || mkdir_rc=$?
+  local tentativa=1
+  while [ "$tentativa" -le 3 ]; do
+    mkdir_rc=0
+    ( trap '' HUP INT TERM
+      mkdir "$caminho" 2>/dev/null || exit 1
+      ( set -C; : > "$caminho/.dono" ) 2>/dev/null || {
+        [ -e "$caminho/.dono" ] && exit 1
+        rmdir "$caminho" 2>/dev/null; exit 1
+      }
+      printf '%s\n' "$$" >| "$caminho/.dono" 2>/dev/null && exit 0
+      rm -f "$caminho/.dono" 2>/dev/null
+      rmdir "$caminho" 2>/dev/null; exit 3 ) || mkdir_rc=$?
+    [ "$mkdir_rc" -eq 1 ] && [ ! -d "$caminho" ] || break
+    tentativa=$((tentativa + 1))
+  done
   if [ "$mkdir_rc" -ne 0 ]; then
     _trava_aut6_restaura_sinais
     if [ -n "$TRAVA_AUT6_SINAL_PENDENTE" ]; then
