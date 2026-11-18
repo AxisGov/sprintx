@@ -288,4 +288,11 @@ al_trava_soltar_entre_mkdir_e_teste() {
   return "$rc"
 }
 al_trava_soltar_entre_mkdir_e_teste; afirma "ds233-trava-solta-tenta-de-novo" $? "mkdir falho com pasta removida tenta de novo e adquire"
+# conselhos-municipais#365: a pasta e lida uma vez so; a dona que solta entre duas leituras
+# viraria `ambiente` sem nova tentativa. Conta todo teste de arquivo sobre a pasta (-d, -e, -L...),
+# nao so o -d (CodeAnt no sprintx#92)
+al_trava_uma_leitura() {
+  [ "$(awk '/^adquire_trava_autorizacao_f6\(\)/,/^}/' "$SK/scripts/lib/trava-autorizacao-f6.sh" | grep -cE -- '-[a-zA-Z] "[$]caminho"([^/]|$)')" = 1 ]
+}
+al_trava_uma_leitura; afirma "ds234-trava-le-a-pasta-uma-vez" $? "a classificacao usa a mesma leitura da pasta que decide a nova tentativa"
 rm -rf "$K"

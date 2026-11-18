@@ -125,7 +125,7 @@ adquire_trava_autorizacao_f6() {
   # juntas, para nao transformar uma falha de ambiente em trava ocupada (DS-231).
   # Se a marca nao se cria: com outra marca, a trava e de outro e nada e tocado; sem marca
   # nenhuma, a pasta e nossa e sai, para nao virar trava orfa (CodeAnt no login#100).
-  local tentativa=1
+  local tentativa=1 existe=nao
   while [ "$tentativa" -le 3 ]; do
     mkdir_rc=0
     ( trap '' HUP INT TERM
@@ -137,7 +137,10 @@ adquire_trava_autorizacao_f6() {
       printf '%s\n' "$$" >| "$caminho/.dono" 2>/dev/null && exit 0
       rm -f "$caminho/.dono" 2>/dev/null
       rmdir "$caminho" 2>/dev/null; exit 3 ) || mkdir_rc=$?
-    [ "$mkdir_rc" -eq 1 ] && [ ! -d "$caminho" ] || break
+    # a pasta e lida uma vez so: a classificacao abaixo usa esta leitura, e a dona que
+    # solta depois dela nao vira `ambiente` (CodeAnt no conselhos-municipais#365)
+    existe=nao; [ -d "$caminho" ] && existe=sim
+    [ "$mkdir_rc" -eq 1 ] && [ "$existe" = nao ] || break
     tentativa=$((tentativa + 1))
   done
   if [ "$mkdir_rc" -ne 0 ]; then
@@ -148,7 +151,7 @@ adquire_trava_autorizacao_f6() {
     fi
     # 3: a marca era nossa e o PID nao se escreveu. E ambiente mesmo que a limpeza tambem tenha
     # falhado e a pasta tenha sobrado (CodeAnt no conselhos-municipais#360)
-    if [ "$mkdir_rc" -ne 3 ] && [ -d "$caminho" ]; then TRAVA_AUT6_MOTIVO=existente; return 2; fi
+    if [ "$mkdir_rc" -ne 3 ] && [ "$existe" = sim ]; then TRAVA_AUT6_MOTIVO=existente; return 2; fi
     TRAVA_AUT6_MOTIVO=ambiente
     return 1
   fi
