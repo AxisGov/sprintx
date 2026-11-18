@@ -133,14 +133,16 @@ adquire_trava_autorizacao_f6() {
     }
     printf '%s\n' "$$" >| "$caminho/.dono" 2>/dev/null && exit 0
     rm -f "$caminho/.dono" 2>/dev/null
-    rmdir "$caminho" 2>/dev/null; exit 1 ) || mkdir_rc=$?
+    rmdir "$caminho" 2>/dev/null; exit 3 ) || mkdir_rc=$?
   if [ "$mkdir_rc" -ne 0 ]; then
     _trava_aut6_restaura_sinais
     if [ -n "$TRAVA_AUT6_SINAL_PENDENTE" ]; then
       _trava_aut6_reemite_sinal
       return $?
     fi
-    if [ -d "$caminho" ]; then TRAVA_AUT6_MOTIVO=existente; return 2; fi
+    # 3: a marca era nossa e o PID nao se escreveu. E ambiente mesmo que a limpeza tambem tenha
+    # falhado e a pasta tenha sobrado (CodeAnt no conselhos-municipais#360)
+    if [ "$mkdir_rc" -ne 3 ] && [ -d "$caminho" ]; then TRAVA_AUT6_MOTIVO=existente; return 2; fi
     TRAVA_AUT6_MOTIVO=ambiente
     return 1
   fi

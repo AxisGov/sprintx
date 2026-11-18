@@ -1647,6 +1647,27 @@ l_lock_pid_falha_nao_deixa_orfa() {
   ' _ "$TRAVA_AUT6" "$W" >/dev/null 2>&1 || rc=$?
   [ "$rc" -eq 1 ] && [ ! -e "$p" ]
 }
+# o PID que nao se escreve e ambiente mesmo quando a limpeza tambem falha e a pasta sobra
+# (CodeAnt no conselhos-municipais#360)
+l_lock_pid_e_limpeza_falham_e_ambiente() {
+  [ -f "$TRAVA_AUT6" ] || return 1
+  local p rc=0
+  p="$(git -C "$W" rev-parse --git-path sprintx/travas/autorizacao-f6-pid-limpeza.lock)" || return 1
+  case "$p" in /*) ;; *) p="$W/$p" ;; esac
+  bash -c '
+    . "$1" || exit 1
+    printf() {
+      if [ "$1" = "%s\\n" ] && [ "$2" = "$$" ]; then return 1; fi
+      builtin printf "$@"
+    }
+    rm() { return 1; }
+    rmdir() { return 1; }
+    adquire_trava_autorizacao_f6 "$2" pid-limpeza; r=$?
+    [ "$r" -eq 1 ] && [ "$TRAVA_AUT6_MOTIVO" = ambiente ]
+  ' _ "$TRAVA_AUT6" "$W" >/dev/null 2>&1 || rc=$?
+  command rm -rf -- "$p"
+  return "$rc"
+}
 # o chamador com noclobber (`set -C`) nao impede a escrita do PID na marca recem-criada
 # (CodeAnt no sprintx#89)
 l_lock_chamador_noclobber() {
@@ -1672,6 +1693,7 @@ l_lock_sinal_com_trava_alheia; afirma "l-lock-7-sinal-nao-remove-trava-alheia" $
 l_lock_sem_janela_default_na_restauracao; afirma "l-lock-8-restauracao-sem-janela-default" $? "restauracao nao limpa os tres handlers antes de repor o chamador"
 l_lock_pid_falha_nao_deixa_orfa; afirma "l-lock-9-pid-falha-nao-deixa-trava-orfa" $? "falha de escrita do PID retorna ambiente e remove marca e trava"
 l_lock_chamador_noclobber; afirma "l-lock-10-chamador-com-noclobber-adquire" $? "set -C no chamador nao vira falha de ambiente"
+l_lock_pid_e_limpeza_falham_e_ambiente; afirma "l-lock-11-pid-e-limpeza-falham-e-ambiente" $? "pasta que sobra da propria falha nao vira trava existente"
 
 # Contrato nos documentos: estados, comando da F6, resolucao, congelamento e decisoes.
 SCHK="$SK/references/00-schema.md"
