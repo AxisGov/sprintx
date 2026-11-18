@@ -264,4 +264,28 @@ al_mutante "ds175-mutante-20" $? "$AL_M" l5_pendente_invalido
 AL_M="$(al_copia m21)"
 al_muta "$AL_M" '  if [ "$P_ESTADO" = aprovado ]; then AUT6_ACAO=fechamento_pendente' '  if [ "$P_ESTADO" = aprovado ]; then AUT6_ACAO=retomada'
 al_mutante "ds175-mutante-21" $? "$AL_M" l5_fechamento_pendente_e_fechado
+
+# conselhos#361 T2: a dona pode soltar a trava entre o mkdir que falha e a classificacao.
+al_trava_soltar_entre_mkdir_e_teste() {
+  local p rc=0
+  p="$(git -C "$W" rev-parse --git-path sprintx/travas/autorizacao-f6-solta.lock)" || return 1
+  case "$p" in /*) ;; *) p="$W/$p" ;; esac
+  bash -c '
+    . "$1" || exit 1
+    alvo="$3"; marca="$4"
+    # a tentativa roda num subshell: o estado da primeira chamada fica num arquivo
+    mkdir() {
+      if [ ! -e "$marca" ] && [ "$#" -eq 1 ] && [ "$1" = "$alvo" ]; then
+        : > "$marca"; command mkdir "$@" || return $?
+        command rmdir "$alvo" || return $?
+        return 1
+      fi
+      command mkdir "$@"
+    }
+    adquire_trava_autorizacao_f6 "$2" solta || exit 1
+    libera_trava_autorizacao_f6
+  ' _ "$SK/scripts/lib/trava-autorizacao-f6.sh" "$W" "$p" "$K/ds233-primeira" >/dev/null 2>&1 || rc=$?
+  return "$rc"
+}
+al_trava_soltar_entre_mkdir_e_teste; afirma "ds233-trava-solta-tenta-de-novo" $? "mkdir falho com pasta removida tenta de novo e adquire"
 rm -rf "$K"
