@@ -191,6 +191,12 @@ EOF
   [ ! -e "$trava" ]
   afirma 'falha ao escrever PID nao deixa trava orfa' $? "sobrou: $trava"
 
+  # noclobber herdado (`set -C`) nao impede a escrita do PID na marca recem-criada (CodeAnt no sprintx#89)
+  nova_fixture
+  local ambiente_noclobber="$K/ambiente-noclobber-$fx_n"
+  printf 'set -C\n' > "$ambiente_noclobber"
+  BASH_ENV="$ambiente_noclobber" caso_rc 'registro com noclobber herdado adquire a trava' 0 registra especificacao "$SPEC"
+
   nova_fixture
   local fora="$K/fora-$fx_n"
   mkdir -p "$fora"

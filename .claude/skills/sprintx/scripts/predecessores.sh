@@ -2,6 +2,7 @@
 # predecessores.sh — registra e prova documentos consumidos antes da SprintX.
 # Bash 3.2; sem jq, python ou eval.
 set -uo pipefail
+set +C # noclobber herdado (BASH_ENV, SHELLOPTS) quebra as escritas que substituem arquivo (CodeAnt no sprintx#89)
 export GIT_LITERAL_PATHSPECS=1
 
 E_PROVA=3
@@ -275,7 +276,7 @@ adquire_trava_registro() {
       [ -e "$candidata/.dono" ] && exit 2
       rmdir "$candidata" 2>/dev/null; exit 1
     }
-    printf '%s\n' "$$" > "$candidata/.dono" 2>/dev/null && exit 0
+    printf '%s\n' "$$" >| "$candidata/.dono" 2>/dev/null && exit 0
     rm -f "$candidata/.dono" 2>/dev/null
     rmdir "$candidata" 2>/dev/null; exit 3 ) || rc_trava=$?
   [ "$rc_trava" != 0 ] || LOCK_DIR="$candidata"

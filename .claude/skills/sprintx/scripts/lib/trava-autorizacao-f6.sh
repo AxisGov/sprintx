@@ -131,7 +131,7 @@ adquire_trava_autorizacao_f6() {
       [ -e "$caminho/.dono" ] && exit 1
       rmdir "$caminho" 2>/dev/null; exit 1
     }
-    printf '%s\n' "$$" > "$caminho/.dono" 2>/dev/null && exit 0
+    printf '%s\n' "$$" >| "$caminho/.dono" 2>/dev/null && exit 0
     rm -f "$caminho/.dono" 2>/dev/null
     rmdir "$caminho" 2>/dev/null; exit 1 ) || mkdir_rc=$?
   if [ "$mkdir_rc" -ne 0 ]; then
