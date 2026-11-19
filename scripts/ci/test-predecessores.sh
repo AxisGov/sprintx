@@ -155,6 +155,25 @@ grupo_registro() {
   grep -qF "$SPEC" "$MANIFESTO" && grep -qF 'especificacao' "$MANIFESTO" && grep -qF 'superpowers' "$MANIFESTO"
   afirma 'prosa repete caminho origem e papel' $? 'prosa incompleta'
 
+  # TERM no meio do registro sai 143, nunca 0: o $? do comando interrompido nao vira o rc
+  # (CodeAnt no conselhos-municipais#371, DS-235). O shim manda o sinal durante o `git diff --quiet`.
+  nova_fixture
+  local shim="$K/shim-term" pidf="$K/pid-term" rc_t git_real
+  git_real="$(command -v git)"; mkdir -p "$shim"; : > "$K/arma-term"
+  cat > "$shim/git" <<EOF
+#!/usr/bin/env bash
+case " \$* " in *" diff --quiet "*)
+  if [ -f "$K/arma-term" ]; then rm -f "$K/arma-term"; kill -TERM "\$(cat "$pidf")"; fi ;;
+esac
+exec "$git_real" "\$@"
+EOF
+  chmod +x "$shim/git"
+  (cd "$FX" && PATH="$shim:$PATH" bash -c 'printf "%s\n" "$$" > "$1"; shift; exec bash "$@"' _ "$pidf" \
+    "$S/predecessores.sh" --registrar ft-pre --origem superpowers --papel especificacao --caminho "$SPEC") >/dev/null 2>&1
+  rc_t=$?
+  [ ! -e "$K/arma-term" ] && [ "$rc_t" = 143 ] && [ ! -e "$MANIFESTO" ]
+  afirma 'TERM durante o registro sai 143, sem manifesto' $? "rc=$rc_t, sinal enviado: $([ -e "$K/arma-term" ] && echo nao || echo sim)"
+
   nova_fixture
   caso_rc 'recusa SHA informado pelo chamador' 64 pred --registrar ft-pre --origem superpowers \
     --papel especificacao --caminho "$SPEC" --commit-sha "$FX_SPEC_COMMIT"

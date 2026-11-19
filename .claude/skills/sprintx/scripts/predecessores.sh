@@ -280,7 +280,7 @@ adquire_trava_registro() {
     rm -f "$candidata/.dono" 2>/dev/null
     rmdir "$candidata" 2>/dev/null; exit 3 ) || rc_trava=$?
   [ "$rc_trava" != 0 ] || LOCK_DIR="$candidata"
-  trap limpa HUP INT TERM
+  trap 'limpa 129' HUP; trap 'limpa 130' INT; trap 'limpa 143' TERM
   case "$sinal" in HUP) exit 129 ;; INT) exit 130 ;; TERM) exit 143 ;; esac
   # 3: a marca e nossa, mas o PID nao se escreveu; marca e pasta ja sairam (DS-231)
   [ "$rc_trava" != 3 ] || falha "$E_CONTRATO" 'nao consegui registrar o dono da trava de registro'
@@ -464,15 +464,18 @@ MANIFESTO_REL="docs/sprintx/features/$SLUG/00-PREDECESSORES.md"
 MANIFESTO="$RAIZ/$MANIFESTO_REL"
 PLANEJAMENTO_REL="docs/sprintx/features/$SLUG/00-PLANEJAMENTO.md"
 TMP_BASE="$(mktemp -d)" || falha "$E_CONTRATO" 'nao consegui criar temporario de leitura'
+# limpa [rc] — no sinal, o rc vem do trap (129/130/143): o $? do comando interrompido podia
+# ser 0 e o registro sairia como sucesso sem gravar o manifesto (CodeAnt no conselhos#371, DS-235)
 limpa() {
   local rc=$?
+  [ -z "${1:-}" ] || rc="$1"
   trap - EXIT HUP INT TERM
   [ -z "$TMP_ATOMICO" ] || rm -f "$TMP_ATOMICO"
   [ -z "$LOCK_DIR" ] || { rm -f -- "$LOCK_DIR/.dono"; rmdir "$LOCK_DIR" 2>/dev/null; } || true
   rm -rf "$TMP_BASE"
   exit "$rc"
 }
-trap limpa EXIT HUP INT TERM
+trap limpa EXIT; trap 'limpa 129' HUP; trap 'limpa 130' INT; trap 'limpa 143' TERM
 
 case "$CMD" in
   --registrar) cmd_registrar "$@" ;;
