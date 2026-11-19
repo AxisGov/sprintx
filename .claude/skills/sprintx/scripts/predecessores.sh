@@ -10,7 +10,10 @@ E_CONTRATO=4
 E_USO=64
 TMP_ATOMICO=""
 LOCK_DIR=""
-trap '[ -z "$TMP_ATOMICO" ] || rm -f "$TMP_ATOMICO"' EXIT HUP INT TERM
+# o sinal sai com o codigo dele, e o EXIT limpa: so limpar e voltar deixava o registro seguir
+# ate o sucesso (CodeAnt no sprintx#93, DS-235)
+trap '[ -z "$TMP_ATOMICO" ] || rm -f "$TMP_ATOMICO"' EXIT
+trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM
 
 falha() { local rc="$1"; shift; printf 'predecessores: %s\n' "$*" >&2; exit "$rc"; }
 
@@ -392,7 +395,8 @@ grava_manifesto_atomico() { # <tsv> <criado_em>
   esperado="$RAIZ_FISICA/docs/sprintx/features/$SLUG"
   (
     local tmp=''
-    trap 'rc=$?; [ -z "$tmp" ] || rm -f -- "$tmp"; exit "$rc"' EXIT HUP INT TERM
+    trap '[ -z "$tmp" ] || rm -f -- "$tmp"' EXIT
+    trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM
     cd -P "$dir" || falha "$E_CONTRATO" 'diretorio do manifesto inacessivel'
     [ "$(pwd -P)" = "$esperado" ] || falha "$E_CONTRATO" 'diretorio do manifesto mudou durante a gravacao'
     tmp="$(mktemp '.00-PREDECESSORES.md.tmp.XXXXXX')" || falha "$E_CONTRATO" 'nao consegui criar temporario'
