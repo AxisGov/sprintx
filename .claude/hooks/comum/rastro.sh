@@ -80,7 +80,8 @@ rastro_caminho_em() {
 # comando cortaria a quebra de linha final do nome (CodeAnt no login#100)
 _rastro_fisico() {
   local _p
-  _p="$(cd -P -- "$1" 2>/dev/null && pwd -P && printf x)" || return 1
+  # sem CDPATH: com a pasta relativa, o `cd` iria a outra pasta e imprimiria o caminho dela (DS-235)
+  _p="$(CDPATH='' cd -P -- "$1" 2>/dev/null && pwd -P && printf x)" || return 1
   _p="${_p%x}"; _p="${_p%$'\n'}"
   printf -v "$2" '%s' "$_p"
 }

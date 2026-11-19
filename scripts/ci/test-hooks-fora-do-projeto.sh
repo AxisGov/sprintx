@@ -87,6 +87,11 @@ if mkdir -p "$R/src/x$nl" 2>/dev/null; then
   ! rastro_fora_do_projeto "$R" "$R/src/x$nl/c.ts" && [ "$RASTRO_REL" = "src/x$nl/c.ts" ]
   afirma 'pasta com quebra de linha no fim do nome: o relativo nao perde a quebra' $?
 fi
+# raiz relativa com CDPATH que casa com ela: o `cd` iria para a pasta do CDPATH e imprimiria o
+# caminho dela, e o arquivo do projeto pareceria de fora (CodeAnt no conselhos-municipais#371, DS-235)
+mkdir -p "$aux/cdp/proj"
+( cd "$aux" && CDPATH="$aux/cdp" && ! rastro_fora_do_projeto proj "$R/src/a.ts" && [ "$RASTRO_REL" = src/a.ts ] )
+afirma 'raiz relativa com CDPATH que casa: o arquivo continua do projeto (src/a.ts)' $?
 
 echo
 echo "  $ok ok, $falhou falhas"

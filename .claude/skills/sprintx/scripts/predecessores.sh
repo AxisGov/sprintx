@@ -10,7 +10,10 @@ E_CONTRATO=4
 E_USO=64
 TMP_ATOMICO=""
 LOCK_DIR=""
-trap '[ -z "$TMP_ATOMICO" ] || rm -f "$TMP_ATOMICO"' EXIT HUP INT TERM
+# o sinal sai com o codigo dele, e o EXIT limpa: so limpar e voltar deixava o registro seguir
+# ate o sucesso (CodeAnt no sprintx#93, DS-235)
+trap '[ -z "$TMP_ATOMICO" ] || rm -f "$TMP_ATOMICO"' EXIT
+trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM
 
 falha() { local rc="$1"; shift; printf 'predecessores: %s\n' "$*" >&2; exit "$rc"; }
 
@@ -280,7 +283,7 @@ adquire_trava_registro() {
     rm -f "$candidata/.dono" 2>/dev/null
     rmdir "$candidata" 2>/dev/null; exit 3 ) || rc_trava=$?
   [ "$rc_trava" != 0 ] || LOCK_DIR="$candidata"
-  trap limpa HUP INT TERM
+  trap 'limpa 129' HUP; trap 'limpa 130' INT; trap 'limpa 143' TERM
   case "$sinal" in HUP) exit 129 ;; INT) exit 130 ;; TERM) exit 143 ;; esac
   # 3: a marca e nossa, mas o PID nao se escreveu; marca e pasta ja sairam (DS-231)
   [ "$rc_trava" != 3 ] || falha "$E_CONTRATO" 'nao consegui registrar o dono da trava de registro'
@@ -392,7 +395,8 @@ grava_manifesto_atomico() { # <tsv> <criado_em>
   esperado="$RAIZ_FISICA/docs/sprintx/features/$SLUG"
   (
     local tmp=''
-    trap 'rc=$?; [ -z "$tmp" ] || rm -f -- "$tmp"; exit "$rc"' EXIT HUP INT TERM
+    trap '[ -z "$tmp" ] || rm -f -- "$tmp"' EXIT
+    trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM
     cd -P "$dir" || falha "$E_CONTRATO" 'diretorio do manifesto inacessivel'
     [ "$(pwd -P)" = "$esperado" ] || falha "$E_CONTRATO" 'diretorio do manifesto mudou durante a gravacao'
     tmp="$(mktemp '.00-PREDECESSORES.md.tmp.XXXXXX')" || falha "$E_CONTRATO" 'nao consegui criar temporario'
@@ -464,15 +468,18 @@ MANIFESTO_REL="docs/sprintx/features/$SLUG/00-PREDECESSORES.md"
 MANIFESTO="$RAIZ/$MANIFESTO_REL"
 PLANEJAMENTO_REL="docs/sprintx/features/$SLUG/00-PLANEJAMENTO.md"
 TMP_BASE="$(mktemp -d)" || falha "$E_CONTRATO" 'nao consegui criar temporario de leitura'
+# limpa [rc] — no sinal, o rc vem do trap (129/130/143): o $? do comando interrompido podia
+# ser 0 e o registro sairia como sucesso sem gravar o manifesto (CodeAnt no conselhos#371, DS-235)
 limpa() {
   local rc=$?
+  [ -z "${1:-}" ] || rc="$1"
   trap - EXIT HUP INT TERM
   [ -z "$TMP_ATOMICO" ] || rm -f "$TMP_ATOMICO"
   [ -z "$LOCK_DIR" ] || { rm -f -- "$LOCK_DIR/.dono"; rmdir "$LOCK_DIR" 2>/dev/null; } || true
   rm -rf "$TMP_BASE"
   exit "$rc"
 }
-trap limpa EXIT HUP INT TERM
+trap limpa EXIT; trap 'limpa 129' HUP; trap 'limpa 130' INT; trap 'limpa 143' TERM
 
 case "$CMD" in
   --registrar) cmd_registrar "$@" ;;

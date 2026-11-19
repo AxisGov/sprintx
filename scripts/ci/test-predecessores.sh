@@ -133,6 +133,25 @@ manifesto_valido() {
   } > "$MANIFESTO"
 }
 
+term_no_registro() { # term_no_registro <trecho dos args do git> <descricao>
+  nova_fixture
+  local shim="$K/shim-term" pidf="$K/pid-term" rc_t git_real
+  git_real="$(command -v git)"; rm -rf "$shim"; mkdir -p "$shim"; : > "$K/arma-term"
+  cat > "$shim/git" <<EOF
+#!/usr/bin/env bash
+case " \$* " in *"$1"*)
+  if [ -f "$K/arma-term" ]; then rm -f "$K/arma-term"; kill -TERM "\$(cat "$pidf")"; fi ;;
+esac
+exec "$git_real" "\$@"
+EOF
+  chmod +x "$shim/git"
+  (cd "$FX" && PATH="$shim:$PATH" bash -c 'printf "%s\n" "$$" > "$1"; shift; exec bash "$@"' _ "$pidf" \
+    "$S/predecessores.sh" --registrar ft-pre --origem superpowers --papel especificacao --caminho "$SPEC") >/dev/null 2>&1
+  rc_t=$?
+  [ ! -e "$K/arma-term" ] && [ "$rc_t" = 143 ] && [ ! -e "$MANIFESTO" ]
+  afirma "$2" $? "rc=$rc_t, sinal enviado: $([ -e "$K/arma-term" ] && echo nao || echo sim)"
+}
+
 grupo_registro() {
   echo '== registro =='
   nova_fixture
@@ -154,6 +173,12 @@ grupo_registro() {
   [ "$before" = "$after" ]; afirma 'idempotencia preserva bytes' $? "$before != $after"
   grep -qF "$SPEC" "$MANIFESTO" && grep -qF 'especificacao' "$MANIFESTO" && grep -qF 'superpowers' "$MANIFESTO"
   afirma 'prosa repete caminho origem e papel' $? 'prosa incompleta'
+
+  # TERM no meio do registro sai 143, nunca 0 (CodeAnt no conselhos-municipais#371 e no
+  # sprintx#93, DS-235): durante o `git diff --quiet`, com o trap do `limpa` instalado, e no
+  # `rev-parse --show-toplevel`, antes dele, quando so o trap inicial estava armado
+  term_no_registro ' diff --quiet ' 'TERM durante o registro sai 143, sem manifesto'
+  term_no_registro ' --show-toplevel ' 'TERM antes do trap do limpa sai 143, sem manifesto'
 
   nova_fixture
   caso_rc 'recusa SHA informado pelo chamador' 64 pred --registrar ft-pre --origem superpowers \
