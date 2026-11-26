@@ -297,7 +297,7 @@ fi
 # Daqui para baixo a edicao nao e da task corrente: o modo decide.
 rastro_modo_em MODO "$RAIZ" escopo-da-task metodo
 # Desligado nao roda e nao registra: quem desligou nao quer nem o aviso —
-# nem a excecao de arquivo_de_task_irma, nem o fail-closed de sessao ambigua.
+# nem a excecao de arquivo_de_task_irma, nem o aviso ou bloqueio de sessao ambigua.
 [ "$MODO" = "desligado" ] && exit 0
 
 # O trabalho da sessao ja esta resolvido: rastro_grava_trabalho nao varre de novo.
@@ -320,17 +320,26 @@ fi
 #
 # A sessao precisa resolver para EXATAMENTE uma task aberta. Zero (o rastro
 # nao reconhece esta sessao como dona de nada) ou duas-ou-mais (estado
-# inconsistente) sao ambiguos — aqui a falha NAO e aberta: para por
-# contrato, nunca escolhe a primeira task em_andamento que encontrar.
+# inconsistente) sao ambiguos: a maquina nunca escolhe a primeira task
+# em_andamento que encontrar. O modo decide o desfecho (DS-236): em `bloqueio`
+# para por contrato; em `aviso` registra regra_violada, avisa e deixa passar
+# sem conferir contra task nenhuma. Uma sessao runx (as linhas dela nao
+# reivindicam task da SprintX, DS-196) numa arvore com feature aberta caia
+# aqui e ficava com toda escrita barrada mesmo em aviso.
 if [ "$N_MINHAS" -ne 1 ]; then
   # A mensagem aponta o escritor publico e nao ecoa a sessao: a identidade e derivada pelo
   # mecanismo, nunca copiada daqui para uma linha montada a mao (DS-159).
-  MSG_AMB="sprintx/escopo-da-task: sessao_ambigua — esta sessao nao foi associada de forma inequivoca a uma task em andamento pelo rastro ($N_MINHAS reivindicacao(oes) ativa(s) desta sessao em $RAIZ/docs/eventos/). Por contrato a edicao fica bloqueada; a maquina nunca escolhe a primeira task em_andamento que encontra. Reivindique a task pelo escritor do rastro antes de editar: bash <raiz-da-skill>/scripts/rastro.sh task-iniciada <slug> <T-NN.MM> (references/08-rastro.md). Nao grave o evento a mao."
+  MSG_AMB_CAUSA="sprintx/escopo-da-task: sessao_ambigua — esta sessao nao foi associada de forma inequivoca a uma task em andamento pelo rastro ($N_MINHAS reivindicacao(oes) ativa(s) desta sessao em $RAIZ/docs/eventos/)."
+  MSG_AMB_COMO="Reivindique a task pelo escritor do rastro antes de editar: bash <raiz-da-skill>/scripts/rastro.sh task-iniciada <slug> <T-NN.MM> (references/08-rastro.md). Nao grave o evento a mao."
   EXTRAS_AMB="\"condicao\":\"sessao_ambigua\",\"tasks_candidatas\":$N_MINHAS"
   # Sem trabalho corrente inequivoco nao ha rastro de trabalho onde gravar: a
   # forma curta manda para `sem-trabalho`, que e exatamente o que aconteceu.
-  rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "sessao_ambigua" "[]" "$EXTRAS_AMB"
-  rastro_bloqueia "$MSG_AMB"
+  if [ "$MODO" = "bloqueio" ]; then
+    rastro_grava "$RAIZ" acao_bloqueada hook bloqueado "sessao_ambigua" "[]" "$EXTRAS_AMB"
+    rastro_bloqueia "$MSG_AMB_CAUSA Por contrato a edicao fica bloqueada; a maquina nunca escolhe a primeira task em_andamento que encontra. $MSG_AMB_COMO"
+  fi
+  rastro_grava "$RAIZ" regra_violada hook aviso "sessao_ambigua" "[]" "$EXTRAS_AMB"
+  rastro_aviso_ao_modelo PreToolUse "$MSG_AMB_CAUSA A edicao de $REL segue (modo aviso), mas NAO foi conferida contra task nenhuma. Se esta sessao executa uma task da SprintX: $MSG_AMB_COMO"
 fi
 
 rastro_json_escape_em TRABALHO_E "$TRABALHO"

@@ -588,6 +588,7 @@ ai_h() { # ai_h <arv> <dir> <sessao> <arquivo-relativo> — o escopo-da-task da 
 }
 ai_ok() { [ "$AI_RC" -eq 0 ] && [ -z "$AI_OUT" ]; }
 ai_barra() { [ "$AI_RC" -eq 2 ] && printf '%s' "$AI_OUT" | grep -qF "$1"; }
+ai_avisa() { [ "$AI_RC" -eq 0 ] && printf '%s' "$AI_OUT" | grep -qF "$1"; }  # passa com aviso (DS-236)
 ai_linha() { # ai_linha <arquivo> <evento> <task> — a ultima linha daquele evento, vazia se nao ha
   [ -f "$1" ] || return 0
   grep -F "\"evento\":\"$2\"" "$1" 2>/dev/null | grep -F "\"task\":\"$3\"" | tail -1
@@ -658,11 +659,11 @@ ai_dono() { # A: outra sessao nao fecha nem relibera a reivindicacao; o dono fec
   [ -z "$(ai_linha "$AI_FX/docs/eventos/fx.jsonl" task_bloqueada T-01.01)" ] || return 1
   # a reivindicacao de s1 continua ATIVA, e a task continua dela: nao foi reliberada
   ai_h "$a" "$AI_FX" s1 src/a.ts; ai_ok || return 1
-  ai_h "$a" "$AI_FX" s2 src/a.ts; ai_barra sessao_ambigua || return 1
+  ai_h "$a" "$AI_FX" s2 src/a.ts; ai_avisa sessao_ambigua || return 1
   # e o DONO fecha normalmente (controle: o portao nao quebra o caminho de sempre)
   ai_w "$a" "$AI_FX" s1 task-concluida fx T-01.01 "suite parcial verde" src/a.ts; [ "$AI_RC" -eq 0 ] || return 1
   [ -n "$(ai_linha "$AI_FX/docs/eventos/fx.jsonl" task_concluida T-01.01)" ] || return 1
-  ai_h "$a" "$AI_FX" s1 src/a.ts; ai_barra sessao_ambigua
+  ai_h "$a" "$AI_FX" s1 src/a.ts; ai_avisa sessao_ambigua
 }
 ai_dono_bloqueada() { # B: o dono tambem bloqueia; e depois de fechada qualquer sessao reivindica
   local a="$1"; ai_fx
@@ -679,7 +680,7 @@ ai_legado() { # C: evento legado sem `sessao` nao reivindica (DS-150) e continua
   local a="$1"; ai_fx; mkdir -p "$AI_FX/docs/eventos"
   printf '%s\n' "$AI_LEGADO" >> "$AI_FX/docs/eventos/fx.jsonl"
   # nao reivindica: a primeira edicao continua barrada, como sempre
-  ai_h "$a" "$AI_FX" s1 src/a.ts; ai_barra sessao_ambigua || return 1
+  ai_h "$a" "$AI_FX" s1 src/a.ts; ai_avisa sessao_ambigua || return 1
   # e, porque nao reivindica, nao ha dono para proteger: o fechamento compativel segue valendo
   ai_w "$a" "$AI_FX" s1 task-concluida fx T-01.01 "fechamento do legado"; [ "$AI_RC" -eq 0 ] || return 1
   [ -n "$(ai_linha "$AI_FX/docs/eventos/fx.jsonl" task_concluida T-01.01)" ] || return 1
@@ -747,7 +748,7 @@ ai_sem_awk_a_propria_dona() { # nem a dona fecha: o portao nao SABE que ela e a 
   printf '%s' "$AI_OUT" | grep -qF 'prerequisito_ausente' || return 1
   # e nada foi reliberado: a task continua dela
   ai_h "$a" "$AI_FX" s1 src/a.ts; ai_ok || return 1
-  ai_h "$a" "$AI_FX" s2 src/a.ts; ai_barra sessao_ambigua
+  ai_h "$a" "$AI_FX" s2 src/a.ts; ai_avisa sessao_ambigua
 }
 ai_awk_com_erro() { # `awk` que existe e falha e inconclusivo, nos dois fechamentos
   local a="$1"; ai_fx

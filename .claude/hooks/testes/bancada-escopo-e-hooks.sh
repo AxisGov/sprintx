@@ -55,6 +55,8 @@ l_fixture() {
   : > "$C2RASTRO"
   c2_evento task_iniciada T-04.03 "teste@eu"
 }
+# sessao_ambigua so barra em bloqueio (DS-236): l_h, l_i0 e l_i1 provam o fail-closed nesse modo
+l_em_bloqueio() { mkdir -p "$C2/.expx"; echo '{"hooks":{"escopo-da-task":{"modo":"bloqueio"}}}' > "$C2/.expx/hooks.json"; }
 l_a() { l_fixture; c2_hook "$1" "src/ui/cabecalho-topo.tsx" teste@eu; [ $? -eq 0 ]; }
 l_b() {
   l_fixture
@@ -104,6 +106,7 @@ l_g() {
 }
 l_h() {
   l_fixture
+  l_em_bloqueio
   mkdir -p "$C2OC/sprint-02"
   c2_abre 02 "$C2OC/sprint-02/tasks.md"
   c2_tarefa "$C2OC/sprint-02/tasks.md" T-02.09 em_andamento "" "src/outro/coisa.ts"
@@ -113,12 +116,14 @@ l_h() {
 }
 l_i0() {
   l_fixture
+  l_em_bloqueio
   : > "$C2RASTRO"
   c2_hook "$1" "src/ui/cabecalho-topo.tsx" teste@eu
   [ $? -eq 2 ] && ! printf '%s' "$C2_SAIDA" | grep -qF "arquivo_de_task_irma"
 }
 l_i1() {
   l_fixture
+  l_em_bloqueio
   c2_abre 04 "$C2OC/sprint-04/tasks.md"
   c2_tarefa "$C2OC/sprint-04/tasks.md" T-04.03 em_andamento "" "src/ui/cabecalho-topo.tsx"
   c2_tarefa "$C2OC/sprint-04/tasks.md" T-04.05 em_andamento "" "src/menu/outra.ts"
@@ -714,7 +719,7 @@ n_j() { # zero sessao ativa: fail-closed
   n_fx "$NF_DIR/j" alfa-antiga hist
   : > "$NF_DIR/j/docs/eventos/corrente.jsonl"
   n_hook "$NF_DIR/j" "$1" src/novo.ts eu@sessao
-  [ "$N_RC" -eq 2 ] && n_tem sessao_ambigua
+  [ "$N_RC" -eq 0 ] && n_tem sessao_ambigua
 }
 n_k() { # a mesma sessao reivindicando task em DOIS trabalhos: fail-closed
   n_fx "$NF_DIR/k" alfa-antiga hist
@@ -723,7 +728,7 @@ $(n_task T-01.01 em_andamento src/antigo.ts)
 EOF
   n_ev "$NF_DIR/k" alfa-antiga task_iniciada T-01.01 eu@sessao
   n_hook "$NF_DIR/k" "$1" src/novo.ts eu@sessao
-  [ "$N_RC" -eq 2 ] && n_tem sessao_ambigua
+  [ "$N_RC" -eq 0 ] && n_tem sessao_ambigua
 }
 n_l() { # plano do trabalho corrente ausente: fail-closed, sem cair na historica
   n_fx "$NF_DIR/l" alfa-antiga hist

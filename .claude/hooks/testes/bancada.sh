@@ -1715,6 +1715,7 @@ u_h() {
 }
 u_ok() { [ "$U_RC" -eq 0 ] && [ -z "$U_OUT" ]; }           # permitido, em silencio
 u_barra() { [ "$U_RC" -eq 2 ] && printf '%s' "$U_OUT" | grep -qF "$1"; }
+u_avisa() { [ "$U_RC" -eq 0 ] && printf '%s' "$U_OUT" | grep -qF "$1"; }  # passa com aviso (DS-236)
 u_linha() { # u_linha <arquivo> <evento> <task> — a linha do evento (a ultima), vazia se nao ha
   [ -f "$1" ] || return 0
   grep -F "\"evento\":\"$2\"" "$1" | grep -F "\"task\":\"$3\"" | tail -1
@@ -1751,7 +1752,7 @@ u_c() { # C: identidade indisponivel -> o escritor falha e nao grava nada, nem i
     [ -f "$e" ] || continue
     grep -qE '"evento":"task_(iniciada|concluida|bloqueada)"' "$e" && return 1
   done
-  u_h "$a" "$U_FX" s1 src/a.ts; u_barra sessao_ambigua
+  u_h "$a" "$U_FX" s1 src/a.ts; u_avisa sessao_ambigua
 }
 u_d() { # D: caminhos Windows no payload e o escritor chamado de um subdiretorio
   local a="$1" f w; u_fx
@@ -1783,7 +1784,7 @@ u_e() { # E: sessoes diferentes — uma nunca reivindica pela outra
   u_h "$a" "$U_FX" s1 src/a.ts; u_ok || return 1
   u_h "$a" "$U_FX" s2 src/b.ts; u_ok || return 1
   u_h "$a" "$U_FX" s2 src/a.ts; u_barra arquivo_de_task_irma || return 1
-  u_h "$a" "$U_FX" s3 src/a.ts; u_barra sessao_ambigua
+  u_h "$a" "$U_FX" s3 src/a.ts; u_avisa sessao_ambigua
 }
 u_f() { # F: worktrees diferentes — rastro e reivindicacao nao atravessam a arvore
   local a="$1" r wt; U_N=$((U_N + 1)); r="$U_DIR/wt$U_N"; wt="$r--fx"
@@ -1796,14 +1797,14 @@ u_f() { # F: worktrees diferentes — rastro e reivindicacao nao atravessam a ar
   [ -n "$(u_linha "$wt/docs/eventos/fx.jsonl" task_iniciada T-01.01)" ] || return 1
   [ ! -e "$r/docs/eventos" ] || return 1
   u_h "$a" "$wt" s1 src/a.ts; u_ok || return 1
-  u_h "$a" "$r" s1 src/a.ts; u_barra sessao_ambigua || return 1
+  u_h "$a" "$r" s1 src/a.ts; u_avisa sessao_ambigua || return 1
   git -C "$r" worktree remove --force "$wt" >/dev/null 2>&1; return 0
 }
 u_g() { # G: evento legado sem identidade continua sem reivindicar nada (DS-150)
   local a="$1"; u_fx; mkdir -p "$U_FX/docs/eventos"
   printf '%s\n' '{"ts":"2026-09-26T10:23:54Z","expx_eventos":1,"trabalho_id":"fx","ferramenta":"sprintx","origem":"skill","evento":"task_iniciada","fase":"f6","task":"T-01.01","agente":"principal","resultado":"ok","detalhe":"legado","arquivos":[]}' \
     >> "$U_FX/docs/eventos/fx.jsonl"
-  u_h "$a" "$U_FX" s1 src/a.ts; u_barra sessao_ambigua || return 1
+  u_h "$a" "$U_FX" s1 src/a.ts; u_avisa sessao_ambigua || return 1
   u_w "$a" "$U_FX" s1 task-iniciada fx T-01.01; [ "$U_RC" -eq 0 ] || return 1
   u_h "$a" "$U_FX" s1 src/a.ts; u_ok
 }
@@ -1814,12 +1815,12 @@ u_hc() { # H: task_concluida e task_bloqueada pelo escritor fecham a reivindicac
   l="$(u_linha "$U_FX/docs/eventos/fx.jsonl" task_concluida T-01.01)"
   [ "$(u_campo "$l" sessao)" = claude-code@s1 ] || return 1
   printf '%s' "$l" | grep -qF '"arquivos":["src/a.ts"]' || return 1
-  u_h "$a" "$U_FX" s1 src/a.ts; u_barra sessao_ambigua || return 1
+  u_h "$a" "$U_FX" s1 src/a.ts; u_avisa sessao_ambigua || return 1
   u_w "$a" "$U_FX" s1 task-iniciada fx T-01.01; [ "$U_RC" -eq 0 ] || return 1
   u_w "$a" "$U_FX" s1 task-bloqueada fx T-01.01 B-01; [ "$U_RC" -eq 0 ] || return 1
   l="$(u_linha "$U_FX/docs/eventos/fx.jsonl" task_bloqueada T-01.01)"
   [ "$(u_campo "$l" sessao)" = claude-code@s1 ] && printf '%s' "$l" | grep -qF '"resultado":"bloqueado"' || return 1
-  u_h "$a" "$U_FX" s1 src/a.ts; u_barra sessao_ambigua
+  u_h "$a" "$U_FX" s1 src/a.ts; u_avisa sessao_ambigua
 }
 u_i() { # I: contexto que nao fecha nao grava no trabalho pedido
   local a="$1"; u_fx
@@ -1839,7 +1840,7 @@ u_j() { # J: sessao e harness nunca vem de quem chama
   u_w "$a" "$U_FX" s1 task-iniciada fx T-01.01 'x","sessao":"claude-code@forjada","harness":"forjado'; [ "$U_RC" -eq 0 ] || return 1
   l="$(u_linha "$U_FX/docs/eventos/fx.jsonl" task_iniciada T-01.01)"
   [ "$(u_campo "$l" sessao)" = claude-code@s1 ] && [ "$(u_campo "$l" harness)" = claude-code ] || return 1
-  u_h "$a" "$U_FX" forjada src/a.ts; u_barra sessao_ambigua || return 1
+  u_h "$a" "$U_FX" forjada src/a.ts; u_avisa sessao_ambigua || return 1
   u_h "$a" "$U_FX" s1 src/a.ts; u_ok
 }
 u_k() { # K: o evento vai para o rastro do trabalho DADO, mesmo com a task homonima em outro

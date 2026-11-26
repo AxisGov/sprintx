@@ -47,19 +47,27 @@ mv "$AQT" "$AQ/fora.md"; ln -s "$AQ/fora.md" "$AQT"
 aq_hook infra/a.sh; [ "$AQ_RC" = 0 ] && [ -z "$AQ_SAIDA" ]; afirma "aq5-plano-da-ocorrencia-por-link-nao-e-da-sprintx" $? "$(aq_mostra)"
 rm -f "$AQT"; mv "$AQ/fora.md" "$AQT"
 
-# -- a feature aberta continua protegida
+# -- a feature aberta continua protegida: sem reivindicacao, aviso no modo padrao e bloqueio
+# quando promovido (DS-236)
 aq_limpa; aq_feature "$AQF" fq
 aq_hook infra/a.sh
+[ "$AQ_RC" = 0 ] && case "$AQ_SAIDA" in *sessao_ambigua*) true ;; *) false ;; esac \
+  && grep -F '"evento":"regra_violada"' "$AQE/sem-trabalho.jsonl" 2>/dev/null | grep -F '"condicao":"sessao_ambigua"' >/dev/null
+afirma "aq6-feature-aberta-e-sessao-sem-reivindicacao-avisa" $? "$(aq_mostra)"
+aq_modo bloqueio
+aq_hook infra/a.sh
 [ "$AQ_RC" = 2 ] && case "$AQ_SAIDA" in *sessao_ambigua*) true ;; *) false ;; esac
-afirma "aq6-feature-aberta-e-sessao-sem-reivindicacao" $? "$(aq_mostra)"
+afirma "aq6b-sessao-sem-reivindicacao-em-bloqueio-barra" $? "$(aq_mostra)"
+rm -f "$AQ/.expx/hooks.json"
 printf '{"ts":"2026-11-01T00:00:00Z","expx_eventos":1,"trabalho_id":"fq","ferramenta":"sprintx","origem":"skill","evento":"task_iniciada","fase":"f6","task":"T-01.01","agente":"principal","sessao":"eu@aq"}\n' > "$AQE/fq.jsonl"
 aq_hook src/f.ts; [ "$AQ_RC" = 0 ]; afirma "aq7-a-task-da-feature-segue-editando" $? "$(aq_mostra)"
 aq_modo bloqueio
 aq_hook infra/a.sh; [ "$AQ_RC" = 2 ]; afirma "aq8-feature-nao-edita-arquivo-da-ocorrencia" $? "$(aq_mostra)"
 aq_hook docs/manutencao/OC-9999-sonda/sprint-01/tasks.md; [ "$AQ_RC" = 2 ]; afirma "aq9-feature-nao-edita-plano-da-ocorrencia" $? "$(aq_mostra)"
 
-# -- a linha da runx nao e reivindicacao, na forma que ela grava e na compacta
-aq_limpa; aq_feature "$AQF" fq
+# -- a linha da runx nao e reivindicacao, na forma que ela grava e na compacta (em bloqueio,
+# onde a sessao sem reivindicacao barra: DS-236)
+aq_limpa; aq_feature "$AQF" fq; aq_modo bloqueio
 printf '{"ts": "2026-11-01T00:00:00Z", "expx_eventos": 1, "trabalho_id": "OC-9999", "ferramenta": "runx", "origem": "hook", "evento": "task_iniciada", "fase": "e3", "task": "T-01.01", "agente": null, "sessao": "eu@aq"}\n' > "$AQE/OC-9999.jsonl"
 aq_hook infra/a.sh
 [ "$AQ_RC" = 2 ] && case "$AQ_SAIDA" in *sessao_ambigua*) true ;; *) false ;; esac
@@ -93,13 +101,13 @@ case "$AQ_LEITORES" in *"tam=$AQ_BYTES"*) true ;; *) false ;; esac
 afirma "aq19-rotacao-conta-os-bytes-da-linha-da-runx" $? "$AQ_LEITORES bytes=$AQ_BYTES"
 
 # -- o recorte e estreito: slug de feature que parece ocorrencia, e o layout legado
-aq_limpa
+aq_limpa; aq_modo bloqueio
 AQS="$AQ/docs/sprintx/features/OC-feature"; aq_feature "$AQS" OC-feature
 printf -- '---\nexpx_schema: 1\nexpx_tool: sprintx\nkind: orquestrador\ntrabalho_id: OC-feature\n---\n' > "$AQS/ORQUESTRADOR.md"
 aq_hook infra/a.sh; [ "$AQ_RC" = 2 ]; afirma "aq13-feature-canonica-com-slug-oc" $? "$(aq_mostra)"
 printf '{"ts":"2026-11-01T00:00:00Z","expx_eventos":1,"trabalho_id":"OC-feature","ferramenta":"sprintx","origem":"skill","evento":"task_iniciada","fase":"f6","task":"T-01.01","agente":"principal","sessao":"eu@aq"}\n' > "$AQE/OC-feature.jsonl"
 aq_hook src/f.ts; [ "$AQ_RC" = 0 ]; afirma "aq14-reivindicacao-da-sprintx-com-slug-oc-vale" $? "$(aq_mostra)"
-rm -rf "$AQS"; aq_limpa
+rm -rf "$AQS"; aq_limpa; aq_modo bloqueio
 aq_feature "$AQ/docs/manutencao" manutencao
 aq_hook infra/a.sh; [ "$AQ_RC" = 2 ]; afirma "aq15-feature-legada-com-slug-manutencao" $? "$(aq_mostra)"
 
