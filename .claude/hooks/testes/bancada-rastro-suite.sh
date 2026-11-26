@@ -784,7 +784,7 @@ ai_ausencia_conclusiva() { # ausencia REAL continua conclusiva e nao vira erro
 }
 # O contrato publico: a tabela de respostas de 08-rastro.md e o passo 1 da 06-execucao.md.
 AI_LIT_C5='nos três `task_*`, **falha fechado como o código `3`**'
-AI_LIT_C5_PORQUE='sem `task_iniciada` não há reivindicação, e o `escopo-da-task` barra a primeira edição da task'
+AI_LIT_C5_PORQUE='sem `task_iniciada` não há reivindicação, e o `escopo-da-task` não confere a edição contra a task'
 AI_LIT_C5_INFO='Nos demais eventos (`fase-*`, `veredito-emitido`), que nenhum hook lê, siga sem o evento'
 AI_LIT_C4='a task está reivindicada por outra sessão'
 AI_LIT_EXEC='nada foi gravado e a task **não** está reivindicada'
