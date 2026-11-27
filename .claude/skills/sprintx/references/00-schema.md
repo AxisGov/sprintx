@@ -195,8 +195,8 @@ corresponde a `[]` no YAML, com `paralelizavel: false`.
 
 O arquivo mais importante. Cada task do plano vira um item da lista `tasks:`, com
 EXATAMENTE os mesmos campos do Contrato da Task do `SKILL.md` — nenhum a mais, nenhum a
-menos — acrescidos apenas dos três campos de execução (`concluida_em`, `suite`) e do
-vínculo com a fase (`fase`).
+menos — acrescidos apenas dos três campos de execução (`concluida_em`, `suite`,
+`suite_falhas`) e do vínculo com a fase (`fase`).
 
 **Campos de extensão de task.** A única exceção ao "nenhum a mais" são os campos de task
 que uma camada **instalada e ativa** declara no próprio schema — hoje, `design_refs` e
@@ -230,6 +230,7 @@ tasks:
     paralelizavel: true
     concluida_em: 2026-08-29
     suite: verde
+    suite_falhas: []
 ---
 ```
 
@@ -240,8 +241,11 @@ Regras duras deste kind:
   preenchidas — inclusive na F3, quando a task ainda está `pendente`.
 - `arquivos` mantém a forma do contrato do `SKILL.md`: um mapa com `cria` e `altera`,
   cada um uma lista de caminhos relativos à raiz do repositório (`[]` quando vazio).
+- A task que não muda arquivo é válida e declara `cria: []` e `altera: []`, as duas explícitas.
+  Omitir uma das chaves continua inválido. Ela não gera commit no E1 da `mergex` (DS-238).
 - `concluida_em` é `null` enquanto a task não estiver `concluida`.
 - `suite` é `nao_executada` até rodar algum teste para aquela task; depois `parcial`, `verde` ou `vermelha`. `parcial` é o estado normal de uma task concluída na F6: rodou o subconjunto de testes afetado por ela e passou, e a suíte inteira é cobrada uma vez, no fim da sprint. `verde` significa suíte inteira executada e sem falha — quem a rodar na task grava `verde`, que nunca é violação.
+- `suite_falhas` é a lista dos arquivos de teste que falharam, em fluxo `[a, b]` ou em bloco `- a`; é `[]` quando `suite` não é `vermelha`. Task `concluida` com `suite: vermelha` só vale quando a lista não está vazia, todo caminho dela está em `.expx/falhas-de-ambiente.tsv` para a plataforma da máquina e nenhum está no diff do trabalho (`references/06-execucao.md`, passo 3). Timeout por máquina carregada não entra no TSV: a reexecução isolada verde é gravada como `parcial`.
 - Os campos do YAML são a mesma verdade da prosa do bloco correspondente. Os dois andam juntos.
 
 ### `sprint-NN/tasks.md` no formato condensado → `kind: plano`
@@ -299,6 +303,7 @@ tasks:
     paralelizavel: false
     concluida_em: 2026-08-29
     suite: parcial
+    suite_falhas: []
 ---
 ```
 

@@ -80,7 +80,7 @@ Se o usuário pedir uma fase adiantada, explique o que falta e execute a fase pe
 | `id` | T-NN.MM |
 | `titulo` | título curto |
 | `objetivo` | uma frase |
-| `arquivos` | criados e alterados |
+| `arquivos` | criados e alterados; a task que não muda nada declara `cria: []` e `altera: []` |
 | `teste_integracao` | o que valida, contra o quê |
 | `teste_funcional` | o que valida, com qual entrada e saída |
 | `criterio_aceite` | verificável, binário, sem adjetivo |
@@ -117,7 +117,7 @@ A integração é condicional: sem a `mergex` instalada, a F6 roda exatamente co
 1. Todo o esforço vai para o planejamento; pergunta feita durante a execução é sempre falha da fase de planejamento.
 2. As fases são estritamente sequenciais; nunca pule fase nem execute fora de ordem.
 3. TDD é obrigatório: o teste é escrito antes da implementação.
-4. Task só é marcada como concluída quando o teste de integração E o teste funcional passam; não existe "concluído com ressalva". Na task roda o subconjunto afetado (`suite: parcial`); a suíte inteira é cobrada uma vez, ao fechar a sprint.
+4. Task só é marcada como concluída quando o teste de integração E o teste funcional passam; não existe "concluído com ressalva". Na task roda o subconjunto afetado (`suite: parcial`); a suíte inteira é cobrada uma vez, ao fechar a sprint. Suíte `vermelha` só fecha quando todas as falhas são de ambiente: `suite_falhas` toda em `.expx/falhas-de-ambiente.tsv` e fora do diff, com os dois testes da task verdes (DS-238).
 5. Toda transição (task → task, task → fase, fase → sprint) tem critério de aceite verificável, binário e sem adjetivo; critério não atendido = não avança.
 6. O paralelismo é declarado no plano para cada task e cada fase; a IA em execução nunca decide isso sozinha.
 7. Nenhuma task pode depender de decisão humana em tempo de execução.
@@ -206,7 +206,7 @@ O modo de cada hook vive em `.expx/hooks.json`, e é lá que se promove. O id é
 | Hook | Evento | Modo inicial | O que faz |
 |---|---|---|---|
 | `escopo-da-task` | `PreToolUse` (escrita) | `aviso` | Resolve pelo rastro o par TRABALHO + TASK da SESSAO corrente (nunca "a primeira `em_andamento`", nunca o id da task sozinho: `T-01.01` se repete entre features) e compara o arquivo editado com o campo `arquivos` dessa task, lendo so o plano DAQUELE trabalho — plano de outra feature nao participa, nem como fallback (DS-153). Fora da task corrente mas dentro de outra task do MESMO trabalho — `arquivo_de_task_irma` —, bloqueia sempre, mesmo em modo `aviso` (DS-149); fora de toda task do trabalho corrente, so avisa. Sessao sem reivindicacao — `sessao_ambigua` — avisa em `aviso` e bloqueia em `bloqueio` (DS-236). Contexto que nao fecha — `contexto_de_trabalho_divergente`, `plano_corrente_ausente`, `plano_corrente_ambiguo`, `plano_corrente_ilegivel`, `task_fora_do_plano_corrente` — bloqueia por contrato, sem abrir B-NN (DS-154) |
-| `task-so-fecha-verde` | `PreToolUse` (`tasks.md`) | `aviso` | Barra `status: concluida` quando `suite` não é `verde` nem `parcial`, ou falta `teste_integracao`/`teste_funcional` |
+| `task-so-fecha-verde` | `PreToolUse` (`tasks.md`) | `aviso` | Barra `status: concluida` quando `suite` não é `verde` nem `parcial` (salvo `vermelha` com `suite_falhas` toda em `.expx/falhas-de-ambiente.tsv` para a plataforma), ou falta `teste_integracao`/`teste_funcional` |
 | `sem-placeholder-no-plano` | `PostToolUse` (plano) | `aviso` | Acha marcador `{{...}}` de template não substituído |
 | `tdd-teste-antes` | `PostToolUse` (escrita) | `aviso` | Avisa quando a implementação nasce antes do teste. **Inativo sem `CONVENCOES.md`** — não chuta onde o teste deveria estar |
 | `segredo` | `PreToolUse` (escrita) | `bloqueio` | Barra segredo com forma reconhecível indo para arquivo versionado |
