@@ -113,6 +113,25 @@ sa_roda "$SA_DUAS" > "$SA_T/r"
 [ "$(cat "$SA_T/r")" = 0/avisa ] && case "$SA_SAIDA" in *"T-01.02: suite=vermelha sem suite_falhas"*) true ;; *) false ;; esac
 afirma "ap-lista-nao-vaza-para-a-task-seguinte" $? "real $(cat "$SA_T/r")"
 
+# 12. Item entre aspas na lista de fluxo (DS-239): a virgula e o `#` de dentro das aspas
+#     ficam no caminho e as aspas saem; sem aspas, a virgula continua separando; aspa sem
+#     fechamento invalida a lista inteira, e a vermelha nao fecha.
+sa_fx; sa_lista "${SA_LISTA_LINUX}tests/a,b.test.ts${T2}linux${T2}locale${T2}2026-11-27\ntests/c #1.test.ts${T2}linux${T2}locale${T2}2026-11-27\n"
+sa_caso virgula-entre-aspas-duplas-no-fluxo-fecha 0/silencio "$(sa_task vermelha '    suite_falhas: [tests/a.test.ts, "tests/a,b.test.ts"]\n')"
+sa_caso virgula-entre-aspas-simples-no-fluxo-fecha 0/silencio "$(sa_task vermelha "    suite_falhas: ['tests/a,b.test.ts', tests/b c.test.ts]  # nota\n")"
+sa_caso cerquilha-entre-aspas-no-fluxo-fecha 0/silencio "$(sa_task vermelha '    suite_falhas: ["tests/c #1.test.ts"]\n')"
+sa_caso virgula-sem-aspas-continua-separando 0/avisa "$(sa_task vermelha '    suite_falhas: [tests/a,b.test.ts]\n')"
+sa_roda "$(sa_task vermelha '    suite_falhas: ["tests/a.test.ts, tests/b c.test.ts]\n')" > "$SA_T/r"
+[ "$(cat "$SA_T/r")" = 0/avisa ] && case "$SA_SAIDA" in *"suite_falhas invalida"*) true ;; *) false ;; esac
+afirma "ap-aspas-duplas-desbalanceadas-no-fluxo-nao-fecha" $? "real $(cat "$SA_T/r")"
+sa_caso aspas-simples-desbalanceadas-no-fluxo-nao-fecha 0/avisa "$(sa_task vermelha "    suite_falhas: [tests/a.test.ts, 'tests/b c.test.ts]\n")"
+sa_caso texto-depois-da-aspa-no-fluxo-nao-fecha 0/avisa "$(sa_task vermelha '    suite_falhas: ["tests/a.test.ts"x]\n')"
+# na lista em bloco, o item entre aspas tambem perde as aspas, e a aspa sem fechamento invalida
+sa_caso aspas-na-lista-em-bloco-fecha 0/silencio "$(sa_task vermelha "    suite_falhas:\n      - \"tests/a,b.test.ts\"\n      - 'tests/c #1.test.ts'  # nota\n")"
+sa_caso aspas-desbalanceadas-na-lista-em-bloco-nao-fecha 0/avisa "$(sa_task vermelha '    suite_falhas:\n      - tests/a.test.ts\n      - "tests/b c.test.ts\n')"
+# a lista invalida so pesa na vermelha: a verde fecha como antes
+sa_caso verde-com-aspas-desbalanceadas-fecha 0/silencio "$(sa_task verde '    suite_falhas: ["tests/a.test.ts]\n')"
+
 # 11. O contrato escrito: nenhum texto da skill diz que cria/altera vazios sao invalidos, e o
 #     da suite vermelha por ambiente esta onde a F6 o le.
 SA_EXEC="$SK/references/06-execucao.md"
