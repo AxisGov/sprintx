@@ -13,7 +13,8 @@
 #   - `suite` nao for `verde` nem `parcial`, ou
 #   - `suite` for `vermelha` e `suite_falhas` estiver ausente, vazia ou tiver um
 #     arquivo fora de .expx/falhas-de-ambiente.tsv para a plataforma desta maquina
-#     (DS-238: vermelha so por ambiente fecha a task), ou
+#     (DS-238: vermelha so por ambiente fecha a task; DS-239: item entre aspas guarda
+#     a virgula, e aspa sem par invalida a lista), ou
 #   - `teste_integracao` ou `teste_funcional` estiverem vazios, ou
 #   - em `revisao_por_task.modo: obrigatoria`, faltar a evidencia da revisao por
 #     task da task que ESTA escrita leva a `concluida` (DS-207).
@@ -103,12 +104,59 @@ PROBLEMAS="$(printf '%s' "$NOVO" | SX_AMB="$AMBIENTE" awk '
   { ind0 = match($0, /[^ \t]/) - 1 }
   bs >= 0 && ($0 ~ /^[ \t]*$/ || ind0 > bs) { next }
   { bs = -1 }
-  function falha(c) { gsub(/^[ \t]+|[ \t]+$/, "", c); gsub(/^["\047]|["\047]$/, "", c); if (c != "") FL[++nf] = c }
+  # item sem aspas: aspa no meio e literal, mas aspa solta no fim e par sem abertura e invalida a lista
+  function falha(c) { gsub(/^[ \t]+|[ \t]+$/, "", c); if (c ~ /["\047]$/) { sfi = 1; return }; if (c != "") FL[++nf] = c }
+  # item entre aspas, duplas ou simples (DS-239): o texto vai ate a aspa igual seguinte, com a virgula
+  # e o `#` de dentro, e as aspas saem. Sem a aspa de fechamento, ou com texto colado depois dela, a
+  # lista e invalida (sfi). Devolve a posicao logo depois da aspa de fechamento, ou 0. So POSIX (mawk).
+  function aspas(v, i,   ch, j, it) {
+    ch = substr(v, i, 1); j = index(substr(v, i + 1), ch)
+    if (!j) { sfi = 1; return 0 }
+    it = substr(v, i + 1, j - 1)
+    # escape dentro das aspas duplas nao e lido: a lista fica invalida em vez de ser lida pela metade
+    if (ch == "\"" && it ~ /\\$/) { sfi = 1; return 0 }
+    if (it != "") FL[++nf] = it
+    return i + j + 1
+  }
+  # `suite_falhas: [a, "b,c", \047d\047]`: v e o texto depois do `[`. Fora das aspas, a virgula separa,
+  # o `]` fecha e o `#` depois de espaco comenta o resto da linha
+  function fluxo(v,   n, i, k, ch, it) {
+    n = length(v); i = 1
+    while (i <= n) {
+      while (i <= n && substr(v, i, 1) ~ /[ \t]/) i++
+      ch = substr(v, i, 1)
+      if (ch == "\"" || ch == "\047") {
+        if (!(i = aspas(v, i))) return
+        k = i; while (i <= n && substr(v, i, 1) ~ /[ \t]/) i++
+        ch = substr(v, i, 1)
+        if (i <= n && ch != "," && ch != "]" && !(ch == "#" && i > k)) { sfi = 1; return }
+      } else {
+        it = ""
+        while (i <= n && (ch = substr(v, i, 1)) != "," && ch != "]") {
+          if (ch == "#" && it ~ /[ \t]$/) break
+          it = it ch; i++
+        }
+        falha(it)
+      }
+      # so o `]` fecha a lista; sem ele, a lista e invalida
+      if (i > n || ch != ",") { if (i > n || ch != "]") sfi = 1; return }
+      i++
+    }
+    sfi = 1
+  }
+  # item da lista em bloco: entre aspas sai como no fluxo, e depois da aspa so cabe espaco e comentario
+  function bloco(v,   i, ch) {
+    ch = substr(v, 1, 1)
+    if (ch == "\"" || ch == "\047") {
+      if ((i = aspas(v, 1)) && substr(v, i) !~ /^([ \t]+(#.*)?)?$/) sfi = 1
+    } else { sub(/[ \t]+#.*$/, "", v); falha(v) }
+  }
   function fecha(  msg, i, fora) {
     if (id != "" && concluida) {
       msg = ""
       if (suite == "vermelha") {
-        if (nf == 0) msg = msg " suite=vermelha sem suite_falhas"
+        if (sfi) msg = msg " suite=vermelha com suite_falhas invalida (aspas sem par ou texto depois da aspa)"
+        else if (nf == 0) msg = msg " suite=vermelha sem suite_falhas"
         else {
           fora = ""
           for (i = 1; i <= nf; i++) if (!(FL[i] in AMB)) fora = fora (fora == "" ? "" : ",") FL[i]
@@ -119,18 +167,19 @@ PROBLEMAS="$(printf '%s' "$NOVO" | SX_AMB="$AMBIENTE" awk '
       if (tf == 0)            msg = msg " teste_funcional vazio"
       if (msg != "") print id ":" msg
     }
-    id=""; concluida=0; suite=""; ti=0; tf=0; nf=0; sfb=-1
+    id=""; concluida=0; suite=""; ti=0; tf=0; nf=0; sfb=-1; sfi=0
   }
   # item da lista em bloco de `suite_falhas` (`- tests/a.test.ts`); item de mapa (`- id:`) a encerra
-  sfb >= 0 && ind0 >= sfb && /^[ \t]*-[ \t]+/ && !/^[ \t]*-[ \t]*[A-Za-z_][A-Za-z0-9_]*:/ { v = $0; sub(/^[ \t]*-[ \t]+/, "", v); sub(/[ \t]+#.*$/, "", v); falha(v); next }
+  sfb >= 0 && ind0 >= sfb && /^[ \t]*-[ \t]+/ && !/^[ \t]*-[ \t]*[A-Za-z_][A-Za-z0-9_]*:/ { v = $0; sub(/^[ \t]*-[ \t]+/, "", v); bloco(v); next }
   { sfb = -1 }
   /^[ \t]*-[ \t]*id:/ { fecha(); id=$3; sub(/^[ \t]+/,"",id) }
   /^[ \t]*(-[ \t]+)?status:[ \t]*(concluida|"concluida"|\047concluida\047)[ \t]*(#.*)?$/ { concluida=1 }
   /suite:/                      { s=$0; sub(/.*suite:[ \t]*/,"",s); sub(/[ \t]+$/,"",s); suite=s }
   # `suite_falhas: [a, b]` em fluxo, ou `suite_falhas:` com a lista em bloco nas linhas seguintes
-  /^[ \t]*suite_falhas:/ { v = $0; sub(/^[ \t]*suite_falhas:[ \t]*/, "", v); sub(/[ \t]+#.*$/, "", v)
-    if (v ~ /^\[/) { sub(/^\[/, "", v); sub(/\][ \t]*$/, "", v); nq = split(v, q, ","); for (i = 1; i <= nq; i++) falha(q[i]) }
-    else if (v == "") sfb = ind0 }
+  # (no fluxo, o comentario sai dentro do `fluxo`, que sabe o que esta entre aspas: DS-239)
+  /^[ \t]*suite_falhas:/ { v = $0; sub(/^[ \t]*suite_falhas:[ \t]*/, "", v)
+    if (v ~ /^\[/) fluxo(substr(v, 2))
+    else { sub(/[ \t]+#.*$/, "", v); if (v == "") sfb = ind0 } }
   /teste_integracao:/           { v=$0; sub(/.*teste_integracao:[ \t]*/,"",v); gsub(/[ \t"'"'"']/,"",v); if (v != "" && v != "null") ti=1 }
   /teste_funcional:/            { v=$0; sub(/.*teste_funcional:[ \t]*/,"",v);  gsub(/[ \t"'"'"']/,"",v); if (v != "" && v != "null") tf=1 }
   # comentario nunca abre escalar: nem a linha inteira (`# nota: |`, regressao da DS-212; conselhos#298)

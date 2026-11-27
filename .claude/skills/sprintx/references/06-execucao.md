@@ -117,6 +117,8 @@ dependências estão satisfeitas; sem nenhuma, registre um bloqueio `task_reivin
    - todo caminho dela está no TSV para a plataforma desta máquina (`EXPX_PLATAFORMA` ou `uname`), com caminho exato e motivo preenchido;
    - nenhum desses arquivos está no diff do trabalho (a V2 e o E1 da `mergex` conferem).
 
+   Caminho com vírgula vai entre aspas duplas ou simples na lista em fluxo (`["tests/a,b.test.ts", tests/c.test.ts]`), e as aspas saem do item; aspa sem par invalida a lista e a task não fecha (DS-239).
+
    Os testes de integração e funcional da própria task continuam obrigatoriamente verdes. Falha fora da lista barra a task. Não grave `verde` nem `parcial` no lugar de uma suíte que falhou.
 
    **Timeout por máquina carregada não entra na lista.** Reexecute sozinho o arquivo que estourou o prazo. Passando, grave `suite: parcial` e anote a reexecução na linha da task. Falhando de novo, é falha comum.
