@@ -525,7 +525,9 @@ ah_parcial() { # ah_parcial <PATH> — codigo do escritor em AH_P_RC, saida em A
   ah_fixture sim; rm -f "$AH_T/g/docs/eventos/outro.jsonl"
   printf '%04055d\n' 0 > "$AH_T/g/docs/eventos/alvo.jsonl"   # 4056 bytes: sobram 40
   cp "$AH_T/g/docs/eventos/alvo.jsonl" "$AH_T/antes.jsonl"
-  AH_P_OUT="$(cd "$AH_T/g" && trap '' XFSZ && ulimit -f 4 && PATH="$1" SPRINTX_RAIZ="$AH_T/g" \
+  # Sem `trap '' XFSZ` aqui: e a biblioteca que tem de sobreviver ao sinal (CodeAnt no #97).
+  chmod 600 "$AH_T/g/docs/eventos/alvo.jsonl"
+  AH_P_OUT="$(cd "$AH_T/g" && ulimit -f 4 && PATH="$1" SPRINTX_RAIZ="$AH_T/g" \
     EXPX_SESSAO=seg@1 EXPX_HARNESS=seg bash "$AH_SK/scripts/rastro.sh" task-iniciada alvo T-01.01 2>&1)"
   AH_P_RC=$?
 }
@@ -536,10 +538,20 @@ printf '%04055d\n' 0 > "$AH_T/ctl"
 if [ "$(wc -c < "$AH_T/ctl")" -eq 4096 ]; then
   afirma "ah16-controle-ulimit-grava-so-uma-parte" 0 "4056 -> 4096 bytes"
   ah_parcial "$PATH"
+  [ "$AH_P_RC" -eq 5 ] && cmp -s "$AH_T/antes.jsonl" "$AH_T/g/docs/eventos/alvo.jsonl" \
+    && [ -n "$(find "$AH_T/g/docs/eventos/alvo.jsonl" -perm 600 2>/dev/null)" ]
+  afirma "ah17-escrita-parcial-da-5-e-arquivo-identico" $? "exit=$AH_P_RC (inclusive o modo 600)"
+  # Ultima linha sem `\n`: o tamanho do cache erra por 1, e o corte nao pode depender dele.
+  ah_fixture sim; rm -f "$AH_T/g/docs/eventos/outro.jsonl"
+  printf '%04055d' 0 > "$AH_T/g/docs/eventos/alvo.jsonl"
+  cp "$AH_T/g/docs/eventos/alvo.jsonl" "$AH_T/antes.jsonl"
+  AH_P_OUT="$(cd "$AH_T/g" && ulimit -f 4 && SPRINTX_RAIZ="$AH_T/g" \
+    EXPX_SESSAO=seg@1 EXPX_HARNESS=seg bash "$AH_SK/scripts/rastro.sh" task-iniciada alvo T-01.01 2>&1)"
+  AH_P_RC=$?
   [ "$AH_P_RC" -eq 5 ] && cmp -s "$AH_T/antes.jsonl" "$AH_T/g/docs/eventos/alvo.jsonl"
-  afirma "ah17-escrita-parcial-da-5-e-arquivo-identico" $? "exit=$AH_P_RC"
-  mkdir -p "$AH_T/head-ruim"; printf '#!/bin/sh\nexit 1\n' > "$AH_T/head-ruim/head"; chmod +x "$AH_T/head-ruim/head"
-  ah_parcial "$AH_T/head-ruim:$PATH"
+  afirma "ah17b-sem-quebra-final-corta-so-o-fragmento" $? "exit=$AH_P_RC"
+  mkdir -p "$AH_T/dd-ruim"; printf '#!/bin/sh\nexit 1\n' > "$AH_T/dd-ruim/dd"; chmod +x "$AH_T/dd-ruim/dd"
+  ah_parcial "$AH_T/dd-ruim:$PATH"
   [ "$AH_P_RC" -eq 5 ] && printf '%s' "$AH_P_OUT" | grep -qF 'o truncamento de volta tambem'
   afirma "ah18-sem-poder-truncar-da-5-e-avisa" $? "exit=$AH_P_RC"
 else
