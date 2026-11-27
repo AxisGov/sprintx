@@ -583,7 +583,10 @@ _rastro_linha() {
   local arq="$1" tid="$2" evento="$3" origem="$4" resultado="$5" detalhe="$6"
   local arquivos="$7" extras="$8"
 
+  # `antes` e o tamanho a restaurar se a escrita falhar (DS-237).
+  local antes=0 existia=0
   if [ -f "$arq" ]; then
+    existia=1
     # O tamanho ja lido pela varredura do rastro (RASTRO_TAMANHOS) evita um `wc`.
     local tam
     case "${RASTRO_TAMANHOS:-}" in
@@ -594,8 +597,9 @@ $arq	"}"; tam="${tam%%
       *) tam=$(wc -c < "$arq" 2>/dev/null) ;;
     esac
     tam="${tam//[!0-9]/}"; [ -n "$tam" ] || tam=0
+    antes="$tam"
     if [ "$tam" -gt 5242880 ] 2>/dev/null; then
-      mv -f "$arq" "${arq%.jsonl}.1.jsonl" 2>/dev/null || true
+      mv -f "$arq" "${arq%.jsonl}.1.jsonl" 2>/dev/null && { antes=0; existia=0; }
     fi
   fi
 
@@ -624,7 +628,41 @@ $arq	"}"; tam="${tam%%
   [ -n "$extras" ] && linha="$linha,$extras"
   linha="$linha}"
 
-  if printf '%s\n' "$linha" >> "$arq" 2>/dev/null; then RASTRO_GRAVACAO=gravado; else RASTRO_GRAVACAO=falha; fi
+  if printf '%s\n' "$linha" >> "$arq" 2>/dev/null; then
+    RASTRO_GRAVACAO=gravado
+    # A entrada nova vai na frente e vence a antiga: uma segunda linha neste processo parte do
+    # tamanho certo. Sem processo.
+    local LC_ALL=C
+    RASTRO_TAMANHOS=$'\n'"$arq"$'\t'"$((antes + ${#linha} + 1))${RASTRO_TAMANHOS:-}"
+  else
+    RASTRO_GRAVACAO=falha
+    _rastro_restaura "$arq" "$antes" "$existia" "$linha" \
+      || printf 'rastro: a escrita em %s falhou e o truncamento de volta tambem: pode haver uma linha incompleta no fim do arquivo; nao a apague nem complete a mao\n' "$arq" >&3
+  fi
+}
+
+# _rastro_restaura <arquivo> <bytes antes> <existia 0|1> <linha> — desfaz a escrita que falhou no
+# meio (DS-237). So corta quando o que passou de <bytes antes> e um comeco da PROPRIA linha: a
+# escrita do rastro nao tem trava (DS-174). 0 quando o arquivo ficou como estava. Processo so
+# neste caminho de falha (DS-157).
+_rastro_restaura() {
+  local LC_ALL=C
+  local arq="$1" antes="$2" existia="$3" linha="$4" resto tmp="$1.tmp.$$"
+  [ -f "$arq" ] || return 0
+  resto="$(tail -c "+$((antes + 1))" "$arq" 2>/dev/null && printf x)" || return 1
+  resto="${resto%x}"
+  if [ -n "$resto" ]; then
+    case "$linha"$'\n' in "$resto"*) ;; *) return 1 ;; esac
+  elif [ "$existia" = 1 ]; then
+    return 0
+  fi
+  if [ "$existia" = 0 ]; then rm -f "$arq" 2>/dev/null; return; fi
+  if head -c "$antes" "$arq" > "$tmp" 2>/dev/null && [ "$(wc -c < "$tmp")" -eq "$antes" ] \
+     && mv -f "$tmp" "$arq" 2>/dev/null; then
+    return 0
+  fi
+  rm -f "$tmp" 2>/dev/null
+  return 1
 }
 
 # _rastro_classifica <classe> — poe <classe> em RASTRO_GRAVACAO, a menos que a tentativa de
@@ -707,7 +745,7 @@ rastro_grava_trabalho() {
     fi
 
     _rastro_linha "$dir/$tid.jsonl" "$tid" "$evento" "$origem" "$resultado" "$detalhe" "$arquivos" "$extras"
-  } 2>/dev/null || true
+  } 3>&2 2>/dev/null || true  # fd 3: so o aviso de restauracao que falhou chega ao stderr
   return 0
 }
 
