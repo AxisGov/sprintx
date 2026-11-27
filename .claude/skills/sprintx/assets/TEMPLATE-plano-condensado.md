@@ -35,6 +35,7 @@ tasks:
     paralelizavel: false
     concluida_em: null
     suite: nao_executada
+    suite_falhas: []
   - id: T-{{NN}}.02
     titulo: {{titulo curto, sem acento, uma linha}}
     fase: F-{{NN}}.1
@@ -50,10 +51,13 @@ tasks:
     paralelizavel: false
     concluida_em: null
     suite: nao_executada
+    suite_falhas: []
 ---
 
 > Frontmatter obrigatorio (expx-schema v1). Formato completo em `references/00-schema.md`.
 > Substitua TODOS os marcadores; NUNCA omita uma chave — ausente e `null`, lista vazia e `[]`.
+> A task que não muda arquivo declara `cria: []` e `altera: []`.
+> Omitir uma das chaves continua inválido.
 >
 > **Um unico bloco YAML.** Os leitores de frontmatter param no primeiro `---` de fechamento:
 > um segundo bloco neste arquivo seria invisivel para os hooks de metodo.

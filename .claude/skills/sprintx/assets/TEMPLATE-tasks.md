@@ -21,6 +21,7 @@ tasks:
     paralelizavel: {{true | false}}
     concluida_em: null
     suite: nao_executada
+    suite_falhas: []
   - id: T-{{NN}}.{{MM}}
     titulo: {{titulo curto, sem acento, uma linha}}
     fase: F-{{NN}}.{{M}}
@@ -36,11 +37,15 @@ tasks:
     paralelizavel: {{true | false}}
     concluida_em: null
     suite: nao_executada
+    suite_falhas: []
 ---
 
 # Tasks — Sprint {{NN}}
 
 > Um bloco por task. Repita o bloco abaixo para cada task da sprint, preenchendo TODOS os campos — nenhum é opcional. Na execução (F6), a linha `status` é atualizada em cada transição; ao concluir, acrescente data e resultado da suíte.
+>
+> A task que não muda arquivo declara `cria: []` e `altera: []`.
+> Omitir uma das chaves continua inválido.
 
 ---
 

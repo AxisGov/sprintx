@@ -110,6 +110,16 @@ dependências estão satisfeitas; sem nenhuma, registre um bloqueio `task_reivin
    A suíte inteira roda **uma vez, ao fechar a sprint** (ver "Portões de fase e de sprint"). Rodá-la ao fim de cada task custa uma execução completa por task e não descobre nada que a execução do portão não descubra — só descobre mais cedo, ao preço de repetir tudo N vezes. Se o subconjunto ficar difícil de delimitar, rode a suíte inteira e grave `suite: verde`: o valor mais forte nunca é violação.
 
    O que não muda: **task com teste vermelho não fecha**, seja o subconjunto ou a suíte inteira. `parcial` significa "o que era desta task passou", nunca "passou mais ou menos".
+
+   **Única exceção: suíte vermelha só por ambiente (DS-238).** Há testes que falham pela máquina, não pelo código. Eles ficam em `.expx/falhas-de-ambiente.tsv`, versionado, uma linha por arquivo: `caminho<TAB>plataforma<TAB>motivo<TAB>desde`. A task fecha com `suite: vermelha` somente quando as três condições valem:
+
+   - `suite_falhas` lista todos os arquivos de teste que falharam, e não está vazia;
+   - todo caminho dela está no TSV para a plataforma desta máquina (`EXPX_PLATAFORMA` ou `uname`), com caminho exato e motivo preenchido;
+   - nenhum desses arquivos está no diff do trabalho (a V2 e o E1 da `mergex` conferem).
+
+   Os testes de integração e funcional da própria task continuam obrigatoriamente verdes. Falha fora da lista barra a task. Não grave `verde` nem `parcial` no lugar de uma suíte que falhou.
+
+   **Timeout por máquina carregada não entra na lista.** Reexecute sozinho o arquivo que estourou o prazo. Passando, grave `suite: parcial` e anote a reexecução na linha da task. Falhando de novo, é falha comum.
 4. Assuma os três papéis do ORQUESTRADOR, em sequência: implementador (passos 2–3), revisor de testes, auditor de aceite (o `criterio_aceite` é verdade agora? verifique de fato, não presuma).
 
    **O papel de revisor de testes é do agente `sprintx-revisor-testes`, quando ele existir neste harness.** Acione-o sobre a task que está fechando, com o pedido neutro de `references/05-auditoria.md` (Passo 1.0: alvo, arquivos, prova e formato, sem as suas hipóteses): ele lê os testes e responde no formato determinístico (`T-NN.MM | solido`, ou `T-NN.MM | fraco | <tipo> | <cláusula> | <implementação errada>`). Passe a ele também as implementações erradas que a última F5 registrou como `[fraco:teste]` para esta task (`obrigacoes-f6`): além do julgamento normal, ele confere que **cada uma delas é discriminada** pelo teste escrito. **A task não conclui se alguma delas continuar passando.** Um `fraco` significa que o teste passaria com a implementação errada — e teste fraco é pior que teste ausente, porque produz suíte verde e falsa confiança. Task com teste `fraco` NÃO fecha: corrija o teste e, antes de seguir, rode-o contra a implementação errada que o revisor apontou — ele tem que falhar, e pelo motivo esperado. Teste corrigido que nunca foi visto vermelho contra o erro não prova que o detecta; só com ele vermelho e depois verde a task segue. Sem o agente disponível, faça você mesma a pergunta, com o mesmo rigor.
@@ -150,11 +160,13 @@ dependências estão satisfeitas; sem nenhuma, registre um bloqueio `task_reivin
 
    **A ordem é obrigatória e é esta:** teste → implementação → suíte afetada → revisão de testes → aceite → revisão por task → `status: concluida` → `tasks.md` atualizado (data, resultado da suíte e esforço real dos passos 5 e 6) → E1. O commit registra a task **já marcada** como concluída, e é o `tasks.md` atualizado que dá à mensagem o objetivo e os testes.
 
-   **`suite: parcial` fecha task e sustenta commit** — é o registro normal da F6, e a suíte inteira continua sendo cobrada no fechamento da sprint. O E1 barra apenas `suite: vermelha` e `suite: nao_executada`.
+   **`suite: parcial` fecha task e sustenta commit** — é o registro normal da F6, e a suíte inteira continua sendo cobrada no fechamento da sprint. O E1 barra `suite: nao_executada` e `suite: vermelha`. Ele aceita só a vermelha que a V2 daria como AVISO: a só de ambiente, do passo 3.
 
    Se a `mergex` abortar o commit por suspeita de segredo, **não contorne**: a task fica sem commit, o aviso vai para o relatório final, e o portão de prontidão vai barrá-la depois.
 
    **Task marcada `bloqueada` não gera commit** — a regra de bloqueio abaixo segue para a próxima task sem passar por aqui. Sem a `mergex` instalada, a task fecha no passo 8, como sempre fechou.
+
+   **Task sem arquivos não gera commit no E1.** É a task que declara `cria: []` e `altera: []`, como a que só roda `npm ci`. Ela segue os mesmos testes, revisão e aceite. A V11 da `mergex` a dispensa quando nenhum commit tem o trailer `Task: <id>` dela (DS-238). Não crie commit vazio para ela.
 
 **Frontmatter (obrigatório) — o YAML e a prosa andam juntos.** Cada arquivo de estado que
 você tocar na F6 é gravado com o frontmatter do contrato expx-schema v1
@@ -170,6 +182,9 @@ dois. A cada gravação de `tasks.md`:
 - `suite` recebe `parcial` quando o subconjunto afetado pela task terminou com 0 failed,
   `verde` quando foi a suíte inteira que rodou sem falha, `vermelha` quando houve falha, e
   permanece `nao_executada` enquanto nada rodou para aquela task.
+- `suite_falhas` recebe os arquivos de teste que falharam quando `suite` é `vermelha`, e é
+  `[]` nos outros casos. Com ela, a task só fecha pela exceção de ambiente do passo 3. O
+  timeout reexecutado sozinho e verde é gravado como `parcial`.
 
 **Onde gravar, nos dois formatos.** A lista `tasks:` acima é a mesma chave nos dois formatos —
 `kind: tasks` e `kind: plano` carregam tasks idênticas —, então fechar uma task funciona igual
@@ -277,6 +292,11 @@ colateral ainda é barata de achar.
 
 - Suíte inteira vermelha: a sprint **não fecha**. Corrija, ou registre bloqueio `suite_vermelha` em
   `00-BLOQUEIOS.md` e trate como qualquer outro critério de saída não atendido.
+- Vermelha só por ambiente (as condições do passo 3): a sprint fecha, com aviso. No relatório da
+  sprint, registre o resultado como vermelho, com `suite_falhas` e a saída colada. Com a
+  `mergex`, confira por
+  `bash .claude/skills/mergex/scripts/portao-v2.sh --conferir-falhas --base <branch_base> <caminhos>`.
+  Um único arquivo fora da lista, ou tocado pelo diff, mantém a sprint aberta.
 - Suíte inteira verde: cole a saída no relatório da sprint e siga. As tasks daquela sprint
   **permanecem com `suite: parcial`** — o valor descreve o que rodou para aquela task, e
   reescrevê-lo em massa apagaria justamente essa informação.
@@ -435,8 +455,8 @@ quais módulos ele declara — é assim que o usuário sabe que a feature entrou
 
 - [ ] Toda task está `concluida` ou `bloqueada` (nenhuma `pendente`/`em_andamento` executável restante).
 - [ ] `tasks.md` atualizado com data e resultado de suíte em cada task concluída.
-- [ ] Toda task concluída tem `suite: parcial` ou `suite: verde` — nenhuma com `vermelha` ou `nao_executada`.
-- [ ] Toda sprint concluída teve a suíte INTEIRA executada e verde, com a saída colada no relatório.
+- [ ] Toda task concluída tem `suite: parcial` ou `suite: verde`, ou `vermelha` só por ambiente, com `suite_falhas` toda em `.expx/falhas-de-ambiente.tsv` e fora do diff. Nenhuma com `nao_executada`.
+- [ ] Toda sprint concluída teve a suíte INTEIRA executada, com a saída colada no relatório: verde, ou vermelha só por ambiente, com `suite_falhas` registrada.
 - [ ] Em todo arquivo de estado tocado, o frontmatter está válido e coerente com a prosa: `status`, `concluida_em`, `suite` e `atualizado_em` refletem o estado real (`references/00-schema.md`).
 - [ ] Se o trabalho inteiro foi entregue, `ORQUESTRADOR.md` teve `estagio`, `status`, `concluido_em` e `atualizado_em` reescritos; sprints e fases concluídas tiveram `status` atualizado onde o formato daquela sprint o guarda — `sprint.md` e `fases.md` nos três arquivos, `sprint.status` e `fases[].status` do `tasks.md` no condensado.
 - [ ] Toda task concluída tem o esforço real registrado em `tasks.md`.
