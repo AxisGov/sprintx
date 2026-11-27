@@ -112,7 +112,10 @@ PROBLEMAS="$(printf '%s' "$NOVO" | SX_AMB="$AMBIENTE" awk '
   function aspas(v, i,   ch, j, it) {
     ch = substr(v, i, 1); j = index(substr(v, i + 1), ch)
     if (!j) { sfi = 1; return 0 }
-    it = substr(v, i + 1, j - 1); if (it != "") FL[++nf] = it
+    it = substr(v, i + 1, j - 1)
+    # escape dentro das aspas duplas nao e lido: a lista fica invalida em vez de ser lida pela metade
+    if (ch == "\"" && it ~ /\\$/) { sfi = 1; return 0 }
+    if (it != "") FL[++nf] = it
     return i + j + 1
   }
   # `suite_falhas: [a, "b,c", \047d\047]`: v e o texto depois do `[`. Fora das aspas, a virgula separa,
@@ -135,9 +138,11 @@ PROBLEMAS="$(printf '%s' "$NOVO" | SX_AMB="$AMBIENTE" awk '
         }
         falha(it)
       }
-      if (i > n || ch != ",") return
+      # so o `]` fecha a lista; sem ele, a lista e invalida
+      if (i > n || ch != ",") { if (i > n || ch != "]") sfi = 1; return }
       i++
     }
+    sfi = 1
   }
   # item da lista em bloco: entre aspas sai como no fluxo, e depois da aspa so cabe espaco e comentario
   function bloco(v,   i, ch) {
