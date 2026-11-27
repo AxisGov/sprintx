@@ -126,6 +126,8 @@ sa_roda "$(sa_task vermelha '    suite_falhas: ["tests/a.test.ts, tests/b c.test
 afirma "ap-aspas-duplas-desbalanceadas-no-fluxo-nao-fecha" $? "real $(cat "$SA_T/r")"
 sa_caso aspas-simples-desbalanceadas-no-fluxo-nao-fecha 0/avisa "$(sa_task vermelha "    suite_falhas: [tests/a.test.ts, 'tests/b c.test.ts]\n")"
 sa_caso texto-depois-da-aspa-no-fluxo-nao-fecha 0/avisa "$(sa_task vermelha '    suite_falhas: ["tests/a.test.ts"x]\n')"
+sa_caso aspa-solta-no-fim-do-item-no-fluxo-nao-fecha 0/avisa "$(sa_task vermelha '    suite_falhas: [tests/a.test.ts"]\n')"
+sa_caso aspa-solta-no-fim-do-item-em-bloco-nao-fecha 0/avisa "$(sa_task vermelha '    suite_falhas:\n      - tests/a.test.ts"\n')"
 # na lista em bloco, o item entre aspas tambem perde as aspas, e a aspa sem fechamento invalida
 sa_caso aspas-na-lista-em-bloco-fecha 0/silencio "$(sa_task vermelha "    suite_falhas:\n      - \"tests/a,b.test.ts\"\n      - 'tests/c #1.test.ts'  # nota\n")"
 sa_caso aspas-desbalanceadas-na-lista-em-bloco-nao-fecha 0/avisa "$(sa_task vermelha '    suite_falhas:\n      - tests/a.test.ts\n      - "tests/b c.test.ts\n')"

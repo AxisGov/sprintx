@@ -104,7 +104,8 @@ PROBLEMAS="$(printf '%s' "$NOVO" | SX_AMB="$AMBIENTE" awk '
   { ind0 = match($0, /[^ \t]/) - 1 }
   bs >= 0 && ($0 ~ /^[ \t]*$/ || ind0 > bs) { next }
   { bs = -1 }
-  function falha(c) { gsub(/^[ \t]+|[ \t]+$/, "", c); gsub(/^["\047]|["\047]$/, "", c); if (c != "") FL[++nf] = c }
+  # item sem aspas: aspa no meio e literal, mas aspa solta no fim e par sem abertura e invalida a lista
+  function falha(c) { gsub(/^[ \t]+|[ \t]+$/, "", c); if (c ~ /["\047]$/) { sfi = 1; return }; if (c != "") FL[++nf] = c }
   # item entre aspas, duplas ou simples (DS-239): o texto vai ate a aspa igual seguinte, com a virgula
   # e o `#` de dentro, e as aspas saem. Sem a aspa de fechamento, ou com texto colado depois dela, a
   # lista e invalida (sfi). Devolve a posicao logo depois da aspa de fechamento, ou 0. So POSIX (mawk).
