@@ -583,7 +583,10 @@ _rastro_linha() {
   local arq="$1" tid="$2" evento="$3" origem="$4" resultado="$5" detalhe="$6"
   local arquivos="$7" extras="$8"
 
+  # Se a escrita falhar, `existia` diz se o arquivo ja estava la (DS-237).
+  local existia=0
   if [ -f "$arq" ]; then
+    existia=1
     # O tamanho ja lido pela varredura do rastro (RASTRO_TAMANHOS) evita um `wc`.
     local tam
     case "${RASTRO_TAMANHOS:-}" in
@@ -595,7 +598,7 @@ $arq	"}"; tam="${tam%%
     esac
     tam="${tam//[!0-9]/}"; [ -n "$tam" ] || tam=0
     if [ "$tam" -gt 5242880 ] 2>/dev/null; then
-      mv -f "$arq" "${arq%.jsonl}.1.jsonl" 2>/dev/null || true
+      mv -f "$arq" "${arq%.jsonl}.1.jsonl" 2>/dev/null && existia=0
     fi
   fi
 
@@ -624,7 +627,47 @@ $arq	"}"; tam="${tam%%
   [ -n "$extras" ] && linha="$linha,$extras"
   linha="$linha}"
 
-  if printf '%s\n' "$linha" >> "$arq" 2>/dev/null; then RASTRO_GRAVACAO=gravado; else RASTRO_GRAVACAO=falha; fi
+  # Acima do `ulimit -f`, o SIGXFSZ padrao mataria o hook no meio do printf, sem restaurar:
+  # ignorado so durante a escrita, ela falha com erro e a restauracao roda. `trap` e builtin.
+  local grava=0
+  trap '' XFSZ
+  printf '%s\n' "$linha" >> "$arq" 2>/dev/null || grava=$?
+  trap - XFSZ
+  if [ "$grava" = 0 ]; then
+    RASTRO_GRAVACAO=gravado
+  else
+    RASTRO_GRAVACAO=falha
+    _rastro_restaura "$arq" "$existia" "$linha" \
+      || printf 'rastro: a escrita em %s falhou e o truncamento de volta tambem: pode haver uma linha incompleta no fim do arquivo; nao a apague nem complete a mao\n' "$arq" >&3
+  fi
+}
+
+# _rastro_restaura <arquivo> <existia 0|1> <linha> — desfaz a escrita que falhou no meio
+# (DS-237). Procura no fim do arquivo o maior pedaco que e comeco da PROPRIA linha e corta so
+# ele: nao depende do tamanho anterior (o cache da rotacao erra por 1 byte quando a ultima linha
+# nao termina em `\n`), e a escrita do rastro nao tem trava (DS-174). O corte e no proprio
+# arquivo (`dd` com `seek`), sem temporario: mantem permissoes e inode, e nao pede espaco num
+# disco cheio. 0 quando o arquivo ficou como estava. Processo so neste caminho de falha (DS-157).
+_rastro_restaura() {
+  local LC_ALL=C
+  local arq="$1" existia="$2" alvo="$3"$'\n' tam cauda k=0 n pedaco
+  [ -f "$arq" ] || return 0
+  tam="$(wc -c < "$arq" 2>/dev/null)" || return 1
+  tam="${tam//[!0-9]/}"; [ -n "$tam" ] || return 1
+  cauda="$(tail -c "${#alvo}" "$arq" 2>/dev/null && printf x)" || return 1
+  cauda="${cauda%x}"
+  for (( n = ${#cauda}; n > 0; n-- )); do
+    pedaco="${cauda:${#cauda}-n}"
+    [ "${pedaco:0:1}" = "${alvo:0:1}" ] || continue
+    case "$alvo" in "$pedaco"*) k="$n"; break ;; esac
+  done
+  # Nada da linha no fim, ou a linha inteira: nao ha fragmento a cortar.
+  [ "$k" -gt 0 ] && [ "$k" -lt "${#alvo}" ] || return 0
+  n=$(( tam - k ))
+  dd if=/dev/null of="$arq" bs=1 seek="$n" 2>/dev/null || return 1
+  [ "$(wc -c < "$arq" 2>/dev/null | tr -cd 0-9)" = "$n" ] || return 1
+  if [ "$existia" = 0 ] && [ "$n" = 0 ]; then rm -f "$arq" 2>/dev/null; fi
+  return 0
 }
 
 # _rastro_classifica <classe> — poe <classe> em RASTRO_GRAVACAO, a menos que a tentativa de
@@ -707,7 +750,7 @@ rastro_grava_trabalho() {
     fi
 
     _rastro_linha "$dir/$tid.jsonl" "$tid" "$evento" "$origem" "$resultado" "$detalhe" "$arquivos" "$extras"
-  } 2>/dev/null || true
+  } 3>&2 2>/dev/null || true  # fd 3: so o aviso de restauracao que falhou chega ao stderr
   return 0
 }
 

@@ -518,6 +518,46 @@ AH_MUT_G="$(cd "$AH_T/g" && EXPX_SESSAO=seg@1 EXPX_HARNESS=seg \
 afirma "ahm3-classe-que-mascara-falha-morre-na-precedencia" "$AH_RC" \
   "a copia devolve $AH_MUT_G em vez de falha, e ah11/ah13 a rejeitam"
 
+# ---------------------------------------------------------------- 6. escrita que falha no meio (DS-237)
+# `ulimit -f 4` (4 KiB) com SIGXFSZ ignorado: o kernel grava ate o limite e recusa o resto. O
+# printf e builtin, entao comando falso no PATH nao o alcanca.
+ah_parcial() { # ah_parcial <PATH> — codigo do escritor em AH_P_RC, saida em AH_P_OUT
+  ah_fixture sim; rm -f "$AH_T/g/docs/eventos/outro.jsonl"
+  printf '%04055d\n' 0 > "$AH_T/g/docs/eventos/alvo.jsonl"   # 4056 bytes: sobram 40
+  cp "$AH_T/g/docs/eventos/alvo.jsonl" "$AH_T/antes.jsonl"
+  # Sem `trap '' XFSZ` aqui: e a biblioteca que tem de sobreviver ao sinal (CodeAnt no #97).
+  chmod 600 "$AH_T/g/docs/eventos/alvo.jsonl"
+  AH_P_OUT="$(cd "$AH_T/g" && ulimit -f 4 && PATH="$1" SPRINTX_RAIZ="$AH_T/g" \
+    EXPX_SESSAO=seg@1 EXPX_HARNESS=seg bash "$AH_SK/scripts/rastro.sh" task-iniciada alvo T-01.01 2>&1)"
+  AH_P_RC=$?
+}
+printf '%04055d\n' 0 > "$AH_T/ctl"
+( trap '' XFSZ; ulimit -f 4; printf '%0100d\n' 0 >> "$AH_T/ctl" ) 2>/dev/null
+# Onde o `ulimit -f` nao corta a escrita (Git Bash, por exemplo), nao ha como provocar a escrita
+# parcial: os tres casos viram pulo, e o Linux do CI os cobre.
+if [ "$(wc -c < "$AH_T/ctl")" -eq 4096 ]; then
+  afirma "ah16-controle-ulimit-grava-so-uma-parte" 0 "4056 -> 4096 bytes"
+  ah_parcial "$PATH"
+  [ "$AH_P_RC" -eq 5 ] && cmp -s "$AH_T/antes.jsonl" "$AH_T/g/docs/eventos/alvo.jsonl" \
+    && [ -n "$(find "$AH_T/g/docs/eventos/alvo.jsonl" -perm 600 2>/dev/null)" ]
+  afirma "ah17-escrita-parcial-da-5-e-arquivo-identico" $? "exit=$AH_P_RC (inclusive o modo 600)"
+  # Ultima linha sem `\n`: o tamanho do cache erra por 1, e o corte nao pode depender dele.
+  ah_fixture sim; rm -f "$AH_T/g/docs/eventos/outro.jsonl"
+  printf '%04055d' 0 > "$AH_T/g/docs/eventos/alvo.jsonl"
+  cp "$AH_T/g/docs/eventos/alvo.jsonl" "$AH_T/antes.jsonl"
+  AH_P_OUT="$(cd "$AH_T/g" && ulimit -f 4 && SPRINTX_RAIZ="$AH_T/g" \
+    EXPX_SESSAO=seg@1 EXPX_HARNESS=seg bash "$AH_SK/scripts/rastro.sh" task-iniciada alvo T-01.01 2>&1)"
+  AH_P_RC=$?
+  [ "$AH_P_RC" -eq 5 ] && cmp -s "$AH_T/antes.jsonl" "$AH_T/g/docs/eventos/alvo.jsonl"
+  afirma "ah17b-sem-quebra-final-corta-so-o-fragmento" $? "exit=$AH_P_RC"
+  mkdir -p "$AH_T/dd-ruim"; printf '#!/bin/sh\nexit 1\n' > "$AH_T/dd-ruim/dd"; chmod +x "$AH_T/dd-ruim/dd"
+  ah_parcial "$AH_T/dd-ruim:$PATH"
+  [ "$AH_P_RC" -eq 5 ] && printf '%s' "$AH_P_OUT" | grep -qF 'o truncamento de volta tambem'
+  afirma "ah18-sem-poder-truncar-da-5-e-avisa" $? "exit=$AH_P_RC"
+else
+  pula "ah16-ah18-escrita-parcial" "ulimit -f nao corta a escrita neste ambiente"
+fi
+
 rm -rf "$AH_T"
 
 echo "== AI. fechar task e do DONO da reivindicacao; dona indeterminada nao e dona ausente (PR#12, PR#14) =="
