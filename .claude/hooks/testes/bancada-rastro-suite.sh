@@ -531,15 +531,20 @@ ah_parcial() { # ah_parcial <PATH> — codigo do escritor em AH_P_RC, saida em A
 }
 printf '%04055d\n' 0 > "$AH_T/ctl"
 ( trap '' XFSZ; ulimit -f 4; printf '%0100d\n' 0 >> "$AH_T/ctl" ) 2>/dev/null
-[ "$(wc -c < "$AH_T/ctl")" -eq 4096 ]
-afirma "ah16-controle-ulimit-grava-so-uma-parte" $? "4056 -> 4096 bytes"
-ah_parcial "$PATH"
-[ "$AH_P_RC" -eq 5 ] && cmp -s "$AH_T/antes.jsonl" "$AH_T/g/docs/eventos/alvo.jsonl"
-afirma "ah17-escrita-parcial-da-5-e-arquivo-identico" $? "exit=$AH_P_RC"
-mkdir -p "$AH_T/head-ruim"; printf '#!/bin/sh\nexit 1\n' > "$AH_T/head-ruim/head"; chmod +x "$AH_T/head-ruim/head"
-ah_parcial "$AH_T/head-ruim:$PATH"
-[ "$AH_P_RC" -eq 5 ] && printf '%s' "$AH_P_OUT" | grep -qF 'o truncamento de volta tambem'
-afirma "ah18-sem-poder-truncar-da-5-e-avisa" $? "exit=$AH_P_RC"
+# Onde o `ulimit -f` nao corta a escrita (Git Bash, por exemplo), nao ha como provocar a escrita
+# parcial: os tres casos viram pulo, e o Linux do CI os cobre.
+if [ "$(wc -c < "$AH_T/ctl")" -eq 4096 ]; then
+  afirma "ah16-controle-ulimit-grava-so-uma-parte" 0 "4056 -> 4096 bytes"
+  ah_parcial "$PATH"
+  [ "$AH_P_RC" -eq 5 ] && cmp -s "$AH_T/antes.jsonl" "$AH_T/g/docs/eventos/alvo.jsonl"
+  afirma "ah17-escrita-parcial-da-5-e-arquivo-identico" $? "exit=$AH_P_RC"
+  mkdir -p "$AH_T/head-ruim"; printf '#!/bin/sh\nexit 1\n' > "$AH_T/head-ruim/head"; chmod +x "$AH_T/head-ruim/head"
+  ah_parcial "$AH_T/head-ruim:$PATH"
+  [ "$AH_P_RC" -eq 5 ] && printf '%s' "$AH_P_OUT" | grep -qF 'o truncamento de volta tambem'
+  afirma "ah18-sem-poder-truncar-da-5-e-avisa" $? "exit=$AH_P_RC"
+else
+  pula "ah16-ah18-escrita-parcial" "ulimit -f nao corta a escrita neste ambiente"
+fi
 
 rm -rf "$AH_T"
 
