@@ -170,6 +170,7 @@ PROBLEMAS="$(printf '%s' "$NOVO" | SX_AMB="$AMBIENTE" awk '
     id=""; concluida=0; suite=""; ti=0; tf=0; nf=0; sfb=-1; sfi=0
   }
   # item da lista em bloco de `suite_falhas` (`- tests/a.test.ts`); item de mapa (`- id:`) a encerra
+  sfb >= 0 && ($0 ~ /^[[:space:]]*$/ || $0 ~ /^[[:space:]]*#/) { next }
   sfb >= 0 && ind0 >= sfb && /^[ \t]*-[ \t]+/ && !/^[ \t]*-[ \t]*[A-Za-z_][A-Za-z0-9_]*:/ { v = $0; sub(/^[ \t]*-[ \t]+/, "", v); bloco(v); next }
   { sfb = -1 }
   /^[ \t]*-[ \t]*id:/ { fecha(); id=$3; sub(/^[ \t]+/,"",id) }
