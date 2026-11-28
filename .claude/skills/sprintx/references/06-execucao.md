@@ -168,7 +168,7 @@ dependências estão satisfeitas; sem nenhuma, registre um bloqueio `task_reivin
 
    **Task marcada `bloqueada` não gera commit** — a regra de bloqueio abaixo segue para a próxima task sem passar por aqui. Sem a `mergex` instalada, a task fecha no passo 8, como sempre fechou.
 
-   **Task sem arquivos não gera commit no E1.** É a task que declara `cria: []` e `altera: []`, como a que só roda `npm ci`. Ela segue os mesmos testes, revisão por task e aceite. A evidência `revisao/<T>.json` e o `tasks.md` atualizado entram no próximo commit do E1 como artefatos de método; a V12 dá n/a para essa task (DM-356). A V11 da `mergex` a dispensa quando nenhum commit tem o trailer `Task: <id>` dela (DS-238). Não crie commit vazio para ela.
+   **Task sem arquivos não gera commit no E1.** É a task que declara `cria: []` e `altera: []`, como a que só roda `npm ci`. Ela segue os mesmos testes, revisão por task e aceite. O `tasks.md` atualizado entra no próximo commit como artefato de método da feature. A evidência `revisao/<T>.json` não entra no E1 de outra task, que só leva a revisão da task atual: ela entra no commit de método `pre-e2` da `mergex`, ao fim da execução, mesmo quando a task sem arquivos é a última (DM-360). A V12 dá n/a para essa task (DM-356). A V11 da `mergex` a dispensa quando nenhum commit tem o trailer `Task: <id>` dela (DS-238). Não crie commit vazio para ela.
 
 **Frontmatter (obrigatório) — o YAML e a prosa andam juntos.** Cada arquivo de estado que
 você tocar na F6 é gravado com o frontmatter do contrato expx-schema v1
