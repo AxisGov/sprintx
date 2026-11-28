@@ -73,7 +73,8 @@ if [ -z "$PLATAFORMA" ]; then
 fi
 AMBIENTE=""
 LISTA_AMBIENTE="$RAIZ/.expx/falhas-de-ambiente.tsv"
-if [ -n "$PLATAFORMA" ] && [ -f "$LISTA_AMBIENTE" ]; then
+# `desconhecida` conta como plataforma vazia: a lista nao absolve, como na V2 (conselhos#414)
+if [ -n "$PLATAFORMA" ] && [ "$PLATAFORMA" != desconhecida ] && [ -f "$LISTA_AMBIENTE" ]; then
   TAB=$'\t'
   # `IFS=$'\t' read` juntaria dois tabs seguidos e o motivo vazio pularia de coluna:
   # as colunas saem por expansao. A ultima linha sem quebra final tambem conta.
@@ -138,8 +139,9 @@ PROBLEMAS="$(printf '%s' "$NOVO" | SX_AMB="$AMBIENTE" awk '
         }
         falha(it)
       }
-      # so o `]` fecha a lista; sem ele, a lista e invalida
-      if (i > n || ch != ",") { if (i > n || ch != "]") sfi = 1; return }
+      # so o `]` fecha a lista; sem ele, a lista e invalida. Depois do `]` so cabe espaco e
+      # comentario (`[a] # nota`); outro texto (`[a]lixo`) invalida, como na V2 (conselhos#414)
+      if (i > n || ch != ",") { if (i > n || ch != "]" || substr(v, i + 1) !~ /^([ \t]+(#.*)?)?$/) sfi = 1; return }
       i++
     }
     sfi = 1

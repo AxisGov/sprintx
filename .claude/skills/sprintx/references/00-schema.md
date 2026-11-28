@@ -196,7 +196,8 @@ corresponde a `[]` no YAML, com `paralelizavel: false`.
 O arquivo mais importante. Cada task do plano vira um item da lista `tasks:`, com
 EXATAMENTE os mesmos campos do Contrato da Task do `SKILL.md` — nenhum a mais, nenhum a
 menos — acrescidos apenas dos três campos de execução (`concluida_em`, `suite`,
-`suite_falhas`) e do vínculo com a fase (`fase`).
+`suite_falhas`) e do vínculo com a fase (`fase`). `suite_falhas` ausente equivale a `[]` e só
+é exigido com `suite: vermelha`: o plano `kind: plano` da runx sem o campo cumpre o contrato.
 
 **Campos de extensão de task.** A única exceção ao "nenhum a mais" são os campos de task
 que uma camada **instalada e ativa** declara no próprio schema — hoje, `design_refs` e
@@ -245,7 +246,7 @@ Regras duras deste kind:
   Omitir uma das chaves continua inválido. Ela não gera commit no E1 da `mergex` (DS-238).
 - `concluida_em` é `null` enquanto a task não estiver `concluida`.
 - `suite` é `nao_executada` até rodar algum teste para aquela task; depois `parcial`, `verde` ou `vermelha`. `parcial` é o estado normal de uma task concluída na F6: rodou o subconjunto de testes afetado por ela e passou, e a suíte inteira é cobrada uma vez, no fim da sprint. `verde` significa suíte inteira executada e sem falha — quem a rodar na task grava `verde`, que nunca é violação.
-- `suite_falhas` é a lista dos arquivos de teste que falharam, em fluxo `[a, b]` ou em bloco `- a`; é `[]` quando `suite` não é `vermelha`. Task `concluida` com `suite: vermelha` só vale quando a lista não está vazia, todo caminho dela está em `.expx/falhas-de-ambiente.tsv` para a plataforma da máquina e nenhum está no diff do trabalho (`references/06-execucao.md`, passo 3). Timeout por máquina carregada não entra no TSV: a reexecução isolada verde é gravada como `parcial`.
+- `suite_falhas` é a lista dos arquivos de teste que falharam, em fluxo `[a, b]` ou em bloco `- a`; é `[]` quando `suite` não é `vermelha`. Ausente, vale como `[]`: o campo só é exigido com `suite: vermelha`, e é assim que o hook e a V2 da `mergex` o leem. Na lista em fluxo, depois do `]` só cabe espaço e comentário (`[a] # nota`); outro texto (`[a]lixo`) invalida a lista. Task `concluida` com `suite: vermelha` só vale quando a lista não está vazia, todo caminho dela está em `.expx/falhas-de-ambiente.tsv` para a plataforma da máquina e nenhum está no diff do trabalho (`references/06-execucao.md`, passo 3). Timeout por máquina carregada não entra no TSV: a reexecução isolada verde é gravada como `parcial`.
 - Os campos do YAML são a mesma verdade da prosa do bloco correspondente. Os dois andam juntos.
 
 ### `sprint-NN/tasks.md` no formato condensado → `kind: plano`
