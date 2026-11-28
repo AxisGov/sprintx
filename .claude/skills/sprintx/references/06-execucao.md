@@ -186,7 +186,9 @@ dois. A cada gravação de `tasks.md`:
   permanece `nao_executada` enquanto nada rodou para aquela task.
 - `suite_falhas` recebe os arquivos de teste que falharam quando `suite` é `vermelha`, e é
   `[]` nos outros casos. Com ela, a task só fecha pela exceção de ambiente do passo 3. O
-  timeout reexecutado sozinho e verde é gravado como `parcial`.
+  timeout reexecutado sozinho e verde é gravado como `parcial`. Na lista em fluxo, depois
+  do `]` só cabe espaço e comentário (`[a] # nota`); `[a]lixo` invalida a lista e a task
+  vermelha não fecha.
 
 **Onde gravar, nos dois formatos.** A lista `tasks:` acima é a mesma chave nos dois formatos —
 `kind: tasks` e `kind: plano` carregam tasks idênticas —, então fechar uma task funciona igual

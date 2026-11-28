@@ -142,6 +142,15 @@ sa_caso aspas-desbalanceadas-na-lista-em-bloco-nao-fecha 0/avisa "$(sa_task verm
 # a lista invalida so pesa na vermelha: a verde fecha como antes
 sa_caso verde-com-aspas-desbalanceadas-fecha 0/silencio "$(sa_task verde '    suite_falhas: ["tests/a.test.ts]\n')"
 
+# 13. Depois do `]` do fluxo so cabe espaco e comentario, como na V2 (conselhos#414); e a
+#     plataforma `desconhecida` nao usa a lista, nem a linha marcada com ela.
+sa_fx; sa_lista "${SA_LISTA_LINUX}tests/a.test.ts${T2}desconhecida${T2}fuso${T2}2026-11-28\n"
+sa_caso texto-depois-do-fecho-do-fluxo-nao-fecha 0/avisa "$(sa_task vermelha '    suite_falhas: [tests/a.test.ts]lixo\n')"
+sa_caso comentario-colado-ao-fecho-nao-fecha 0/avisa "$(sa_task vermelha '    suite_falhas: [tests/a.test.ts]# nota\n')"
+sa_caso fecho-com-espaco-e-comentario-fecha 0/silencio "$(sa_task vermelha '    suite_falhas: [tests/a.test.ts] # comentario\n')"
+sa_caso fecho-com-espacos-no-fim-fecha 0/silencio "$(sa_task vermelha '    suite_falhas: [tests/a.test.ts]   \n')"
+SA_PLAT=desconhecida sa_caso plataforma-desconhecida-nao-usa-a-lista 0/avisa "$(sa_task vermelha '    suite_falhas: [tests/a.test.ts]\n')"
+
 # 11. O contrato escrito: nenhum texto da skill diz que cria/altera vazios sao invalidos, e o
 #     da suite vermelha por ambiente esta onde a F6 o le.
 SA_EXEC="$SK/references/06-execucao.md"
