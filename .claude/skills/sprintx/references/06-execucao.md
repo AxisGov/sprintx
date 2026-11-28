@@ -162,13 +162,13 @@ dependências estão satisfeitas; sem nenhuma, registre um bloqueio `task_reivin
 
    **A ordem é obrigatória e é esta:** teste → implementação → suíte afetada → revisão de testes → aceite → revisão por task → `status: concluida` → `tasks.md` atualizado (data, resultado da suíte e esforço real dos passos 5 e 6) → E1. O commit registra a task **já marcada** como concluída, e é o `tasks.md` atualizado que dá à mensagem o objetivo e os testes.
 
-   **`suite: parcial` fecha task e sustenta commit** — é o registro normal da F6, e a suíte inteira continua sendo cobrada no fechamento da sprint. O E1 barra `suite: nao_executada` e `suite: vermelha`. Ele aceita só a vermelha que a V2 daria como AVISO: a só de ambiente, do passo 3.
+   **`suite: parcial` fecha task e sustenta commit** — é o registro normal da F6, e a suíte inteira continua sendo cobrada no fechamento da sprint. O E1 não lê a suíte. No commit, o hook `commit-por-task` da `mergex` confere a suíte e nasce em modo `aviso`. O portão é a V2 no E2: ela dá FALHA para `suite: nao_executada` e para a vermelha que não se enquadra na exceção de ambiente do passo 3.
 
    Se a `mergex` abortar o commit por suspeita de segredo, **não contorne**: a task fica sem commit, o aviso vai para o relatório final, e o portão de prontidão vai barrá-la depois.
 
    **Task marcada `bloqueada` não gera commit** — a regra de bloqueio abaixo segue para a próxima task sem passar por aqui. Sem a `mergex` instalada, a task fecha no passo 8, como sempre fechou.
 
-   **Task sem arquivos não gera commit no E1.** É a task que declara `cria: []` e `altera: []`, como a que só roda `npm ci`. Ela segue os mesmos testes, revisão e aceite. A V11 da `mergex` a dispensa quando nenhum commit tem o trailer `Task: <id>` dela (DS-238). Não crie commit vazio para ela.
+   **Task sem arquivos não gera commit no E1.** É a task que declara `cria: []` e `altera: []`, como a que só roda `npm ci`. Ela segue os mesmos testes, revisão por task e aceite. A evidência `revisao/<T>.json` e o `tasks.md` atualizado entram no próximo commit do E1 como artefatos de método; a V12 dá n/a para essa task (DM-356). A V11 da `mergex` a dispensa quando nenhum commit tem o trailer `Task: <id>` dela (DS-238). Não crie commit vazio para ela.
 
 **Frontmatter (obrigatório) — o YAML e a prosa andam juntos.** Cada arquivo de estado que
 você tocar na F6 é gravado com o frontmatter do contrato expx-schema v1

@@ -72,6 +72,10 @@ sa_caso vermelha-com-suite-falhas-vazia-avisa 0/avisa "$(sa_task vermelha '    s
 # 3. Vermelha com todas as falhas na lista da plataforma fecha, em fluxo e em bloco.
 sa_caso vermelha-toda-na-lista-em-fluxo-fecha 0/silencio "$(sa_task vermelha '    suite_falhas: [tests/a.test.ts, "tests/b c.test.ts"]\n')"
 sa_caso vermelha-toda-na-lista-em-bloco-fecha 0/silencio "$(sa_task vermelha '    suite_falhas:\n      - tests/a.test.ts\n      - tests/b c.test.ts\n')"
+sa_caso bloco-linha-em-branco-fora-avisa 0/avisa "$(sa_task vermelha '    suite_falhas:\n      - tests/a.test.ts\n\n      - tests/novo.test.ts\n')"
+sa_caso bloco-comentario-fora-avisa 0/avisa "$(sa_task vermelha '    suite_falhas:\n      - tests/a.test.ts\n      # nota: |\n      - tests/novo.test.ts\n')"
+sa_caso bloco-linha-em-branco-listados-fecha 0/silencio "$(sa_task vermelha '    suite_falhas:\n      - tests/a.test.ts\n\n      - tests/b c.test.ts\n')"
+sa_caso bloco-chave-seguinte-lida 0/avisa "$(sa_task vermelha '    suite_falhas:\n      - tests/a.test.ts\n\n    suite: nao_executada\n')"
 
 # 4. Uma falha fora da lista barra, e o aviso nomeia o arquivo.
 sa_roda "$(sa_task vermelha '    suite_falhas: [tests/a.test.ts, tests/novo.test.ts]\n')" > "$SA_T/r"
